@@ -57,6 +57,100 @@ const stages = [
   'Preparando o relatório final'
 ]
 
+
+function InlineMarkdown({text}:{text:string}) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g)
+  return <>{parts.map((part,index) =>
+    part.startsWith('**') && part.endsWith('**')
+      ? <strong key={index}>{part.slice(2,-2)}</strong>
+      : <span key={index}>{part}</span>
+  )}</>
+}
+
+function MarkdownBlock({text}:{text:string}) {
+  const lines = String(text || '').replace(/\r/g,'').split('\n')
+  const blocks: JSX.Element[] = []
+  let i = 0
+
+  while (i < lines.length) {
+    const line = lines[i].trim()
+
+    if (!line) {
+      i++
+      continue
+    }
+
+    const next = (lines[i + 1] || '').trim()
+    const isTableHeader = line.startsWith('|') && line.endsWith('|')
+      && /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(next)
+
+    if (isTableHeader) {
+      const parseRow = (row:string) => row.trim().replace(/^\||\|$/g,'').split('|').map(cell => cell.trim())
+      const headers = parseRow(line)
+      const rows:string[][] = []
+      i += 2
+      while (i < lines.length) {
+        const row = lines[i].trim()
+        if (!(row.startsWith('|') && row.endsWith('|'))) break
+        rows.push(parseRow(row))
+        i++
+      }
+      blocks.push(
+        <div className="markdown-table-wrap" key={`table-${i}`}>
+          <table className="markdown-table">
+            <thead><tr>{headers.map((cell,index)=><th key={index}><InlineMarkdown text={cell}/></th>)}</tr></thead>
+            <tbody>{rows.map((row,rowIndex)=><tr key={rowIndex}>{headers.map((_,cellIndex)=><td key={cellIndex}><InlineMarkdown text={row[cellIndex] || ''}/></td>)}</tr>)}</tbody>
+          </table>
+        </div>
+      )
+      continue
+    }
+
+    if (/^[-*]\s+/.test(line)) {
+      const items:string[] = []
+      while (i < lines.length && /^[-*]\s+/.test(lines[i].trim())) {
+        items.push(lines[i].trim().replace(/^[-*]\s+/,''))
+        i++
+      }
+      blocks.push(<ul className="markdown-list" key={`ul-${i}`}>{items.map((item,index)=><li key={index}><InlineMarkdown text={item}/></li>)}</ul>)
+      continue
+    }
+
+    if (/^\d+[.)]\s+/.test(line)) {
+      const items:string[] = []
+      while (i < lines.length && /^\d+[.)]\s+/.test(lines[i].trim())) {
+        items.push(lines[i].trim().replace(/^\d+[.)]\s+/,''))
+        i++
+      }
+      blocks.push(<ol className="markdown-list" key={`ol-${i}`}>{items.map((item,index)=><li key={index}><InlineMarkdown text={item}/></li>)}</ol>)
+      continue
+    }
+
+    if (/^#{1,4}\s+/.test(line)) {
+      const title = line.replace(/^#{1,4}\s+/,'')
+      blocks.push(<h4 className="markdown-heading" key={`h-${i}`}><InlineMarkdown text={title}/></h4>)
+      i++
+      continue
+    }
+
+    const paragraph:string[] = [line]
+    i++
+    while (i < lines.length) {
+      const candidate = lines[i].trim()
+      const following = (lines[i + 1] || '').trim()
+      if (!candidate) break
+      if (/^[-*]\s+/.test(candidate) || /^\d+[.)]\s+/.test(candidate) || /^#{1,4}\s+/.test(candidate)) break
+      if (candidate.startsWith('|') && candidate.endsWith('|')
+        && /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(following)) break
+      paragraph.push(candidate)
+      i++
+    }
+    blocks.push(<p className="markdown-paragraph" key={`p-${i}`}><InlineMarkdown text={paragraph.join(' ')} /></p>)
+  }
+
+  return <div className="markdown-content">{blocks}</div>
+}
+
 function App() {
   const [dark, setDark] = useState(() => localStorage.getItem('p360-theme') !== 'light')
   const [file, setFile] = useState<File | null>(null)
@@ -226,7 +320,7 @@ function AnalysisResult({report}:{report:AnalysisReport}) {
 
     <div className="analysis-section-full">
       <h3>1. Resumo executivo</h3>
-      <p>{report.executiveSummary}</p>
+      <MarkdownBlock text={report.executiveSummary}/>
     </div>
 
     <div className="analysis-section-full">
@@ -242,8 +336,8 @@ function AnalysisResult({report}:{report:AnalysisReport}) {
     </div>
 
     <div className="analysis-grid">
-      <article><h3>3. Alegações, provas e decisões</h3><p>{report.claimsEvidenceDecisions}</p></article>
-      <article><h3>4. Análise jurídica global</h3><p>{report.globalAnalysis}</p></article>
+      <article><h3>3. Alegações, provas e decisões</h3><MarkdownBlock text={report.claimsEvidenceDecisions}/></article>
+      <article><h3>4. Análise jurídica global</h3><MarkdownBlock text={report.globalAnalysis}/></article>
     </div>
 
     <div className="analysis-section-full">
@@ -259,7 +353,7 @@ function AnalysisResult({report}:{report:AnalysisReport}) {
 
     <div className="analysis-section-full">
       <h3>6. Conclusão e estratégia</h3>
-      <p>{report.conclusionStrategy}</p>
+      <MarkdownBlock text={report.conclusionStrategy}/>
     </div>
 
     <div className="analysis-section-full sources-block">
