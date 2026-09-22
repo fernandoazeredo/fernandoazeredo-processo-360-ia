@@ -140,7 +140,7 @@ function App() {
         <section className="hero">
           <span className="eyebrow"><BrainCircuit size={16} /> Inteligência jurídica especializada</span>
           <h1>O processo completo.<br /><em>Analisado por inteiro.</em></h1>
-          <p>Envie o PDF, selecione a perspectiva e receba uma análise estruturada, rastreável e orientada à área jurídica correta.</p>
+          <p>Envie o PDF, selecione a área e a perspectiva, e receba uma análise jurídica estruturada, rastreável e completa do processo.</p>
         </section>
 
         <section className="workspace-card">
