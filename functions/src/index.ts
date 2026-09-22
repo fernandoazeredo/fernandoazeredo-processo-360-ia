@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase-admin/app'
-import { getFirestore, FieldValue } from 'firebase-admin/firestore'
+import { getFirestore, FieldValue, DocumentReference } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import { defineSecret } from 'firebase-functions/params'
@@ -204,7 +204,7 @@ async function loadPrompts(area: string, perspective: string) {
 async function waitForOpenAIResponse(
   client: OpenAI,
   response: any,
-  analysisRef: FirebaseFirestore.DocumentReference,
+  analysisRef: DocumentReference,
   stageLabel: string
 ) {
   const startedAt = Date.now()
