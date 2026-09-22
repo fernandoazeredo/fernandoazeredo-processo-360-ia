@@ -370,8 +370,20 @@ function AnalysisResult({report}:{report:AnalysisReport}) {
 }
 
 function BrainLoader() {
+  const particles = Array.from({length:30},(_,i)=>i)
   return <div className="brain-loader brain-loader-blue" aria-hidden="true">
-    <img className="ai-brain-image" src="/assets/brain-ai-blue.webp?v=3" alt="" />
+    <img className="ai-brain-image" src="/assets/brain-ai-blue.webp?v=4" alt="" />
+    <div className="brain-particles">
+      {particles.map(i=><span
+        key={i}
+        className={`brain-particle p${(i%8)+1}`}
+        style={{
+          left:`${12+((i*17)%76)}%`,
+          top:`${13+((i*29)%72)}%`,
+          animationDelay:`-${(i*.31).toFixed(2)}s`
+        }}
+      />)}
+    </div>
     <div className="ai-brain-scan"/>
   </div>
 }
