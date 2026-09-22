@@ -371,8 +371,7 @@ function AnalysisResult({report}:{report:AnalysisReport}) {
 
 function BrainLoader() {
   return <div className="brain-loader brain-loader-blue" aria-hidden="true">
-    <div className="ai-brain-halo"/>
-    <div className="ai-brain-art"/>
+    <img className="ai-brain-image" src="/assets/brain-ai-blue.webp?v=3" alt="" />
     <div className="ai-brain-scan"/>
   </div>
 }

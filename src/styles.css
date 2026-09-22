@@ -279,25 +279,16 @@ footer button:hover{color:var(--blue)}
   overflow:visible;
   animation:brainFloat 5.5s ease-in-out infinite;
 }
-.ai-brain-art{
-  position:absolute;
-  inset:0;
+.ai-brain-image{
+  width:100%;
+  height:100%;
+  object-fit:contain;
+  display:block;
   z-index:2;
-  background-image:url("/assets/brain-ai-blue.webp");
-  background-position:center;
-  background-repeat:no-repeat;
-  background-size:contain;
-  filter:drop-shadow(0 0 24px rgba(48,132,255,.58)) drop-shadow(0 0 60px rgba(27,99,255,.22));
+  filter:drop-shadow(0 0 26px rgba(48,132,255,.58)) drop-shadow(0 0 64px rgba(27,99,255,.24));
   animation:brainBreathe 3.4s ease-in-out infinite;
-}
-.ai-brain-halo{
-  position:absolute;
-  inset:7%;
-  z-index:1;
-  border-radius:50%;
-  background:radial-gradient(circle,rgba(83,158,255,.16) 0,rgba(20,91,220,.08) 38%,transparent 72%);
-  box-shadow:0 0 74px rgba(59,132,255,.18);
-  animation:brainHalo 2.8s ease-in-out infinite;
+  user-select:none;
+  pointer-events:none;
 }
 .ai-brain-scan{
   position:absolute;
@@ -306,7 +297,7 @@ footer button:hover{color:var(--blue)}
   height:2px;
   left:23%;
   top:30%;
-  opacity:.32;
+  opacity:.30;
   background:linear-gradient(90deg,transparent,#8fd3ff 18%,#fff 50%,#8fd3ff 82%,transparent);
   box-shadow:0 0 14px rgba(125,207,255,.72);
   border-radius:999px;
@@ -321,21 +312,17 @@ footer button:hover{color:var(--blue)}
   0%,100%{transform:scale(.985)}
   50%{transform:scale(1.018)}
 }
-@keyframes brainHalo{
-  0%,100%{transform:scale(.96);opacity:.48}
-  50%{transform:scale(1.05);opacity:.82}
-}
 @keyframes brainScan{
   0%,100%{top:30%;opacity:0}
-  18%{opacity:.34}
-  50%{opacity:.58}
-  82%{opacity:.34}
+  18%{opacity:.30}
+  50%{opacity:.55}
+  82%{opacity:.30}
   100%{top:70%;opacity:0}
 }
 @media(max-width:700px){
   .brain-loader-blue{width:min(82vw,520px)}
 }
 @media(prefers-reduced-motion:reduce){
-  .brain-loader-blue,.ai-brain-art,.ai-brain-halo,.ai-brain-scan{animation:none!important}
+  .brain-loader-blue,.ai-brain-image,.ai-brain-scan{animation:none!important}
   .ai-brain-scan{display:none}
 }
