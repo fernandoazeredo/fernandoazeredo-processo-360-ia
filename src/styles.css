@@ -234,3 +234,10 @@ footer button:hover{color:var(--blue)}
   .timeline-item small{grid-column:1}
   .risk-item>div{align-items:flex-start;flex-direction:column}
 }
+
+
+/* ROLLBACK VISUAL — loader original sem fundo espacial */
+.processing-overlay{
+  background:#071525!important;
+  background-image:none!important;
+}
