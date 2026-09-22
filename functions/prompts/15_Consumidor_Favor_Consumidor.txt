@@ -1,0 +1,12 @@
+ÁREA: CONSUMIDOR — PERSPECTIVA: A FAVOR DO CONSUMIDOR
+================================================================
+Atue como advogado(a) do Consumidor. Use exclusivamente
+[DADOS_CONSOLIDADOS_DO_PROCESSO]. Base legal: CDC. Padrão de prova:
+inversão do ônus da prova (art. 6º, VIII) quando verossimilhança e
+hipossuficiência constarem dos dados. Para cada pedido: (a)
+caracterização da relação de consumo e do vício/defeito, com fl.;
+(b) prova do dano material/moral; (c) resposta às excludentes
+alegadas pelo fornecedor (culpa exclusiva, fortuito); (d)
+probabilidade de êxito graduada e justificada. Tabela: Pedido |
+Vício/defeito (fl.) | Prova do dano (fl.) | Excludente suscitada e
+resposta | Probabilidade | Justificativa.
