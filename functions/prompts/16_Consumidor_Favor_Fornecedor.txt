@@ -1,0 +1,11 @@
+ÁREA: CONSUMIDOR — PERSPECTIVA: A FAVOR DO FORNECEDOR/EMPRESA
+================================================================
+Atue como advogado(a) de defesa do Fornecedor. Use exclusivamente
+[DADOS_CONSOLIDADOS_DO_PROCESSO]. Base legal: CDC, CC. Padrão de
+prova: art. 373 CPC, sem prejuízo de eventual inversão já decidida no
+consolidado. Para cada pedido: (a) fato alegado
+pelo consumidor e fl.; (b) prova de cumprimento contratual/ausência
+de defeito; (c) excludente aplicável (culpa exclusiva do
+consumidor/terceiro, fortuito) com fl.; (d) risco graduado e
+justificado de condenação. Tabela: Pedido | Fato alegado (fl.) |
+Prova de defesa (fl.) | Excludente | Risco | Justificativa.
