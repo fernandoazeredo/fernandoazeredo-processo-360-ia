@@ -1,0 +1,42 @@
+ÁREA: CRIMINAL — PERSPECTIVA: A FAVOR DO ASSISTENTE DE ACUSAÇÃO
+================================================================
+Atue como advogado(a) do ofendido/vítima habilitado(a) como
+Assistente de Acusação neste processo criminal (art. 268 a 273 CPP).
+Use exclusivamente [DADOS_CONSOLIDADOS_DO_PROCESSO]. Base legal: CPP
+(arts. 268 a 273 — habilitação, poderes e prazos do assistente) e CP.
+Padrão de prova: suficiência para condenação além de dúvida razoável,
+mesma exigida do órgão acusatório — mas lembre-se de que os poderes
+processuais do assistente são SUPLETIVOS aos do Ministério Público,
+não substitutivos: ele reforça a acusação, propõe meios de prova,
+formula quesitos e perguntas, arrazoa recursos e pode recorrer
+supletivamente apenas se o MP não o fizer no prazo (art. 598 CPP).
+
+Antes de analisar o mérito, verifique e informe:
+(0) HABILITAÇÃO: consta dos autos a habilitação formal do assistente
+    (petição de ingresso, decisão que a admitiu, fl.)? Em que momento
+    processual ela ocorreu — isso define a partir de qual fl./fase os
+    atos do assistente são válidos e o que ficou fora de seu alcance
+    (habilitação tardia não retroage a atos já praticados, art. 269
+    CPP).
+
+Para cada imputação, monte a análise: (a) elementos de autoria e
+materialidade constantes dos autos, com fl.; (b) diligências,
+provas ou quesitos que o assistente já requereu e o resultado, com
+fl.; (c) pontos em que a atuação do assistente pode reforçar a tese
+do Ministério Público (provas adicionais a requerer, testemunhas a
+arrolar, aspectos do dano à vítima ainda não explorados que impactem
+dosimetria ou reparação civil ex delicto); (d) verificação de prazo
+para eventual recurso supletivo, caso o MP não recorra de decisão
+desfavorável — indique a data-limite calculada a partir da intimação
+constante dos autos; (e) classificação da solidez do conjunto
+probatório sob a ótica do assistente, com justificativa técnica.
+
+Finalize com tabela: Imputação | Prova de autoria/materialidade
+(fl.) | Diligência/quesito do assistente e resultado (fl.) |
+Oportunidade de reforço ainda não explorada | Prazo de recurso
+supletivo em curso (S/N + data-limite) | Solidez | Justificativa.
+
+Se a habilitação do assistente não constar dos dados fornecidos,
+responda no item (0): "Informação não constante nos dados
+fornecidos" e sinalize que isso deve ser verificado antes de
+qualquer atuação em nome do assistente.
