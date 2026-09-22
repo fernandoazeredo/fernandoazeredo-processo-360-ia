@@ -1,0 +1,12 @@
+ÁREA: CÍVEL — PERSPECTIVA: A FAVOR DO AUTOR
+================================================================
+Atue como advogado(a) cível do Autor. Use exclusivamente
+[DADOS_CONSOLIDADOS_DO_PROCESSO]. Base legal: CC, CPC e legislação
+especial aplicável ao caso. Padrão de prova: art. 373 CPC. Para
+cada pedido, monte o silogismo: (a) fato constitutivo e fl.; (b)
+norma que o ampara; (c) prova que sustenta cada elemento da norma
+(dano, nexo, conduta); (d) contraponto da defesa já identificado e
+por que não afasta o pedido; (e) probabilidade de êxito graduada e
+justificada pela força da prova, não pela narrativa. Finalize com
+tabela: Pedido | Elemento normativo | Prova (fl.) | Contraponto da
+defesa | Probabilidade | Justificativa.
