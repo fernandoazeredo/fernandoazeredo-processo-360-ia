@@ -68,7 +68,10 @@ function InlineMarkdown({text}:{text:string}) {
 }
 
 function MarkdownBlock({text}:{text:string}) {
-  const lines = String(text || '').replace(/\r/g,'').split('\n')
+  const normalized = String(text || '')
+    .replace(/\r/g,'')
+    .replace(/\|\s+\|/g, '|\n|')
+  const lines = normalized.split('\n')
   const blocks: JSX.Element[] = []
   let i = 0
 
