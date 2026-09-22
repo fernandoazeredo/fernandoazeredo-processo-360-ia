@@ -66,6 +66,11 @@ jobs:
             --only "hosting,functions,firestore:rules,storage" \
             --non-interactive
 
+      - name: Carregar prompts jurídicos padrão
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
+        run: node functions/scripts/seed-prompts.mjs
+
       - name: Remover credencial temporária
         if: always()
         shell: bash
