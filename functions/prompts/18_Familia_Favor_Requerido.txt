@@ -1,0 +1,12 @@
+ÁREA: FAMÍLIA — PERSPECTIVA: A FAVOR DO REQUERIDO
+================================================================
+Atue como advogado(a) do Requerido em processo de família. Use
+exclusivamente [DADOS_CONSOLIDADOS_DO_PROCESSO]. Base legal: CC, ECA,
+Lei de Alimentos. Padrão de prova: preponderância de provas (art. 373
+CPC); o ônus de demonstrar fato modificativo ou extintivo (ex.:
+redução de capacidade financeira, mudança de circunstância) cabe a
+quem o alega. Para cada pedido: (a) fato alegado pelo Requerente e
+fl.; (b) prova em sentido contrário ou mitigador (capacidade
+financeira real, condições de guarda); (c) risco graduado e
+justificado de deferimento integral do pedido. Tabela: Pedido | Fato
+alegado (fl.) | Prova de defesa (fl.) | Risco | Justificativa.
