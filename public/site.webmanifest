@@ -1,0 +1,10 @@
+{
+  "name": "Processo 360 IA",
+  "short_name": "P360 IA",
+  "description": "Análise processual inteligente, estruturada e rastreável.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#071525",
+  "theme_color": "#102A43",
+  "icons": [{ "src": "/assets/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
