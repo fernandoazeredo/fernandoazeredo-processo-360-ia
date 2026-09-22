@@ -370,21 +370,52 @@ function AnalysisResult({report}:{report:AnalysisReport}) {
 }
 
 function BrainLoader() {
-  const particles = Array.from({length:30},(_,i)=>i)
+  const neuralPaths = [
+    { id:'p1', d:'M270 305 C350 245 430 245 505 305', dur:'2.6s', begin:'-0.2s' },
+    { id:'p2', d:'M505 305 C595 350 660 420 735 505', dur:'3.0s', begin:'-1.1s' },
+    { id:'p3', d:'M285 475 C365 430 445 420 525 438', dur:'2.5s', begin:'-0.8s' },
+    { id:'p4', d:'M525 438 C610 430 680 465 748 535', dur:'3.2s', begin:'-1.6s' },
+    { id:'p5', d:'M300 625 C380 590 455 585 530 610', dur:'2.8s', begin:'-1.3s' },
+    { id:'p6', d:'M530 610 C615 635 680 675 735 735', dur:'3.3s', begin:'-0.5s' },
+    { id:'p7', d:'M455 255 C455 350 465 455 472 610', dur:'2.9s', begin:'-1.8s' },
+    { id:'p8', d:'M565 255 C565 365 560 500 570 690', dur:'3.4s', begin:'-0.9s' },
+    { id:'p9', d:'M325 370 C410 385 505 395 625 382', dur:'2.7s', begin:'-1.4s' },
+    { id:'p10', d:'M330 545 C420 535 525 540 655 575', dur:'3.1s', begin:'-0.4s' },
+    { id:'p11', d:'M390 700 C470 665 550 648 640 655', dur:'2.6s', begin:'-1.0s' },
+    { id:'p12', d:'M410 300 C510 330 610 375 690 455', dur:'3.0s', begin:'-2.0s' },
+    { id:'p13', d:'M700 320 C635 355 585 400 545 470', dur:'2.7s', begin:'-0.6s' },
+    { id:'p14', d:'M315 710 C365 650 405 590 440 520', dur:'3.2s', begin:'-1.5s' }
+  ]
+
   return <div className="brain-loader brain-loader-blue" aria-hidden="true">
-    <img className="ai-brain-image" src="/assets/brain-ai-blue.webp?v=4" alt="" />
-    <div className="brain-particles">
-      {particles.map(i=><span
-        key={i}
-        className={`brain-particle p${(i%8)+1}`}
-        style={{
-          left:`${12+((i*17)%76)}%`,
-          top:`${13+((i*29)%72)}%`,
-          animationDelay:`-${(i*.31).toFixed(2)}s`
-        }}
-      />)}
-    </div>
-    <div className="ai-brain-scan"/>
+    <img className="ai-brain-image" src="/assets/brain-ai-blue.webp?v=6" alt="" />
+    <svg className="brain-network" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <filter id="neuralGlow" x="-80%" y="-80%" width="260%" height="260%">
+          <feGaussianBlur stdDeviation="7" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <g className="neural-guides">
+        {neuralPaths.map(path=><path key={path.id} id={path.id} d={path.d}/>)}
+      </g>
+      <g className="neural-travelers" filter="url(#neuralGlow)">
+        {neuralPaths.map((path,i)=>
+          <circle key={path.id} className={i%4===0 ? 'neural-light neural-light-gold' : 'neural-light'} r={i%3===0 ? 8 : 6.5}>
+            <animateMotion dur={path.dur} begin={path.begin} repeatCount="indefinite" rotate="auto">
+              <mpath href={`#${path.id}`}/>
+            </animateMotion>
+          </circle>
+        )}
+        {neuralPaths.slice(0,8).map((path,i)=>
+          <circle key={`${path.id}-b`} className="neural-light neural-light-small" r="4.5">
+            <animateMotion dur={path.dur} begin={`-${1.2 + i*0.27}s`} repeatCount="indefinite" rotate="auto">
+              <mpath href={`#${path.id}`}/>
+            </animateMotion>
+          </circle>
+        )}
+      </g>
+    </svg>
   </div>
 }
 
