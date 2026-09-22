@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase-admin/app'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
-import { onCall, HttpsError } from 'firebase-functions/v2/https'
+import { onCall, HttpsError } from 'firebase-functions/v2/https'\nimport { defineSecret } from 'firebase-functions/params'
 import OpenAI, { toFile } from 'openai'
 import { PDFDocument } from 'pdf-lib'
 
@@ -10,7 +10,7 @@ initializeApp()
 const db = getFirestore()
 const bucket = getStorage().bucket()
 const LOT_SIZE = 170
-const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-5.6-sol'
+const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY')\nconst DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-5.6-sol'
 
 type PromptDoc = {
   title?: string
