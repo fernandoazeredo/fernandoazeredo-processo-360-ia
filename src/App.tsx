@@ -25,7 +25,7 @@ type PromptItem = {
 const perspectives: Record<Area, string[]> = {
   Trabalhista: ['Reclamante', 'Reclamada'],
   Cível: ['Autor', 'Réu'],
-  Criminal: ['Defesa', 'Acusação', 'Assistente de acusação'],
+  Criminal: ['Defesa', 'Acusação', 'Assistente de acusação', 'Querelante'],
   Ambiental: ['Empresa / Autuado', 'Autor / Órgão fiscalizador'],
   Tributário: ['Contribuinte', 'Fazenda Pública'],
   Administrativo: ['Administrado', 'Administração Pública'],
