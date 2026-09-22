@@ -252,7 +252,8 @@ export const analyzeProcess = onCall(
       area,
       perspective,
       status: 'preparando',
-      progress: 2,
+      stage: 'Preparando arquivo e prompts jurídicos',
+      progress: 33,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp()
     }, { merge: true })
@@ -266,7 +267,8 @@ export const analyzeProcess = onCall(
         pageCount,
         lotCount: lots.length,
         status: 'extraindo',
-        progress: 8,
+        stage: `PDF dividido em ${lots.length} lote(s). Preparando análise`,
+        progress: 36,
         updatedAt: FieldValue.serverTimestamp()
       }, { merge: true })
 
@@ -282,6 +284,15 @@ Preserve referências de página quando identificáveis e declare incerteza quan
       )
 
       for (const lot of lots) {
+        const lotStartProgress = 38 + Math.round(((lot.number - 1) / lots.length) * 42)
+        await analysisRef.set({
+          status: 'extraindo',
+          currentLot: lot.number,
+          stage: `Analisando lote ${lot.number} de ${lots.length} com IA`,
+          progress: lotStartProgress,
+          updatedAt: FieldValue.serverTimestamp()
+        }, { merge: true })
+
         const uploaded = await client.files.create({
           file: await toFile(Buffer.from(lot.bytes), `lote-${lot.number}.pdf`, { type: 'application/pdf' }),
           purpose: 'user_data'
@@ -330,10 +341,11 @@ Analise este lote sem antecipar o diagnóstico final. O resultado deve ser uma e
           await client.files.delete(uploaded.id).catch(() => undefined)
         }
 
-        const progress = 10 + Math.round((lot.number / lots.length) * 58)
+        const progress = 38 + Math.round((lot.number / lots.length) * 42)
         await analysisRef.set({
           status: 'extraindo',
           currentLot: lot.number,
+          stage: `Lote ${lot.number} de ${lots.length} concluído`,
           progress,
           updatedAt: FieldValue.serverTimestamp()
         }, { merge: true })
@@ -341,7 +353,8 @@ Analise este lote sem antecipar o diagnóstico final. O resultado deve ser uma e
 
       await analysisRef.set({
         status: 'consolidando',
-        progress: 72,
+        stage: 'Consolidando todos os lotes e aplicando o prompt jurídico',
+        progress: 85,
         updatedAt: FieldValue.serverTimestamp()
       }, { merge: true })
 
@@ -404,6 +417,7 @@ ${JSON.stringify(lotResults)}`
 
       await analysisRef.set({
         status: 'concluido',
+        stage: 'Relatório jurídico consolidado concluído',
         progress: 100,
         model: DEFAULT_MODEL,
         promptCount: prompts.length,
@@ -425,6 +439,7 @@ ${JSON.stringify(lotResults)}`
       console.error('Processo 360 IA - analyzeProcess', error)
       await analysisRef.set({
         status: 'erro',
+        stage: 'Falha durante o processamento',
         error: error?.message || 'Falha desconhecida',
         updatedAt: FieldValue.serverTimestamp()
       }, { merge: true }).catch(() => undefined)
