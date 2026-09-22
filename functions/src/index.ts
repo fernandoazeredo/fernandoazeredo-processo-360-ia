@@ -5,6 +5,8 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import { defineSecret } from 'firebase-functions/params'
 import OpenAI, { toFile } from 'openai'
 import { PDFDocument } from 'pdf-lib'
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
 
 initializeApp()
 
@@ -13,22 +15,25 @@ const bucket = getStorage().bucket()
 const LOT_SIZE = 170
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY')
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-5.6-sol'
-const GLOBAL_RIGOR_VERSION = 1
+const GLOBAL_RIGOR_VERSION = 2
 
 const GLOBAL_RIGOR = `
 PROCESSO 360 IA — PADRÃO GLOBAL DE RIGOR
 
 Você executará um prompt técnico específico em cada chamada. O prompt específico define O QUE fazer; estas regras definem COMO executar com rigor.
 
-1. Siga integralmente a estrutura e o formato exigidos pelo prompt específico. Não pule itens, não reordene blocos e não acrescente seções não solicitadas.
-2. Baseie toda afirmação factual exclusivamente no material fornecido nesta chamada. Nunca invente fatos, datas, valores, documentos, páginas, provas, decisões, precedentes ou probabilidades.
-3. Se o material não sustentar uma conclusão pedida, declare de forma explícita o que não é possível concluir e qual informação está faltando.
-4. Preserve a área jurídica e a perspectiva informadas durante toda a execução. Considere a posição contrária somente quando o prompt específico exigir esse confronto.
-5. Vincule cada fato, prova, data, valor ou decisão à referência de origem disponível (página, lote, peça ou outra referência fornecida).
-6. Em extração de lote isolado, trate o lote apenas como parte do processo. Extraia e catalogue; não conclua mérito, força de tese, risco global ou estratégia final com base em um único lote.
-7. Em consolidação, considere todos os lotes fornecidos antes de concluir. Identifique duplicidades, complementaridades e contradições entre lotes e só então produza diagnóstico global.
-8. Antes de entregar, verifique internamente: todos os itens pedidos foram respondidos; o formato foi respeitado; afirmações factuais possuem referência; nenhuma conclusão excede os dados disponíveis.
-9. Se uma regra operacional do prompt específico exigir rótulo, ordem ou formato diferente, siga esse detalhe do prompt específico, preservando as regras de não invenção, rastreabilidade e completude acima.
+1. Siga integralmente a estrutura e o formato exigidos pelo prompt específico. Não pule itens, não funda blocos, não reordene e não acrescente seções não solicitadas.
+2. Não inclua introdução, saudação, disclaimer genérico, opinião pessoal ou conteúdo fora do que foi pedido.
+3. Formato de saída é obrigatório. Se o prompt exigir tabela, rótulo, ordem ou estrutura determinada, cumpra exatamente.
+4. Baseie toda afirmação factual exclusivamente no material fornecido nesta chamada. Nunca invente fatos, datas, valores, documentos, páginas, provas, decisões, precedentes ou probabilidades.
+5. Preserve a área jurídica e a perspectiva informadas durante toda a execução. Considere a posição contrária somente quando o prompt específico exigir esse confronto.
+6. Vincule cada fato, prova, data, valor ou decisão à referência de origem disponível (página, lote, peça ou outra referência fornecida).
+7. Em extração de lote isolado, trate o lote apenas como parte do processo. Extraia e catalogue; não conclua mérito, força de tese, risco global ou estratégia final com base em um único lote.
+8. Em consolidação, considere todos os lotes fornecidos antes de concluir. Identifique duplicidades, complementaridades e contradições entre lotes e só então produza diagnóstico global. Ao final, confirme quantos lotes foram considerados.
+9. Antes de entregar, verifique internamente: todos os itens pedidos foram respondidos; o formato foi respeitado; afirmações factuais possuem referência; nenhuma conclusão excede os dados disponíveis.
+10. Sempre que um fato, folha, data, valor ou documento necessário não constar nos dados fornecidos, escreva exatamente: "Informação não constante nos dados fornecidos".
+11. Sempre que o prompt pedir grau de risco, probabilidade de êxito, solidez ou classificação equivalente, use estritamente um destes rótulos: "Alta", "Média" ou "Baixa". Não use percentuais nem rótulos alternativos.
+12. Se uma regra operacional do prompt específico exigir detalhe diferente, prevalece o prompt específico nesse detalhe, preservando não invenção, rastreabilidade e completude.
 `.trim()
 
 type PromptDoc = {
@@ -39,6 +44,31 @@ type PromptDoc = {
   content?: string
   version?: number
   status?: string
+}
+
+const DEFAULT_PROMPT_FILES: Record<string, string> = {
+  'Trabalhista|||Reclamada': '01_Trabalhista_Favor_Reclamada.txt',
+  'Trabalhista|||Reclamante': '02_Trabalhista_Favor_Reclamante.txt',
+  'Cível|||Réu': '03_Civel_Favor_Reu.txt',
+  'Cível|||Autor': '04_Civel_Favor_Autor.txt',
+  'Criminal|||Defesa': '05_Criminal_Favor_Defesa.txt',
+  'Criminal|||Acusação': '06_Criminal_Favor_Acusacao.txt',
+  'Criminal|||Assistente de acusação': '06B_Criminal_Favor_AssistenteAcusacao.txt',
+  'Criminal|||Querelante': '06C_Criminal_Favor_Querelante.txt',
+  'Ambiental|||Autuado / Réu': '07_Ambiental_Favor_Autuado.txt',
+  'Ambiental|||Órgão Ambiental / MP': '08_Ambiental_Favor_OrgaoAmbiental_MP.txt',
+  'Tributário|||Contribuinte': '09_Tributario_Favor_Contribuinte.txt',
+  'Tributário|||Fazenda Pública': '10_Tributario_Favor_FazendaPublica.txt',
+  'Administrativo|||Administrado': '11_Administrativo_Favor_Administrado.txt',
+  'Administrativo|||Administração Pública': '12_Administrativo_Favor_AdministracaoPublica.txt',
+  'Previdenciário|||Segurado': '13_Previdenciario_Favor_Segurado.txt',
+  'Previdenciário|||INSS': '14_Previdenciario_Favor_INSS.txt',
+  'Consumidor|||Consumidor': '15_Consumidor_Favor_Consumidor.txt',
+  'Consumidor|||Fornecedor / Empresa': '16_Consumidor_Favor_Fornecedor.txt',
+  'Família|||Requerente': '17_Familia_Favor_Requerente.txt',
+  'Família|||Requerido': '18_Familia_Favor_Requerido.txt',
+  'Empresarial|||Parte Autora': '19_Empresarial_Favor_ParteAutora.txt',
+  'Empresarial|||Parte Ré': '20_Empresarial_Favor_ParteRe.txt'
 }
 
 const extractionSchema = {
@@ -145,9 +175,29 @@ function promptText(prompts: PromptDoc[], purposes: string[], fallback: string) 
 }
 async function loadPrompts(area: string, perspective: string) {
   const snap = await db.collection('prompts').where('status', '==', 'publicado').get()
-  return snap.docs
+  const prompts = snap.docs
     .map(d => d.data() as PromptDoc)
     .filter(p => p.area === area && p.perspective === perspective)
+
+  const hasGlobalAnalysis = prompts.some(p => p.purpose === 'Análise jurídica global' && p.content?.trim())
+  if (!hasGlobalAnalysis) {
+    const fileName = DEFAULT_PROMPT_FILES[`${area}|||${perspective}`]
+    if (fileName) {
+      const filePath = path.resolve(__dirname, '../prompts', fileName)
+      const content = (await readFile(filePath, 'utf8')).trim()
+      prompts.push({
+        title: `Prompt jurídico padrão — ${area} / ${perspective}`,
+        area,
+        perspective,
+        purpose: 'Análise jurídica global',
+        content,
+        version: 1,
+        status: 'publicado'
+      })
+    }
+  }
+
+  return prompts
 }
 
 async function splitPdf(pdfBytes: Buffer) {
@@ -325,6 +375,8 @@ Arquivo: ${fileName}
 Perspectiva: ${perspective}
 Total de páginas: ${pageCount}
 Total de lotes: ${lots.length}
+
+Para os prompts específicos, [DADOS_CONSOLIDADOS_DO_PROCESSO] significa exclusivamente o conjunto estruturado de todos os lotes abaixo.
 
 A seguir estão as extrações estruturadas de TODOS os lotes. Consolide o processo por inteiro antes de concluir:
 
