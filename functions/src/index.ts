@@ -13,6 +13,7 @@ initializeApp()
 const db = getFirestore()
 const bucket = getStorage().bucket()
 const LOT_SIZE = 170
+const LOT_CONCURRENCY = 2
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY')
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-5.6-sol'
 const GLOBAL_RIGOR_VERSION = 2
@@ -311,7 +312,8 @@ export const analyzeProcess = onCall(
       }, { merge: true })
 
       const client = new OpenAI({ apiKey })
-      const lotResults: unknown[] = []
+      const lotResults: unknown[] = new Array(lots.length)
+      let completedLots = 0
       const extractionInstructions = promptText(
         prompts,
         ['Preparação e leitura inicial','Extração por lote','Catalogação documental'],
@@ -321,16 +323,7 @@ Não produza conclusão global antes da leitura de todos os lotes.
 Preserve referências de página quando identificáveis e declare incerteza quando a referência não puder ser determinada.`
       )
 
-      for (const lot of lots) {
-        const lotStartProgress = 38 + Math.round(((lot.number - 1) / lots.length) * 42)
-        await analysisRef.set({
-          status: 'extraindo',
-          currentLot: lot.number,
-          stage: `Analisando lote ${lot.number} de ${lots.length} com IA`,
-          progress: lotStartProgress,
-          updatedAt: FieldValue.serverTimestamp()
-        }, { merge: true })
-
+      const processLot = async (lot: typeof lots[number]) => {
         const uploaded = await client.files.create({
           file: await toFile(Buffer.from(lot.bytes), `lote-${lot.number}.pdf`, { type: 'application/pdf' }),
           purpose: 'user_data'
@@ -349,10 +342,10 @@ Preserve referências de página quando identificáveis e declare incerteza quan
               {
                 role: 'user',
                 content: [
-                { type: 'input_file', file_id: uploaded.id, detail: 'auto' },
-                {
-                  type: 'input_text',
-                  text: `${extractionInstructions}
+                  { type: 'input_file', file_id: uploaded.id, detail: 'auto' },
+                  {
+                    type: 'input_text',
+                    text: `${extractionInstructions}
 
 CONTEXTO OBRIGATÓRIO:
 Área: ${area}
@@ -361,7 +354,7 @@ Lote: ${lot.number} de ${lots.length}
 Páginas do PDF original: ${lot.start}-${lot.end}
 
 Analise este lote sem antecipar o diagnóstico final. O resultado deve ser uma extração estruturada e verificável.`
-                }
+                  }
                 ]
               }
             ],
@@ -389,19 +382,35 @@ Analise este lote sem antecipar o diagnóstico final. O resultado deve ser uma e
             `Analisando lote ${lot.number} de ${lots.length} com IA`
           )
 
-          lotResults.push(JSON.parse(response.output_text))
+          lotResults[lot.number - 1] = JSON.parse(response.output_text)
         } finally {
           await client.files.delete(uploaded.id).catch(() => undefined)
         }
 
-        const progress = 38 + Math.round((lot.number / lots.length) * 42)
+        completedLots += 1
+        const progress = 38 + Math.round((completedLots / lots.length) * 42)
         await analysisRef.set({
           status: 'extraindo',
           currentLot: lot.number,
-          stage: `Lote ${lot.number} de ${lots.length} concluído`,
+          completedLots,
+          stage: `${completedLots} de ${lots.length} lote(s) concluído(s)`,
           progress,
           updatedAt: FieldValue.serverTimestamp()
         }, { merge: true })
+      }
+
+      for (let index = 0; index < lots.length; index += LOT_CONCURRENCY) {
+        const batch = lots.slice(index, index + LOT_CONCURRENCY)
+        await analysisRef.set({
+          status: 'extraindo',
+          stage: batch.length > 1
+            ? `Analisando lotes ${batch.map(lot => lot.number).join(' e ')} de ${lots.length} em paralelo`
+            : `Analisando lote ${batch[0].number} de ${lots.length} com IA`,
+          progress: 38 + Math.round((completedLots / lots.length) * 42),
+          updatedAt: FieldValue.serverTimestamp()
+        }, { merge: true })
+
+        await Promise.all(batch.map(processLot))
       }
 
       await analysisRef.set({
