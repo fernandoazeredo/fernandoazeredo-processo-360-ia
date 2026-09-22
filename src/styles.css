@@ -234,3 +234,43 @@ footer button:hover{color:var(--blue)}
   .timeline-item small{grid-column:1}
   .risk-item>div{align-items:flex-start;flex-direction:column}
 }
+
+
+/* PROCESSO 360 IA — fundo espacial limpo */
+.processing-overlay{
+  overflow:hidden;
+  isolation:isolate;
+  background:#000;
+}
+.analysis-space-scene{
+  position:absolute;
+  inset:0;
+  z-index:0;
+  overflow:hidden;
+  pointer-events:none;
+  background:#000;
+}
+.analysis-space-stars{
+  position:absolute;
+  inset:-3%;
+  background:
+    linear-gradient(rgba(0,0,0,.18),rgba(0,0,0,.34)),
+    url(https://cssanimation.rocks/images/random/space2.jpg) center/cover no-repeat;
+  opacity:.88;
+  transform:scale(1.04);
+  animation:spaceDrift 30s ease-in-out infinite alternate;
+}
+.processing-inner{
+  position:relative;
+  z-index:2;
+}
+@keyframes spaceDrift{
+  from{transform:scale(1.04) translate3d(0,0,0)}
+  to{transform:scale(1.09) translate3d(-1.2%,.8%,0)}
+}
+@media(max-width:700px){
+  .analysis-space-stars{
+    background-position:center;
+    opacity:.84;
+  }
+}
