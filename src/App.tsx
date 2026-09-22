@@ -191,9 +191,6 @@ function App() {
       <footer><span>© 2026 Processo 360 IA</span><button onClick={() => setAdminOpen(true)}>Área ADM</button></footer>
 
       {processing && <div className="processing-overlay" role="dialog" aria-modal="true" aria-label="Análise em andamento">
-        <div className="analysis-space-scene" aria-hidden="true">
-          <div className="analysis-space-stars" />
-        </div>
         <div className="processing-inner">
           <BrainLoader />
           <div className="live-progress">
