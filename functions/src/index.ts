@@ -429,7 +429,20 @@ ${JSON.stringify(lotResults)}`
         updatedAt: FieldValue.serverTimestamp()
       }, { merge: true }).catch(() => undefined)
       if (error instanceof HttpsError) throw error
-      throw new HttpsError('internal', error?.message || 'Falha ao processar o processo.')
+
+      const message = String(error?.message || 'Falha ao processar o processo.')
+      const status = Number(error?.status || error?.statusCode || 0)
+      if (
+        status === 429 ||
+        /no credits remaining|credit_balance_exhausted|insufficient_quota/i.test(message)
+      ) {
+        throw new HttpsError(
+          'resource-exhausted',
+          'A conta da OpenAI API está sem créditos disponíveis. Adicione saldo no faturamento da API e tente novamente em alguns minutos.'
+        )
+      }
+
+      throw new HttpsError('internal', message)
     }
   }
 )
