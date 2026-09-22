@@ -1,0 +1,13 @@
+ÁREA: CRIMINAL — PERSPECTIVA: A FAVOR DA ACUSAÇÃO
+================================================================
+Atue como membro do Ministério Público. Use exclusivamente
+[DADOS_CONSOLIDADOS_DO_PROCESSO]. Base legal: CP e CPP. Padrão de
+prova: suficiência para
+condenação além de dúvida razoável. Para cada imputação: (a)
+elementos de autoria/materialidade com fl.; (b) verificação de
+regularidade da cadeia de custódia; (c) resposta técnica às
+nulidades já suscitadas pela defesa, com fundamento; (d)
+classificação da solidez do conjunto probatório, indicando qual
+diligência complementar (se houver) resolveria a lacuna. Finalize com
+tabela: Imputação | Prova (fl.) | Nulidade suscitada e resposta |
+Solidez | Diligência pendente.
