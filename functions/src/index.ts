@@ -13,6 +13,23 @@ const bucket = getStorage().bucket()
 const LOT_SIZE = 170
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY')
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-5.6-sol'
+const GLOBAL_RIGOR_VERSION = 1
+
+const GLOBAL_RIGOR = `
+PROCESSO 360 IA — PADRÃO GLOBAL DE RIGOR
+
+Você executará um prompt técnico específico em cada chamada. O prompt específico define O QUE fazer; estas regras definem COMO executar com rigor.
+
+1. Siga integralmente a estrutura e o formato exigidos pelo prompt específico. Não pule itens, não reordene blocos e não acrescente seções não solicitadas.
+2. Baseie toda afirmação factual exclusivamente no material fornecido nesta chamada. Nunca invente fatos, datas, valores, documentos, páginas, provas, decisões, precedentes ou probabilidades.
+3. Se o material não sustentar uma conclusão pedida, declare de forma explícita o que não é possível concluir e qual informação está faltando.
+4. Preserve a área jurídica e a perspectiva informadas durante toda a execução. Considere a posição contrária somente quando o prompt específico exigir esse confronto.
+5. Vincule cada fato, prova, data, valor ou decisão à referência de origem disponível (página, lote, peça ou outra referência fornecida).
+6. Em extração de lote isolado, trate o lote apenas como parte do processo. Extraia e catalogue; não conclua mérito, força de tese, risco global ou estratégia final com base em um único lote.
+7. Em consolidação, considere todos os lotes fornecidos antes de concluir. Identifique duplicidades, complementaridades e contradições entre lotes e só então produza diagnóstico global.
+8. Antes de entregar, verifique internamente: todos os itens pedidos foram respondidos; o formato foi respeitado; afirmações factuais possuem referência; nenhuma conclusão excede os dados disponíveis.
+9. Se uma regra operacional do prompt específico exigir rótulo, ordem ou formato diferente, siga esse detalhe do prompt específico, preservando as regras de não invenção, rastreabilidade e completude acima.
+`.trim()
 
 type PromptDoc = {
   title?: string
@@ -110,12 +127,22 @@ const finalSchema = {
 function promptText(prompts: PromptDoc[], purposes: string[], fallback: string) {
   const selected = prompts.filter(p => p.purpose && purposes.includes(p.purpose) && p.content?.trim())
   if (!selected.length) return fallback
-  return selected
-    .sort((a,b) => (a.purpose || '').localeCompare(b.purpose || '') || (b.version || 0) - (a.version || 0))
+
+  const latestByPurpose = new Map<string, PromptDoc>()
+  for (const prompt of selected) {
+    const purpose = prompt.purpose as string
+    const current = latestByPurpose.get(purpose)
+    if (!current || (prompt.version || 0) > (current.version || 0)) {
+      latestByPurpose.set(purpose, prompt)
+    }
+  }
+
+  return purposes
+    .map(purpose => latestByPurpose.get(purpose))
+    .filter((p): p is PromptDoc => Boolean(p))
     .map(p => `### ${p.purpose} — ${p.title || 'Prompt'} — v${p.version || 1}\n${p.content}`)
     .join('\n\n')
 }
-
 async function loadPrompts(area: string, perspective: string) {
   const snap = await db.collection('prompts').where('status', '==', 'publicado').get()
   return snap.docs
@@ -149,7 +176,8 @@ export const analyzeProcess = onCall(
     region: 'us-central1',
     timeoutSeconds: 3600,
     memory: '4GiB',
-    cors: true
+    cors: true,
+    secrets: [OPENAI_API_KEY]
   },
   async request => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'É necessário estar autenticado.')
@@ -161,7 +189,7 @@ export const analyzeProcess = onCall(
       throw new HttpsError('permission-denied', 'Arquivo não pertence ao usuário autenticado.')
     }
 
-    const apiKey = process.env.OPENAI_API_KEY
+    const apiKey = OPENAI_API_KEY.value()
     if (!apiKey) {
       throw new HttpsError('failed-precondition', 'OPENAI_API_KEY ainda não foi configurada no backend.')
     }
@@ -213,9 +241,14 @@ Preserve referências de página quando identificáveis e declare incerteza quan
           const response = await client.responses.create({
             model: DEFAULT_MODEL,
             reasoning: { effort: 'high' },
-            input: [{
-              role: 'user',
-              content: [
+            input: [
+              {
+                role: 'developer',
+                content: [{ type: 'input_text', text: GLOBAL_RIGOR }]
+              },
+              {
+                role: 'user',
+                content: [
                 { type: 'input_file', file_id: uploaded.id },
                 {
                   type: 'input_text',
@@ -229,8 +262,9 @@ Páginas do PDF original: ${lot.start}-${lot.end}
 
 Analise este lote sem antecipar o diagnóstico final. O resultado deve ser uma extração estruturada e verificável.`
                 }
-              ]
-            }],
+                ]
+              }
+            ],
             text: {
               format: {
                 type: 'json_schema',
@@ -274,9 +308,14 @@ Quando a evidência for insuficiente, registre explicitamente a limitação.`
       const finalResponse = await client.responses.create({
         model: DEFAULT_MODEL,
         reasoning: { effort: 'high' },
-        input: [{
-          role: 'user',
-          content: [{
+        input: [
+          {
+            role: 'developer',
+            content: [{ type: 'input_text', text: GLOBAL_RIGOR }]
+          },
+          {
+            role: 'user',
+            content: [{
             type: 'input_text',
             text: `${finalInstructions}
 
@@ -290,8 +329,9 @@ Total de lotes: ${lots.length}
 A seguir estão as extrações estruturadas de TODOS os lotes. Consolide o processo por inteiro antes de concluir:
 
 ${JSON.stringify(lotResults)}`
-          }]
-        }],
+            }]
+          }
+        ],
         text: {
           format: {
             type: 'json_schema',
@@ -304,11 +344,19 @@ ${JSON.stringify(lotResults)}`
 
       const report = JSON.parse(finalResponse.output_text)
 
+      report.sources = lots.map(lot => ({
+        lot: lot.number,
+        pages: `${lot.start}-${lot.end}`,
+        note: `Lote ${lot.number} de ${lots.length} efetivamente processado na consolidação.`
+      }))
+
       await analysisRef.set({
         status: 'concluido',
         progress: 100,
         model: DEFAULT_MODEL,
         promptCount: prompts.length,
+        globalRigorVersion: GLOBAL_RIGOR_VERSION,
+        processedLots: lots.length,
         report,
         completedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp()
