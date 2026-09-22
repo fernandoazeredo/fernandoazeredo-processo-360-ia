@@ -370,17 +370,10 @@ function AnalysisResult({report}:{report:AnalysisReport}) {
 }
 
 function BrainLoader() {
-  const nodes = [[50,18],[35,27],[65,27],[26,41],[50,38],[74,41],[22,58],[39,55],[61,55],[78,58],[31,72],[50,69],[69,72],[41,84],[59,84]]
-  return <div className="brain-loader" aria-hidden="true">
-    <div className="orbit orbit-a"/><div className="orbit orbit-b"/><div className="orbit orbit-c"/>
-    <svg viewBox="0 0 100 100">
-      <defs><filter id="glow"><feGaussianBlur stdDeviation="1.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
-      <path className="brain-outline" d="M49 13C38 8 28 16 28 26 18 29 15 41 21 49 14 59 20 71 30 73c0 11 10 18 19 12V13Zm2 0c11-5 21 3 21 13 10 3 13 15 7 23 7 10 1 22-9 24 0 11-10 18-19 12V13Z"/>
-      <g className="circuits" filter="url(#glow)">
-        <path d="M49 20 38 27 28 41 39 55 31 72 41 84M51 20 62 27 72 41 61 55 69 72 59 84M49 38H35L22 58l17-3 10 14M51 38h14l13 20-17-3-10 14"/>
-        {nodes.map(([x,y],i)=><circle key={i} cx={x} cy={y} r="1.6" style={{animationDelay:`-${i*.17}s`}}/>)}
-      </g>
-    </svg>
+  return <div className="brain-loader brain-loader-blue" aria-hidden="true">
+    <div className="ai-brain-halo"/>
+    <div className="ai-brain-art"/>
+    <div className="ai-brain-scan"/>
   </div>
 }
 
