@@ -58,26 +58,51 @@ export async function analyzeUploadedProcess(
 
   onProgress?.(32, 'Preparando lotes e prompts jurídicos')
 
-  const unsubscribe = onSnapshot(
-    doc(db, 'processos', analysisId),
-    snap => {
-      if (!snap.exists()) return
-      const data = snap.data()
-      const value = Number(data.progress)
-      const stage = String(data.stage || '')
-      if (Number.isFinite(value)) {
-        onProgress?.(Math.max(32, Math.min(99, value)), stage || 'Processando análise jurídica')
-      }
-    },
-    () => undefined
-  )
+  const analysisRef = doc(db, 'processos', analysisId)
+  let unsubscribe = () => {}
+  const firestoreCompletion = new Promise<AnalysisReport>((resolve, reject) => {
+    unsubscribe = onSnapshot(
+      analysisRef,
+      snap => {
+        if (!snap.exists()) return
+        const data = snap.data()
+        const value = Number(data.progress)
+        const stage = String(data.stage || '')
+
+        if (Number.isFinite(value)) {
+          onProgress?.(Math.max(32, Math.min(99, value)), stage || 'Processando análise jurídica')
+        }
+
+        if (data.status === 'concluido' && data.report) {
+          onProgress?.(100, 'Relatório consolidado concluído')
+          resolve({
+            analysisId,
+            fileName: file.name,
+            area,
+            perspective,
+            ...(data.report as Omit<AnalysisReport, 'analysisId' | 'fileName' | 'area' | 'perspective'>)
+          })
+        }
+
+        if (data.status === 'erro') {
+          reject(new Error(String(data.error || 'Falha durante o processamento da análise.')))
+        }
+      },
+      error => reject(error)
+    )
+  })
+
+  const call = httpsCallable(functionsClient, 'analyzeProcess', { timeout: 3600000 })
+  const callableResult = call({ analysisId, storagePath, fileName: file.name, area, perspective })
+    .then(result => result.data as AnalysisReport)
 
   try {
-    const call = httpsCallable(functionsClient, 'analyzeProcess', { timeout: 3600000 })
-    const result = await call({ analysisId, storagePath, fileName: file.name, area, perspective })
-
-    onProgress?.(100, 'Relatório consolidado concluído')
-    return result.data as AnalysisReport
+    return await Promise.race([callableResult, firestoreCompletion])
+  } catch (callError) {
+    const fallbackTimeout = new Promise<AnalysisReport>((_, reject) => {
+      window.setTimeout(() => reject(callError), 60000)
+    })
+    return await Promise.race([firestoreCompletion, fallbackTimeout])
   } finally {
     unsubscribe()
   }
