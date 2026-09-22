@@ -4,16 +4,23 @@ service cloud.firestore {
     function signedIn() { return request.auth != null; }
     function isAdmin() {
       return signedIn()
-        && request.auth.token.email_verified == true
         && request.auth.token.email == 'fernandoazeredo64@gmail.com';
     }
+
     match /prompts/{promptId} {
       allow read, write: if isAdmin();
     }
+
     match /processos/{processoId} {
-      allow read, write: if signedIn() && resource.data.ownerUid == request.auth.uid;
-      allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid;
+
+      allow read, update, delete: if signedIn()
+        && resource.data.ownerUid == request.auth.uid;
     }
-    match /{document=**} { allow read, write: if false; }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
   }
 }
