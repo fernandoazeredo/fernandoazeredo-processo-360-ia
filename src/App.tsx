@@ -111,7 +111,14 @@ function App() {
       }, 150)
     } catch (error: any) {
       const message = String(error?.message || '')
-      if (message.includes('OPENAI_API_KEY')) {
+      const code = String(error?.code || '')
+      const billingBlocked =
+        code.includes('resource-exhausted') ||
+        /no credits remaining|credit_balance_exhausted|insufficient_quota/i.test(message)
+
+      if (billingBlocked) {
+        setAnalysisError('A análise foi interrompida porque a conta da OpenAI API está sem créditos. Adicione saldo no faturamento da API e tente novamente em alguns minutos.')
+      } else if (message.includes('OPENAI_API_KEY')) {
         setAnalysisError('O motor de IA está pronto, mas a chave da OpenAI ainda precisa ser configurada no backend.')
       } else if (message.includes('AUTH_REQUIRED')) {
         setAnalysisError('É necessário entrar na Área ADM antes de iniciar a análise.')
