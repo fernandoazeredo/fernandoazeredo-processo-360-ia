@@ -71,11 +71,6 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
         run: node functions/scripts/seed-prompts.mjs
 
-      - name: Diagnosticar análises recentes
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
-        run: node functions/scripts/diagnose-processes.mjs
-
       - name: Remover credencial temporária
         if: always()
         shell: bash
