@@ -268,131 +268,78 @@ footer button:hover{color:var(--blue)}
   .markdown-table th{background:#f3f3f3!important}
 }
 
-/* PROCESSO 360 IA — cérebro azul animado */
+/* PROCESSO 360 IA — cérebro azul estático com fluxo neural */
 .brain-loader-blue{
   width:min(64vh,76vw,600px);
   aspect-ratio:1;
   position:relative;
   display:grid;
   place-items:center;
-  filter:none!important;
   overflow:visible;
-  animation:brainFloat 5.5s ease-in-out infinite;
+  filter:none!important;
+  transform:none!important;
+  animation:none!important;
 }
+
 .ai-brain-image{
+  position:relative;
+  z-index:1;
   width:100%;
   height:100%;
   object-fit:contain;
   display:block;
-  z-index:2;
-  filter:drop-shadow(0 0 26px rgba(48,132,255,.58)) drop-shadow(0 0 64px rgba(27,99,255,.24));
-  animation:brainBreathe 3.4s ease-in-out infinite;
   user-select:none;
   pointer-events:none;
+  transform:none!important;
+  animation:none!important;
+  filter:drop-shadow(0 0 22px rgba(48,132,255,.48))
+         drop-shadow(0 0 48px rgba(27,99,255,.18));
 }
-.brain-particles{
+
+.brain-network{
   position:absolute;
-  inset:12%;
+  inset:0;
   z-index:3;
-  overflow:hidden;
-  border-radius:42%;
-  pointer-events:none;
-  mask-image:radial-gradient(circle at 50% 48%,#000 0 54%,rgba(0,0,0,.92) 67%,transparent 86%);
-  -webkit-mask-image:radial-gradient(circle at 50% 48%,#000 0 54%,rgba(0,0,0,.92) 67%,transparent 86%);
-}
-.brain-particle{
-  position:absolute;
-  width:7px;
-  height:7px;
-  border-radius:50%;
-  background:radial-gradient(circle,#fff 0 18%,#8fdbff 32%,#28a9ff 60%,rgba(20,112,255,.12) 74%,transparent 100%);
-  box-shadow:0 0 7px rgba(255,255,255,.9),0 0 14px rgba(75,188,255,.95),0 0 24px rgba(28,119,255,.55);
-  opacity:.92;
-  will-change:transform,opacity;
-}
-.brain-particle:nth-child(4n),
-.brain-particle:nth-child(7n){
-  background:radial-gradient(circle,#fff 0 18%,#ffe39b 34%,#ffb21c 62%,rgba(255,161,0,.12) 76%,transparent 100%);
-  box-shadow:0 0 7px rgba(255,255,255,.9),0 0 15px rgba(255,192,66,.95),0 0 25px rgba(255,153,0,.5);
-}
-.p1{animation:neuralUp 2.8s ease-in-out infinite}
-.p2{animation:neuralDown 3.2s ease-in-out infinite}
-.p3{animation:neuralDiagNE 3.5s ease-in-out infinite}
-.p4{animation:neuralDiagSW 3.8s ease-in-out infinite}
-.p5{animation:neuralDiagNW 3.1s ease-in-out infinite}
-.p6{animation:neuralDiagSE 4s ease-in-out infinite}
-.p7{animation:neuralHorizontal 3.4s ease-in-out infinite}
-.p8{animation:neuralOrbit 4.2s ease-in-out infinite}
-.ai-brain-scan{
-  position:absolute;
-  z-index:4;
-  width:54%;
-  height:2px;
-  left:23%;
-  top:30%;
-  opacity:.26;
-  background:linear-gradient(90deg,transparent,#8fd3ff 18%,#fff 50%,#8fd3ff 82%,transparent);
-  box-shadow:0 0 14px rgba(125,207,255,.65);
-  border-radius:999px;
-  animation:brainScan 3.2s ease-in-out infinite;
+  width:100%;
+  height:100%;
+  overflow:visible;
   pointer-events:none;
 }
-@keyframes brainFloat{
-  0%,100%{transform:translate3d(0,0,0)}
-  50%{transform:translate3d(0,-10px,0)}
+
+.neural-guides path{
+  fill:none;
+  stroke:rgba(109,203,255,.17);
+  stroke-width:4.5;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+  vector-effect:non-scaling-stroke;
 }
-@keyframes brainBreathe{
-  0%,100%{transform:scale(.985)}
-  50%{transform:scale(1.018)}
+
+.neural-light{
+  fill:#8fdbff;
+  stroke:#fff;
+  stroke-width:1.5;
+  opacity:.98;
 }
-@keyframes neuralUp{
-  0%,100%{transform:translate3d(0,10px,0) scale(.72);opacity:.28}
-  48%{transform:translate3d(0,-24px,0) scale(1.28);opacity:1}
+
+.neural-light-gold{
+  fill:#ffc74d;
+  stroke:#fff5cc;
 }
-@keyframes neuralDown{
-  0%,100%{transform:translate3d(0,-11px,0) scale(.76);opacity:.3}
-  52%{transform:translate3d(0,25px,0) scale(1.24);opacity:1}
+
+.neural-light-small{
+  fill:#d8f4ff;
+  stroke:#8ddcff;
+  stroke-width:1;
+  opacity:.88;
 }
-@keyframes neuralDiagNE{
-  0%,100%{transform:translate3d(-13px,14px,0) scale(.74);opacity:.26}
-  50%{transform:translate3d(20px,-21px,0) scale(1.3);opacity:1}
-}
-@keyframes neuralDiagSW{
-  0%,100%{transform:translate3d(15px,-13px,0) scale(.72);opacity:.3}
-  50%{transform:translate3d(-21px,22px,0) scale(1.22);opacity:1}
-}
-@keyframes neuralDiagNW{
-  0%,100%{transform:translate3d(14px,14px,0) scale(.75);opacity:.28}
-  50%{transform:translate3d(-22px,-20px,0) scale(1.3);opacity:1}
-}
-@keyframes neuralDiagSE{
-  0%,100%{transform:translate3d(-14px,-14px,0) scale(.76);opacity:.3}
-  50%{transform:translate3d(22px,21px,0) scale(1.24);opacity:1}
-}
-@keyframes neuralHorizontal{
-  0%,100%{transform:translate3d(-20px,0,0) scale(.7);opacity:.24}
-  50%{transform:translate3d(23px,0,0) scale(1.25);opacity:1}
-}
-@keyframes neuralOrbit{
-  0%{transform:translate3d(-9px,0,0) scale(.75);opacity:.3}
-  25%{transform:translate3d(6px,-15px,0) scale(1.12);opacity:.95}
-  50%{transform:translate3d(18px,4px,0) scale(1.28);opacity:1}
-  75%{transform:translate3d(-5px,17px,0) scale(1.05);opacity:.85}
-  100%{transform:translate3d(-9px,0,0) scale(.75);opacity:.3}
-}
-@keyframes brainScan{
-  0%,100%{top:30%;opacity:0}
-  18%{opacity:.24}
-  50%{opacity:.46}
-  82%{opacity:.24}
-  100%{top:70%;opacity:0}
-}
+
 @media(max-width:700px){
   .brain-loader-blue{width:min(82vw,520px)}
-  .brain-particle{width:6px;height:6px}
+  .neural-guides path{stroke-width:3.5}
 }
+
 @media(prefers-reduced-motion:reduce){
-  .brain-loader-blue,.ai-brain-image,.ai-brain-scan,.brain-particle{animation:none!important}
-  .ai-brain-scan{display:none}
+  .neural-travelers{display:none}
 }
 
