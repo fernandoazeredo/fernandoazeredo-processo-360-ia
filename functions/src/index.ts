@@ -16,6 +16,7 @@ const LOT_SIZE = 170
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY')
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-5.6-sol'
 const GLOBAL_RIGOR_VERSION = 2
+const OPENAI_POLL_MS = 5000
 
 const GLOBAL_RIGOR = `
 PROCESSO 360 IA — PADRÃO GLOBAL DE RIGOR
@@ -200,6 +201,43 @@ async function loadPrompts(area: string, perspective: string) {
   return prompts
 }
 
+async function waitForOpenAIResponse(
+  client: OpenAI,
+  response: any,
+  analysisRef: FirebaseFirestore.DocumentReference,
+  stageLabel: string
+) {
+  const startedAt = Date.now()
+  let current = response
+  let lastHeartbeat = 0
+
+  while (current?.status === 'queued' || current?.status === 'in_progress') {
+    await new Promise(resolve => setTimeout(resolve, OPENAI_POLL_MS))
+    current = await client.responses.retrieve(current.id)
+
+    const elapsedSeconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000))
+    if (elapsedSeconds - lastHeartbeat >= 10) {
+      lastHeartbeat = elapsedSeconds
+      await analysisRef.set({
+        stage: `${stageLabel} — IA em processamento há ${elapsedSeconds}s`,
+        openaiResponseId: current.id,
+        openaiStatus: current.status,
+        updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true })
+    }
+  }
+
+  if (current?.status !== 'completed') {
+    const detail =
+      current?.error?.message ||
+      current?.incomplete_details?.reason ||
+      `status final ${current?.status || 'desconhecido'}`
+    throw new Error(`OpenAI não concluiu a resposta: ${detail}`)
+  }
+
+  return current
+}
+
 async function splitPdf(pdfBytes: Buffer) {
   const source = await PDFDocument.load(pdfBytes, { ignoreEncryption: true })
   const pageCount = source.getPageCount()
@@ -299,9 +337,10 @@ Preserve referências de página quando identificáveis e declare incerteza quan
         })
 
         try {
-          const response = await client.responses.create({
+          const startedResponse = await client.responses.create({
             model: DEFAULT_MODEL,
-            reasoning: { effort: 'high' },
+            reasoning: { effort: 'medium' },
+            background: true,
             input: [
               {
                 role: 'developer',
@@ -310,7 +349,7 @@ Preserve referências de página quando identificáveis e declare incerteza quan
               {
                 role: 'user',
                 content: [
-                { type: 'input_file', file_id: uploaded.id },
+                { type: 'input_file', file_id: uploaded.id, detail: 'auto' },
                 {
                   type: 'input_text',
                   text: `${extractionInstructions}
@@ -335,6 +374,20 @@ Analise este lote sem antecipar o diagnóstico final. O resultado deve ser uma e
               }
             }
           } as any)
+
+          await analysisRef.set({
+            openaiResponseId: startedResponse.id,
+            openaiStatus: startedResponse.status,
+            stage: `Lote ${lot.number} de ${lots.length} enviado à IA`,
+            updatedAt: FieldValue.serverTimestamp()
+          }, { merge: true })
+
+          const response = await waitForOpenAIResponse(
+            client,
+            startedResponse,
+            analysisRef,
+            `Analisando lote ${lot.number} de ${lots.length} com IA`
+          )
 
           lotResults.push(JSON.parse(response.output_text))
         } finally {
@@ -368,9 +421,10 @@ Não invente fatos, páginas, documentos, precedentes ou probabilidades.
 Quando a evidência for insuficiente, registre explicitamente a limitação.`
       )
 
-      const finalResponse = await client.responses.create({
+      const startedFinalResponse = await client.responses.create({
         model: DEFAULT_MODEL,
         reasoning: { effort: 'high' },
+        background: true,
         input: [
           {
             role: 'developer',
@@ -406,6 +460,21 @@ ${JSON.stringify(lotResults)}`
           }
         }
       } as any)
+
+      await analysisRef.set({
+        openaiResponseId: startedFinalResponse.id,
+        openaiStatus: startedFinalResponse.status,
+        stage: 'Relatório final enviado à IA para consolidação',
+        progress: 86,
+        updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true })
+
+      const finalResponse = await waitForOpenAIResponse(
+        client,
+        startedFinalResponse,
+        analysisRef,
+        'Consolidando relatório jurídico com IA'
+      )
 
       const report = JSON.parse(finalResponse.output_text)
 
