@@ -421,9 +421,16 @@ Não invente fatos, páginas, documentos, precedentes ou probabilidades.
 Quando a evidência for insuficiente, registre explicitamente a limitação.`
       )
 
+      const finalReasoningEffort = lots.length === 1 && pageCount <= 30 ? 'medium' : 'high'
+
+      await analysisRef.set({
+        finalReasoningEffort,
+        updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true })
+
       const startedFinalResponse = await client.responses.create({
         model: DEFAULT_MODEL,
-        reasoning: { effort: 'high' },
+        reasoning: { effort: finalReasoningEffort },
         background: true,
         input: [
           {
