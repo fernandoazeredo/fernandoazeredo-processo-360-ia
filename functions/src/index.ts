@@ -324,12 +324,16 @@ Preserve referências de página quando identificáveis e declare incerteza quan
       )
 
       const processLot = async (lot: typeof lots[number]) => {
+        const lotStartedAt = Date.now()
+        const uploadStartedAt = Date.now()
         const uploaded = await client.files.create({
           file: await toFile(Buffer.from(lot.bytes), `lote-${lot.number}.pdf`, { type: 'application/pdf' }),
           purpose: 'user_data'
         })
+        const uploadMs = Date.now() - uploadStartedAt
 
         try {
+          const createStartedAt = Date.now()
           const startedResponse = await client.responses.create({
             model: DEFAULT_MODEL,
             reasoning: { effort: 'medium' },
@@ -367,6 +371,8 @@ Analise este lote sem antecipar o diagnóstico final. O resultado deve ser uma e
               }
             }
           } as any)
+          const createMs = Date.now() - createStartedAt
+          const waitStartedAt = Date.now()
 
           await analysisRef.set({
             openaiResponseId: startedResponse.id,
@@ -381,6 +387,25 @@ Analise este lote sem antecipar o diagnóstico final. O resultado deve ser uma e
             analysisRef,
             `Analisando lote ${lot.number} de ${lots.length} com IA`
           )
+
+          const waitMs = Date.now() - waitStartedAt
+          const timing = {
+            kind: 'lot',
+            lot: lot.number,
+            pages: `${lot.start}-${lot.end}`,
+            responseId: response.id,
+            initialStatus: startedResponse.status,
+            finalStatus: response.status,
+            uploadMs,
+            createMs,
+            waitMs,
+            totalMs: Date.now() - lotStartedAt,
+            completedAtMs: Date.now()
+          }
+          console.info('PROCESSO360_OPENAI_TIMING', JSON.stringify(timing))
+          await analysisRef.set({
+            openaiTimings: FieldValue.arrayUnion(timing)
+          }, { merge: true })
 
           lotResults[lot.number - 1] = JSON.parse(response.output_text)
         } finally {
@@ -437,6 +462,7 @@ Quando a evidência for insuficiente, registre explicitamente a limitação.`
         updatedAt: FieldValue.serverTimestamp()
       }, { merge: true })
 
+      const finalCallStartedAt = Date.now()
       const startedFinalResponse = await client.responses.create({
         model: DEFAULT_MODEL,
         reasoning: { effort: finalReasoningEffort },
@@ -476,6 +502,8 @@ ${JSON.stringify(lotResults)}`
           }
         }
       } as any)
+      const finalCreateMs = Date.now() - finalCallStartedAt
+      const finalWaitStartedAt = Date.now()
 
       await analysisRef.set({
         openaiResponseId: startedFinalResponse.id,
@@ -491,6 +519,21 @@ ${JSON.stringify(lotResults)}`
         analysisRef,
         'Consolidando relatório jurídico com IA'
       )
+
+      const finalTiming = {
+        kind: 'final',
+        responseId: finalResponse.id,
+        initialStatus: startedFinalResponse.status,
+        finalStatus: finalResponse.status,
+        createMs: finalCreateMs,
+        waitMs: Date.now() - finalWaitStartedAt,
+        totalMs: Date.now() - finalCallStartedAt,
+        completedAtMs: Date.now()
+      }
+      console.info('PROCESSO360_OPENAI_TIMING', JSON.stringify(finalTiming))
+      await analysisRef.set({
+        openaiTimings: FieldValue.arrayUnion(finalTiming)
+      }, { merge: true })
 
       const report = JSON.parse(finalResponse.output_text)
 
