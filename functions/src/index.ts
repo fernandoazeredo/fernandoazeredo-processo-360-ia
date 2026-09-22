@@ -488,6 +488,7 @@ ${JSON.stringify(lotResults)}`
         status: 'concluido',
         stage: 'Relatório jurídico consolidado concluído',
         progress: 100,
+        openaiStatus: 'completed',
         model: DEFAULT_MODEL,
         promptCount: prompts.length,
         globalRigorVersion: GLOBAL_RIGOR_VERSION,
