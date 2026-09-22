@@ -1,4 +1,4 @@
-name: Deploy Firebase Hosting
+name: Deploy Firebase Completo
 
 on:
   push:
@@ -7,17 +7,30 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: firebase-production
+  cancel-in-progress: false
+
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
+    environment: production
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node.js 22
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: npm run build
+
+      - name: Instalar frontend
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
         env:
           VITE_FIREBASE_API_KEY: "AIzaSyDj9w8tjTqYubxGc3oOEoXAvlX5J70aQPU"
           VITE_FIREBASE_AUTH_DOMAIN: "processo-360-ia.firebaseapp.com"
@@ -25,9 +38,35 @@ jobs:
           VITE_FIREBASE_STORAGE_BUCKET: "processo-360-ia.firebasestorage.app"
           VITE_FIREBASE_MESSAGING_SENDER_ID: "685012306915"
           VITE_FIREBASE_APP_ID: "1:685012306915:web:e9c441be57f15b41ee6ed6"
-      - uses: FirebaseExtended/action-hosting-deploy@v0
-        with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PROCESSO_360_IA }}
-          channelId: live
-          projectId: processo-360-ia
+
+      - name: Instalar backend
+        run: npm install --prefix functions
+
+      - name: Build backend
+        run: npm run build --prefix functions
+
+      - name: Preparar credencial Firebase
+        shell: bash
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PROCESSO_360_IA }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "Segredo FIREBASE_SERVICE_ACCOUNT_PROCESSO_360_IA não configurado."
+            exit 1
+          fi
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-service-account.json"
+
+      - name: Deploy completo em produção
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
+          CI: "true"
+        run: |
+          npx --yes firebase-tools@latest deploy \
+            --project processo-360-ia \
+            --only "hosting,functions,firestore:rules,storage" \
+            --non-interactive
+
+      - name: Remover credencial temporária
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/firebase-service-account.json"
