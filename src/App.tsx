@@ -193,14 +193,6 @@ function App() {
       {processing && <div className="processing-overlay" role="dialog" aria-modal="true" aria-label="Análise em andamento">
         <div className="analysis-space-scene" aria-hidden="true">
           <div className="analysis-space-stars" />
-          <div className="analysis-earth">
-            <img src="https://cssanimation.rocks/images/random/earth.png" alt="" />
-          </div>
-          <div className="analysis-moon-orbit">
-            <div className="analysis-moon">
-              <img src="https://cssanimation.rocks/images/random/moon.png" alt="" />
-            </div>
-          </div>
         </div>
         <div className="processing-inner">
           <BrainLoader />
