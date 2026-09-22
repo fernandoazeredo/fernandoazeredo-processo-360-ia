@@ -1,105 +1,36 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, User } from 'firebase/auth'
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { BrainCircuit, Check, ChevronRight, Download, FileText, LockKeyhole, Moon, Pencil, Plus, Save, ShieldCheck, Sun, Trash2, UploadCloud, X } from 'lucide-react'
-import { auth, db, firebaseConfigured } from './firebase'
-
-const ADMIN_EMAIL = 'fernandoazeredo64@gmail.com'
-
-type Area = 'Trabalhista' | 'Cível' | 'Criminal' | 'Ambiental' | 'Tributário' | 'Administrativo' | 'Previdenciário' | 'Consumidor' | 'Família' | 'Empresarial'
-type PromptStatus = 'rascunho' | 'publicado' | 'inativo'
-type PromptItem = {
-  id: string
-  title: string
-  area: Area
-  perspective: string
-  purpose: string
-  content: string
-  version: number
-  status: PromptStatus
-}
-
-const perspectives: Record<Area, string[]> = {
-  Trabalhista: ['Reclamante', 'Reclamada'],
-  Cível: ['Autor', 'Réu'],
-  Criminal: ['Defesa', 'Acusação', 'Assistente de acusação'],
-  Ambiental: ['Empresa / Autuado', 'Autor / Órgão fiscalizador'],
-  Tributário: ['Contribuinte', 'Fazenda Pública'],
-  Administrativo: ['Administrado', 'Administração Pública'],
-  Previdenciário: ['Segurado', 'INSS'],
-  Consumidor: ['Consumidor', 'Fornecedor'],
-  Família: ['Requerente', 'Requerido'],
-  Empresarial: ['Autor / Credor', 'Réu / Devedor']
-}
-
-const promptPurposes = [
-  'Preparação e leitura inicial',
-  'Extração por lote',
-  'Catalogação documental',
-  'Linha do tempo processual',
-  'Confronto de alegações e provas',
-  'Análise jurídica global',
-  'Cenário percentual de risco',
-  'Relatório final'
-]
-
-const stages = [
-  'Preparando o processo',
-  'Dividindo o PDF em lotes de até 170 páginas',
-  'Extraindo e catalogando os documentos',
-  'Construindo a linha do tempo processual',
-  'Confrontando alegações, provas e decisões',
-  'Elaborando a análise jurídica global',
-  'Calculando o cenário percentual de risco',
-  'Preparando o relatório final'
-]
-
-function App() {
-  const [dark, setDark] = useState(() => localStorage.getItem('p360-theme') !== 'light')
-  const [file, setFile] = useState<File | null>(null)
-  const [area, setArea] = useState<Area>('Trabalhista')
-  const [perspective, setPerspective] = useState('Reclamada')
-  const [processing, setProcessing] = useState(false)
-  const [progress, setProgress] = useState(0)
-  const [complete, setComplete] = useState(false)
-  const [adminOpen, setAdminOpen] = useState(false)
-  const [adminUser, setAdminUser] = useState<User | null>(null)
-  const timer = useRef<number | null>(null)
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = dark ? 'dark' : 'light'
-    localStorage.setItem('p360-theme', dark ? 'dark' : 'light')
-  }, [dark])
-
-  useEffect(() => {
-    if (!auth) return
-    return onAuthStateChanged(auth, user => setAdminUser(user?.email === ADMIN_EMAIL ? user : null))
-  }, [])
-
-  useEffect(() => () => { if (timer.current) window.clearInterval(timer.current) }, [])
-
-  const stage = useMemo(() => stages[Math.min(stages.length - 1, Math.floor(progress / (100 / stages.length)))], [progress])
-
-  function changeArea(next: Area) {
-    setArea(next)
-    setPerspective(perspectives[next][0])
-  }
-
-  function startAnalysis() {
+import { auth, db, firebaseConfigured } from './firebase'\  async function startAnalysis() {
     if (!file) return
+    setAnalysisError('')
+    setAnalysis(null)
+    if (!auth?.currentUser) {
+      setAnalysisError('Para processar o PDF, entre primeiro na Área ADM. O acesso de usuários será habilitado em uma etapa própria.')
+      setAdminOpen(true)
+      return
+    }
     setProgress(0)
-    setComplete(false)
+    setProcessingStage(stages[0])
     setProcessing(true)
-    timer.current = window.setInterval(() => {
-      setProgress(value => {
-        const next = Math.min(100, value + 2)
-        if (next === 100 && timer.current) {
-          window.clearInterval(timer.current)
-          window.setTimeout(() => { setProcessing(false); setComplete(true) }, 900)
-        }
-        return next
+    try {
+      const report = await analyzeUploadedProcess(file, area, perspective, (value, stage) => {
+        setProgress(value)
+        setProcessingStage(stage)
       })
-    }, 130)
+      setAnalysis(report)
+      window.setTimeout(() => document.getElementById('analysis-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
+    } catch (error: any) {
+      const message = String(error?.message || '')
+      if (message.includes('OPENAI_API_KEY')) setAnalysisError('O motor de IA está pronto, mas a chave da OpenAI ainda precisa ser configurada no backend.')
+      else if (message.includes('AUTH_REQUIRED')) {
+        setAnalysisError('É necessário entrar na Área ADM antes de iniciar a análise.')
+        setAdminOpen(true)
+      } else setAnalysisError('Não foi possível concluir a análise. ' + (message || 'Verifique a configuração do backend e tente novamente.'))
+    } finally {
+      setProcessing(false)
+    }
   }
 
   return (
@@ -133,10 +64,11 @@ function App() {
             <label>Área do Direito<select value={area} onChange={e => changeArea(e.target.value as Area)}>{Object.keys(perspectives).map(item => <option key={item}>{item}</option>)}</select></label>
             <label>Perspectiva<select value={perspective} onChange={e => setPerspective(e.target.value)}>{perspectives[area].map(item => <option key={item}>{item}</option>)}</select></label>
           </div>
-          <button className="primary-button" disabled={!file} onClick={startAnalysis}>Iniciar análise completa <ChevronRight size={18}/></button>
+          <button className="primary-button" disabled={!file || processing} onClick={startAnalysis}>{processing?'Analisando processo...':'Iniciar análise completa'} <ChevronRight size={18}/></button>
+          {analysisError && <p className="analysis-error">{analysisError}</p>}
         </section>
 
-        {complete && <AnalysisResult area={area} perspective={perspective} fileName={file?.name ?? ''} />}
+        {analysis && <AnalysisResult report={analysis} />}
 
         <section className="trust-row">
           <span><ShieldCheck/> Rastreabilidade documental</span><span><LockKeyhole/> Prompts protegidos</span><span><BrainCircuit/> Diagnóstico somente após leitura integral</span>
@@ -148,7 +80,7 @@ function App() {
       {processing && <div className="processing-overlay" role="dialog" aria-modal="true" aria-label="Análise em andamento">
         <div className="processing-inner">
           <BrainLoader />
-          <div className="live-progress"><strong>{progress}%</strong><div className="progress-track"><i style={{width:`${progress}%`}} /></div><span>{stage}...</span></div>
+          <div className="live-progress"><strong>{progress}%</strong><div className="progress-track"><i style={{width:`${progress}%`}} /></div><span>{processingStage}...</span><small>Processos extensos podem levar vários minutos. Não feche esta janela.</small></div>
         </div>
       </div>}
 
@@ -157,24 +89,33 @@ function App() {
   )
 }
 
-function AnalysisResult({area,perspective,fileName}:{area:Area;perspective:string;fileName:string}) {
+function AnalysisResult({report}:{report:AnalysisReport}) {
   return <section className="analysis-result" id="analysis-result">
     <div className="analysis-toolbar no-print">
       <div><span className="eyebrow"><FileText size={16}/> Resultado da análise</span><h2>Relatório jurídico consolidado</h2></div>
       <button className="export-button" onClick={() => window.print()}><Download size={18}/> Exportar análise em PDF</button>
     </div>
     <div className="analysis-meta">
-      <span><b>Arquivo:</b> {fileName}</span><span><b>Área:</b> {area}</span><span><b>Perspectiva:</b> {perspective}</span>
+      <span><b>Arquivo:</b> {report.fileName}</span><span><b>Área:</b> {report.area}</span><span><b>Perspectiva:</b> {report.perspective}</span><span><b>ID:</b> {report.analysisId}</span>
+    </div>
+    <div className="analysis-section-full"><h3>1. Resumo executivo</h3><p>{report.executiveSummary}</p></div>
+    <div className="analysis-section-full">
+      <h3>2. Linha do tempo processual</h3>
+      {report.timeline.length ? <div className="timeline-list">{report.timeline.map((item,i)=><div className="timeline-item" key={i}><strong>{item.date || 'Data não identificada'}</strong><span>{item.event}</span><small>{item.reference}</small></div>)}</div> : <p>Nenhum evento cronológico estruturado foi retornado.</p>}
     </div>
     <div className="analysis-grid">
-      <article><h3>1. Resumo executivo</h3><p>Este espaço receberá a síntese do processo, situação atual, teses centrais e pontos críticos identificados pela análise integral.</p></article>
-      <article><h3>2. Linha do tempo processual</h3><p>Eventos relevantes serão organizados cronologicamente, com referência aos documentos e atos processuais correspondentes.</p></article>
-      <article><h3>3. Alegações, provas e decisões</h3><p>O sistema confrontará alegações das partes com documentos, provas, decisões e demais elementos constantes dos autos.</p></article>
-      <article><h3>4. Análise jurídica global</h3><p>As conclusões serão produzidas após a consolidação integral dos lotes, observando a área e a perspectiva selecionadas.</p></article>
-      <article><h3>5. Riscos e pontos de atenção</h3><p>Serão apresentados os fatores favoráveis, desfavoráveis, lacunas probatórias e riscos jurídicos encontrados.</p></article>
-      <article><h3>6. Conclusão e estratégia</h3><p>O relatório final apresentará síntese conclusiva, providências sugeridas e referências aos elementos que sustentam cada conclusão.</p></article>
+      <article><h3>3. Alegações, provas e decisões</h3><p>{report.claimsEvidenceDecisions}</p></article>
+      <article><h3>4. Análise jurídica global</h3><p>{report.globalAnalysis}</p></article>
     </div>
-    <p className="analysis-placeholder">Modelo visual pronto. O conteúdo será substituído pela análise produzida pela IA quando o motor jurídico estiver conectado.</p>
+    <div className="analysis-section-full">
+      <h3>5. Riscos e pontos de atenção</h3>
+      {report.risks.length ? <div className="risk-list">{report.risks.map((risk,i)=><div className="risk-item" key={i}><div><strong>{risk.item}</strong><span className="risk-level">{risk.level}</span></div><p>{risk.basis}</p></div>)}</div> : <p>Nenhum risco estruturado foi retornado.</p>}
+    </div>
+    <div className="analysis-section-full"><h3>6. Conclusão e estratégia</h3><p>{report.conclusionStrategy}</p></div>
+    <div className="analysis-section-full sources-block">
+      <h3>7. Rastreabilidade dos lotes</h3>
+      <div className="source-list">{report.sources.map((source,i)=><div key={i}><b>Lote {source.lot}</b><span>Páginas {source.pages}</span><small>{source.note}</small></div>)}</div>
+    </div>
   </section>
 }
 
