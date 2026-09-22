@@ -26,13 +26,13 @@ const perspectives: Record<Area, string[]> = {
   Trabalhista: ['Reclamante', 'Reclamada'],
   Cível: ['Autor', 'Réu'],
   Criminal: ['Defesa', 'Acusação', 'Assistente de acusação', 'Querelante'],
-  Ambiental: ['Empresa / Autuado', 'Autor / Órgão fiscalizador'],
+  Ambiental: ['Autuado / Réu', 'Órgão Ambiental / MP'],
   Tributário: ['Contribuinte', 'Fazenda Pública'],
   Administrativo: ['Administrado', 'Administração Pública'],
   Previdenciário: ['Segurado', 'INSS'],
-  Consumidor: ['Consumidor', 'Fornecedor'],
+  Consumidor: ['Consumidor', 'Fornecedor / Empresa'],
   Família: ['Requerente', 'Requerido'],
-  Empresarial: ['Autor / Credor', 'Réu / Devedor']
+  Empresarial: ['Parte Autora', 'Parte Ré']
 }
 
 const promptPurposes = [
