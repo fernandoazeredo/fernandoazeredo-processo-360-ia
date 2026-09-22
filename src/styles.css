@@ -241,3 +241,29 @@ footer button:hover{color:var(--blue)}
   background:#071525!important;
   background-image:none!important;
 }
+
+
+/* PROCESSO 360 IA — markdown do relatório */
+.markdown-content{display:grid;gap:10px}
+.markdown-paragraph{margin:0!important;color:var(--muted);line-height:1.72}
+.markdown-heading{margin:8px 0 0;font-size:.96rem;color:var(--text)}
+.markdown-list{margin:2px 0 2px 20px;padding:0;color:var(--muted);line-height:1.65}
+.markdown-list li+li{margin-top:5px}
+.markdown-content strong{color:var(--text)}
+.markdown-table-wrap{width:100%;overflow-x:auto;margin-top:4px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+.markdown-table{width:100%;min-width:640px;border-collapse:collapse;font-size:.82rem}
+.markdown-table th,.markdown-table td{padding:11px 12px;text-align:left;vertical-align:top;border-right:1px solid var(--border);border-bottom:1px solid var(--border);line-height:1.5}
+.markdown-table th:last-child,.markdown-table td:last-child{border-right:0}
+.markdown-table tr:last-child td{border-bottom:0}
+.markdown-table th{background:var(--surface-2);color:var(--text);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em}
+.markdown-table td{color:var(--muted)}
+@media(max-width:700px){
+  .markdown-table{font-size:.78rem}
+  .markdown-table th,.markdown-table td{padding:9px 10px}
+}
+@media print{
+  .markdown-table-wrap{overflow:visible;border-color:#bbb}
+  .markdown-table{min-width:0;font-size:8.5pt}
+  .markdown-table th,.markdown-table td{border-color:#ccc;color:#222}
+  .markdown-table th{background:#f3f3f3!important}
+}
