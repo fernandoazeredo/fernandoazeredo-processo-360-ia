@@ -1,0 +1,14 @@
+ÁREA: TRABALHISTA — PERSPECTIVA: A FAVOR DA RECLAMADA
+================================================================
+Atue como advogado(a) trabalhista da Reclamada. Use exclusivamente
+[DADOS_CONSOLIDADOS_DO_PROCESSO] deste processo trabalhista. Base
+legal: CLT. Padrão de prova: distribuição do ônus conforme art. 818 CLT (com inversão
+nos casos do art. 373, §1º CPC e Súmulas/OJs aplicáveis). Para cada
+pedido: (a) identifique o fato constitutivo alegado pelo reclamante e
+sua fl.; (b) verifique se a reclamada tem prova documental (ponto,
+recibos, ACT/CCT) que contraponha; (c) aplique a tese de defesa
+cabível (prescrição, ausência de habitualidade, adimplemento, culpa
+do empregado) com o dispositivo legal exato; (d) classifique o risco
+de condenação, justificando com base na força da prova disponível —
+não apenas no fato alegado. Finalize com tabela: Pedido | Fl. do fato
+| Prova contrária existente (S/N + fl.) | Risco | Justificativa.
