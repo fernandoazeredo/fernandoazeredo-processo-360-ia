@@ -1,33 +1,124 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, User } from 'firebase/auth'
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore'
-import { BrainCircuit, Check, ChevronRight, Download, FileText, LockKeyhole, Moon, Pencil, Plus, Save, ShieldCheck, Sun, Trash2, UploadCloud, X } from 'lucide-react'
-import { auth, db, firebaseConfigured } from './firebase'\  async function startAnalysis() {
+import { BrainCircuit, ChevronRight, Download, FileText, LockKeyhole, Moon, Pencil, Plus, Save, ShieldCheck, Sun, Trash2, UploadCloud, X } from 'lucide-react'
+import { auth, db, firebaseConfigured } from './firebase'
+import { analyzeUploadedProcess } from './ai'
+import type { AnalysisReport } from './ai'
+
+const ADMIN_EMAIL = 'fernandoazeredo64@gmail.com'
+
+type Area = 'Trabalhista' | 'Cível' | 'Criminal' | 'Ambiental' | 'Tributário' | 'Administrativo' | 'Previdenciário' | 'Consumidor' | 'Família' | 'Empresarial'
+type PromptStatus = 'rascunho' | 'publicado' | 'inativo'
+
+type PromptItem = {
+  id: string
+  title: string
+  area: Area
+  perspective: string
+  purpose: string
+  content: string
+  version: number
+  status: PromptStatus
+}
+
+const perspectives: Record<Area, string[]> = {
+  Trabalhista: ['Reclamante', 'Reclamada'],
+  Cível: ['Autor', 'Réu'],
+  Criminal: ['Defesa', 'Acusação', 'Assistente de acusação'],
+  Ambiental: ['Empresa / Autuado', 'Autor / Órgão fiscalizador'],
+  Tributário: ['Contribuinte', 'Fazenda Pública'],
+  Administrativo: ['Administrado', 'Administração Pública'],
+  Previdenciário: ['Segurado', 'INSS'],
+  Consumidor: ['Consumidor', 'Fornecedor'],
+  Família: ['Requerente', 'Requerido'],
+  Empresarial: ['Autor / Credor', 'Réu / Devedor']
+}
+
+const promptPurposes = [
+  'Preparação e leitura inicial',
+  'Extração por lote',
+  'Catalogação documental',
+  'Linha do tempo processual',
+  'Confronto de alegações e provas',
+  'Análise jurídica global',
+  'Cenário percentual de risco',
+  'Relatório final'
+]
+
+const stages = [
+  'Preparando o processo',
+  'Enviando o processo com segurança',
+  'Dividindo o PDF em lotes de até 170 páginas',
+  'Extraindo e catalogando os documentos',
+  'Construindo a linha do tempo processual',
+  'Confrontando alegações, provas e decisões',
+  'Elaborando a análise jurídica global',
+  'Preparando o relatório final'
+]
+
+function App() {
+  const [dark, setDark] = useState(() => localStorage.getItem('p360-theme') !== 'light')
+  const [file, setFile] = useState<File | null>(null)
+  const [area, setArea] = useState<Area>('Trabalhista')
+  const [perspective, setPerspective] = useState('Reclamada')
+  const [processing, setProcessing] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [processingStage, setProcessingStage] = useState(stages[0])
+  const [analysis, setAnalysis] = useState<AnalysisReport | null>(null)
+  const [analysisError, setAnalysisError] = useState('')
+  const [adminOpen, setAdminOpen] = useState(false)
+  const [adminUser, setAdminUser] = useState<User | null>(null)
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+    localStorage.setItem('p360-theme', dark ? 'dark' : 'light')
+  }, [dark])
+
+  useEffect(() => {
+    if (!auth) return
+    return onAuthStateChanged(auth, user => setAdminUser(user?.email === ADMIN_EMAIL ? user : null))
+  }, [])
+
+  function changeArea(next: Area) {
+    setArea(next)
+    setPerspective(perspectives[next][0])
+  }
+
+  async function startAnalysis() {
     if (!file) return
     setAnalysisError('')
     setAnalysis(null)
+
     if (!auth?.currentUser) {
       setAnalysisError('Para processar o PDF, entre primeiro na Área ADM. O acesso de usuários será habilitado em uma etapa própria.')
       setAdminOpen(true)
       return
     }
+
     setProgress(0)
     setProcessingStage(stages[0])
     setProcessing(true)
+
     try {
       const report = await analyzeUploadedProcess(file, area, perspective, (value, stage) => {
         setProgress(value)
         setProcessingStage(stage)
       })
       setAnalysis(report)
-      window.setTimeout(() => document.getElementById('analysis-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
+      window.setTimeout(() => {
+        document.getElementById('analysis-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 150)
     } catch (error: any) {
       const message = String(error?.message || '')
-      if (message.includes('OPENAI_API_KEY')) setAnalysisError('O motor de IA está pronto, mas a chave da OpenAI ainda precisa ser configurada no backend.')
-      else if (message.includes('AUTH_REQUIRED')) {
+      if (message.includes('OPENAI_API_KEY')) {
+        setAnalysisError('O motor de IA está pronto, mas a chave da OpenAI ainda precisa ser configurada no backend.')
+      } else if (message.includes('AUTH_REQUIRED')) {
         setAnalysisError('É necessário entrar na Área ADM antes de iniciar a análise.')
         setAdminOpen(true)
-      } else setAnalysisError('Não foi possível concluir a análise. ' + (message || 'Verifique a configuração do backend e tente novamente.'))
+      } else {
+        setAnalysisError('Não foi possível concluir a análise. ' + (message || 'Verifique a configuração do backend e tente novamente.'))
+      }
     } finally {
       setProcessing(false)
     }
@@ -56,22 +147,37 @@ import { auth, db, firebaseConfigured } from './firebase'\  async function start
           <div className="step-heading"><span>1</span><div><b>Envie o processo</b><small>Arquivo único em PDF. A divisão em lotes será automática.</small></div></div>
           <label className={`dropzone ${file ? 'has-file' : ''}`}>
             <input type="file" accept="application/pdf,.pdf" onChange={e => setFile(e.target.files?.[0] ?? null)} />
-            {file ? <><FileText size={34}/><b>{file.name}</b><small>{(file.size / 1024 / 1024).toFixed(2)} MB · PDF selecionado</small></> : <><UploadCloud size={38}/><b>Arraste o processo ou selecione o PDF</b><small>O sistema organizará os lotes de até 170 páginas</small></>}
+            {file
+              ? <><FileText size={34}/><b>{file.name}</b><small>{(file.size / 1024 / 1024).toFixed(2)} MB · PDF selecionado</small></>
+              : <><UploadCloud size={38}/><b>Arraste o processo ou selecione o PDF</b><small>O sistema organizará os lotes de até 170 páginas</small></>}
           </label>
 
           <div className="step-heading second"><span>2</span><div><b>Escolha a área e a perspectiva</b><small>Cada opção acionará seu próprio conjunto de prompts especializados.</small></div></div>
           <div className="form-grid">
-            <label>Área do Direito<select value={area} onChange={e => changeArea(e.target.value as Area)}>{Object.keys(perspectives).map(item => <option key={item}>{item}</option>)}</select></label>
-            <label>Perspectiva<select value={perspective} onChange={e => setPerspective(e.target.value)}>{perspectives[area].map(item => <option key={item}>{item}</option>)}</select></label>
+            <label>Área do Direito
+              <select value={area} onChange={e => changeArea(e.target.value as Area)}>
+                {Object.keys(perspectives).map(item => <option key={item}>{item}</option>)}
+              </select>
+            </label>
+            <label>Perspectiva
+              <select value={perspective} onChange={e => setPerspective(e.target.value)}>
+                {perspectives[area].map(item => <option key={item}>{item}</option>)}
+              </select>
+            </label>
           </div>
-          <button className="primary-button" disabled={!file || processing} onClick={startAnalysis}>{processing?'Analisando processo...':'Iniciar análise completa'} <ChevronRight size={18}/></button>
+
+          <button className="primary-button" disabled={!file || processing} onClick={startAnalysis}>
+            {processing ? 'Analisando processo...' : 'Iniciar análise completa'} <ChevronRight size={18}/>
+          </button>
           {analysisError && <p className="analysis-error">{analysisError}</p>}
         </section>
 
         {analysis && <AnalysisResult report={analysis} />}
 
         <section className="trust-row">
-          <span><ShieldCheck/> Rastreabilidade documental</span><span><LockKeyhole/> Prompts protegidos</span><span><BrainCircuit/> Diagnóstico somente após leitura integral</span>
+          <span><ShieldCheck/> Rastreabilidade documental</span>
+          <span><LockKeyhole/> Prompts protegidos</span>
+          <span><BrainCircuit/> Diagnóstico somente após leitura integral</span>
         </section>
       </main>
 
@@ -80,7 +186,12 @@ import { auth, db, firebaseConfigured } from './firebase'\  async function start
       {processing && <div className="processing-overlay" role="dialog" aria-modal="true" aria-label="Análise em andamento">
         <div className="processing-inner">
           <BrainLoader />
-          <div className="live-progress"><strong>{progress}%</strong><div className="progress-track"><i style={{width:`${progress}%`}} /></div><span>{processingStage}...</span><small>Processos extensos podem levar vários minutos. Não feche esta janela.</small></div>
+          <div className="live-progress">
+            <strong>{progress}%</strong>
+            <div className="progress-track"><i style={{width:`${progress}%`}} /></div>
+            <span>{processingStage}...</span>
+            <small>Processos extensos podem levar vários minutos. Não feche esta janela.</small>
+          </div>
         </div>
       </div>}
 
@@ -92,29 +203,64 @@ import { auth, db, firebaseConfigured } from './firebase'\  async function start
 function AnalysisResult({report}:{report:AnalysisReport}) {
   return <section className="analysis-result" id="analysis-result">
     <div className="analysis-toolbar no-print">
-      <div><span className="eyebrow"><FileText size={16}/> Resultado da análise</span><h2>Relatório jurídico consolidado</h2></div>
+      <div>
+        <span className="eyebrow"><FileText size={16}/> Resultado da análise</span>
+        <h2>Relatório jurídico consolidado</h2>
+      </div>
       <button className="export-button" onClick={() => window.print()}><Download size={18}/> Exportar análise em PDF</button>
     </div>
+
     <div className="analysis-meta">
-      <span><b>Arquivo:</b> {report.fileName}</span><span><b>Área:</b> {report.area}</span><span><b>Perspectiva:</b> {report.perspective}</span><span><b>ID:</b> {report.analysisId}</span>
+      <span><b>Arquivo:</b> {report.fileName}</span>
+      <span><b>Área:</b> {report.area}</span>
+      <span><b>Perspectiva:</b> {report.perspective}</span>
+      <span><b>ID:</b> {report.analysisId}</span>
     </div>
-    <div className="analysis-section-full"><h3>1. Resumo executivo</h3><p>{report.executiveSummary}</p></div>
+
+    <div className="analysis-section-full">
+      <h3>1. Resumo executivo</h3>
+      <p>{report.executiveSummary}</p>
+    </div>
+
     <div className="analysis-section-full">
       <h3>2. Linha do tempo processual</h3>
-      {report.timeline.length ? <div className="timeline-list">{report.timeline.map((item,i)=><div className="timeline-item" key={i}><strong>{item.date || 'Data não identificada'}</strong><span>{item.event}</span><small>{item.reference}</small></div>)}</div> : <p>Nenhum evento cronológico estruturado foi retornado.</p>}
+      {report.timeline.length
+        ? <div className="timeline-list">{report.timeline.map((item,i)=>
+            <div className="timeline-item" key={i}>
+              <strong>{item.date || 'Data não identificada'}</strong>
+              <span>{item.event}</span>
+              <small>{item.reference}</small>
+            </div>)}</div>
+        : <p>Nenhum evento cronológico estruturado foi retornado.</p>}
     </div>
+
     <div className="analysis-grid">
       <article><h3>3. Alegações, provas e decisões</h3><p>{report.claimsEvidenceDecisions}</p></article>
       <article><h3>4. Análise jurídica global</h3><p>{report.globalAnalysis}</p></article>
     </div>
+
     <div className="analysis-section-full">
       <h3>5. Riscos e pontos de atenção</h3>
-      {report.risks.length ? <div className="risk-list">{report.risks.map((risk,i)=><div className="risk-item" key={i}><div><strong>{risk.item}</strong><span className="risk-level">{risk.level}</span></div><p>{risk.basis}</p></div>)}</div> : <p>Nenhum risco estruturado foi retornado.</p>}
+      {report.risks.length
+        ? <div className="risk-list">{report.risks.map((risk,i)=>
+            <div className="risk-item" key={i}>
+              <div><strong>{risk.item}</strong><span className="risk-level">{risk.level}</span></div>
+              <p>{risk.basis}</p>
+            </div>)}</div>
+        : <p>Nenhum risco estruturado foi retornado.</p>}
     </div>
-    <div className="analysis-section-full"><h3>6. Conclusão e estratégia</h3><p>{report.conclusionStrategy}</p></div>
+
+    <div className="analysis-section-full">
+      <h3>6. Conclusão e estratégia</h3>
+      <p>{report.conclusionStrategy}</p>
+    </div>
+
     <div className="analysis-section-full sources-block">
       <h3>7. Rastreabilidade dos lotes</h3>
-      <div className="source-list">{report.sources.map((source,i)=><div key={i}><b>Lote {source.lot}</b><span>Páginas {source.pages}</span><small>{source.note}</small></div>)}</div>
+      <div className="source-list">
+        {report.sources.map((source,i)=>
+          <div key={i}><b>Lote {source.lot}</b><span>Páginas {source.pages}</span><small>{source.note}</small></div>)}
+      </div>
     </div>
   </section>
 }
@@ -140,18 +286,31 @@ function AdminModal({user,onUser,onClose}:{user:User|null;onUser:(u:User|null)=>
   const [loading,setLoading]=useState(false)
 
   async function login(e:FormEvent) {
-    e.preventDefault(); setError('')
-    if (!auth) { setError('Configure as credenciais do Firebase para ativar o login.'); return }
+    e.preventDefault()
+    setError('')
+    if (!auth) {
+      setError('Configure as credenciais do Firebase para ativar o login.')
+      return
+    }
     setLoading(true)
     try {
       const credential=await signInWithEmailAndPassword(auth,ADMIN_EMAIL,password)
-      if (credential.user.email !== ADMIN_EMAIL) { await signOut(auth); throw new Error('unauthorized') }
+      if (credential.user.email !== ADMIN_EMAIL) {
+        await signOut(auth)
+        throw new Error('unauthorized')
+      }
       onUser(credential.user)
-    } catch { setError('E-mail ou senha inválidos, ou acesso não autorizado.') }
-    finally { setLoading(false) }
+    } catch {
+      setError('E-mail ou senha inválidos, ou acesso não autorizado.')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  async function logout(){ if(auth) await signOut(auth); onUser(null) }
+  async function logout(){
+    if(auth) await signOut(auth)
+    onUser(null)
+  }
 
   return <div className="modal-backdrop">
     <div className={`admin-modal ${user ? 'admin-modal-large' : ''}`}>
@@ -186,58 +345,138 @@ function PromptManager({user,onLogout}:{user:User;onLogout:()=>void}) {
   const [status,setStatus]=useState<PromptStatus>('rascunho')
 
   useEffect(()=>{
-    if(!db){setLoading(false);setError('Firestore não configurado.');return}
+    if(!db){
+      setLoading(false)
+      setError('Firestore não configurado.')
+      return
+    }
     const q=query(collection(db,'prompts'),orderBy('updatedAt','desc'))
     return onSnapshot(q,snap=>{
       setItems(snap.docs.map(d=>({id:d.id,...d.data()} as PromptItem)))
       setLoading(false)
-    },()=>{setLoading(false);setError('Não foi possível carregar os prompts. Verifique as regras do Firestore.')})
+    },()=>{
+      setLoading(false)
+      setError('Não foi possível carregar os prompts. Verifique as regras do Firestore.')
+    })
   },[])
 
-  function changeArea(next:Area){setArea(next);setPerspective(perspectives[next][0])}
-  function reset(){setEditingId(null);setTitle('');setArea('Trabalhista');setPerspective('Reclamada');setPurpose(promptPurposes[0]);setContent('');setVersion(1);setStatus('rascunho')}
+  function changeArea(next:Area){
+    setArea(next)
+    setPerspective(perspectives[next][0])
+  }
+
+  function reset(){
+    setEditingId(null)
+    setTitle('')
+    setArea('Trabalhista')
+    setPerspective('Reclamada')
+    setPurpose(promptPurposes[0])
+    setContent('')
+    setVersion(1)
+    setStatus('rascunho')
+  }
 
   function edit(item:PromptItem){
-    setEditingId(item.id);setTitle(item.title);setArea(item.area);setPerspective(item.perspective);setPurpose(item.purpose);setContent(item.content);setVersion(item.version || 1);setStatus(item.status || 'rascunho')
+    setEditingId(item.id)
+    setTitle(item.title)
+    setArea(item.area)
+    setPerspective(item.perspective)
+    setPurpose(item.purpose)
+    setContent(item.content)
+    setVersion(item.version || 1)
+    setStatus(item.status || 'rascunho')
   }
 
   async function save(e:FormEvent){
-    e.preventDefault();setError('')
-    if(!db)return
-    const payload={title:title.trim(),area,perspective,purpose,content:content.trim(),version:Number(version)||1,status,updatedAt:serverTimestamp(),updatedBy:user.email}
+    e.preventDefault()
+    setError('')
+    if(!db) return
+
+    const payload={
+      title:title.trim(),
+      area,
+      perspective,
+      purpose,
+      content:content.trim(),
+      version:Number(version)||1,
+      status,
+      updatedAt:serverTimestamp(),
+      updatedBy:user.email
+    }
+
     try{
       if(editingId) await updateDoc(doc(db,'prompts',editingId),payload)
       else await addDoc(collection(db,'prompts'),{...payload,createdAt:serverTimestamp(),createdBy:user.email})
       reset()
-    }catch{setError('Não foi possível salvar. Confirme se o Firestore está criado e com as regras publicadas.')}
+    }catch{
+      setError('Não foi possível salvar. Confirme se o Firestore está criado e com as regras publicadas.')
+    }
   }
 
   async function remove(id:string){
     if(!db || !window.confirm('Excluir este prompt?')) return
-    try{await deleteDoc(doc(db,'prompts',id)); if(editingId===id)reset()}catch{setError('Não foi possível excluir o prompt.')}
+    try{
+      await deleteDoc(doc(db,'prompts',id))
+      if(editingId===id) reset()
+    }catch{
+      setError('Não foi possível excluir o prompt.')
+    }
   }
 
   return <>
     <div className="admin-header">
-      <div><span className="admin-badge"><ShieldCheck/> Administração</span><h2>Painel de prompts</h2><p className="muted">Cadastre o comando usado em cada etapa, área e perspectiva da análise.</p></div>
+      <div>
+        <span className="admin-badge"><ShieldCheck/> Administração</span>
+        <h2>Painel de prompts</h2>
+        <p className="muted">Cadastre o comando usado em cada etapa, área e perspectiva da análise.</p>
+      </div>
       <button className="secondary-button compact" onClick={onLogout}>Sair</button>
     </div>
 
     <div className="admin-layout">
       <form className="prompt-form" onSubmit={save}>
         <div className="form-title"><Plus size={18}/><b>{editingId?'Editar prompt':'Novo prompt'}</b></div>
-        <label>Título<input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Ex.: Análise global - defesa da reclamada" required /></label>
+
+        <label>Título
+          <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Ex.: Análise global - defesa da reclamada" required />
+        </label>
+
         <div className="admin-form-grid">
-          <label>Área<select value={area} onChange={e=>changeArea(e.target.value as Area)}>{Object.keys(perspectives).map(a=><option key={a}>{a}</option>)}</select></label>
-          <label>Perspectiva<select value={perspective} onChange={e=>setPerspective(e.target.value)}>{perspectives[area].map(p=><option key={p}>{p}</option>)}</select></label>
+          <label>Área
+            <select value={area} onChange={e=>changeArea(e.target.value as Area)}>
+              {Object.keys(perspectives).map(a=><option key={a}>{a}</option>)}
+            </select>
+          </label>
+          <label>Perspectiva
+            <select value={perspective} onChange={e=>setPerspective(e.target.value)}>
+              {perspectives[area].map(p=><option key={p}>{p}</option>)}
+            </select>
+          </label>
         </div>
-        <label>Finalidade<select value={purpose} onChange={e=>setPurpose(e.target.value)}>{promptPurposes.map(p=><option key={p}>{p}</option>)}</select></label>
-        <label>Texto do prompt<textarea value={content} onChange={e=>setContent(e.target.value)} rows={12} placeholder="Cole aqui o prompt completo que a IA deverá usar nesta etapa..." required /></label>
+
+        <label>Finalidade
+          <select value={purpose} onChange={e=>setPurpose(e.target.value)}>
+            {promptPurposes.map(p=><option key={p}>{p}</option>)}
+          </select>
+        </label>
+
+        <label>Texto do prompt
+          <textarea value={content} onChange={e=>setContent(e.target.value)} rows={12} placeholder="Cole aqui o prompt completo que a IA deverá usar nesta etapa..." required />
+        </label>
+
         <div className="admin-form-grid">
           <label>Versão<input type="number" min="1" value={version} onChange={e=>setVersion(Number(e.target.value))}/></label>
-          <label>Status<select value={status} onChange={e=>setStatus(e.target.value as PromptStatus)}><option value="rascunho">Rascunho</option><option value="publicado">Publicado</option><option value="inativo">Inativo</option></select></label>
+          <label>Status
+            <select value={status} onChange={e=>setStatus(e.target.value as PromptStatus)}>
+              <option value="rascunho">Rascunho</option>
+              <option value="publicado">Publicado</option>
+              <option value="inativo">Inativo</option>
+            </select>
+          </label>
         </div>
+
         {error&&<p className="error">{error}</p>}
+
         <div className="form-actions">
           {editingId&&<button type="button" className="secondary-button compact" onClick={reset}>Cancelar</button>}
           <button className="primary-button compact" type="submit"><Save size={17}/>{editingId?'Salvar alterações':'Cadastrar prompt'}</button>
@@ -246,12 +485,26 @@ function PromptManager({user,onLogout}:{user:User;onLogout:()=>void}) {
 
       <div className="prompt-list-panel">
         <div className="form-title"><BrainCircuit size={18}/><b>Prompts cadastrados</b><span className="count-badge">{items.length}</span></div>
-        {loading?<p className="muted">Carregando prompts...</p>:items.length===0?<div className="empty-admin"><BrainCircuit/><b>Nenhum prompt cadastrado</b><small>Use o formulário ao lado para cadastrar o primeiro prompt.</small></div>:
-          <div className="prompt-list">{items.map(item=><article className="prompt-item" key={item.id}>
-            <div className="prompt-item-top"><div><strong>{item.title}</strong><small>{item.area} · {item.perspective}</small></div><span className={`status-chip ${item.status}`}>{item.status}</span></div>
-            <p>{item.purpose}</p>
-            <div className="prompt-item-bottom"><small>Versão {item.version || 1}</small><div><button onClick={()=>edit(item)} title="Editar"><Pencil size={16}/></button><button onClick={()=>remove(item.id)} title="Excluir"><Trash2 size={16}/></button></div></div>
-          </article>)}</div>}
+
+        {loading
+          ? <p className="muted">Carregando prompts...</p>
+          : items.length===0
+            ? <div className="empty-admin"><BrainCircuit/><b>Nenhum prompt cadastrado</b><small>Use o formulário ao lado para cadastrar o primeiro prompt.</small></div>
+            : <div className="prompt-list">{items.map(item=>
+                <article className="prompt-item" key={item.id}>
+                  <div className="prompt-item-top">
+                    <div><strong>{item.title}</strong><small>{item.area} · {item.perspective}</small></div>
+                    <span className={`status-chip ${item.status}`}>{item.status}</span>
+                  </div>
+                  <p>{item.purpose}</p>
+                  <div className="prompt-item-bottom">
+                    <small>Versão {item.version || 1}</small>
+                    <div>
+                      <button onClick={()=>edit(item)} title="Editar"><Pencil size={16}/></button>
+                      <button onClick={()=>remove(item.id)} title="Excluir"><Trash2 size={16}/></button>
+                    </div>
+                  </div>
+                </article>)}</div>}
       </div>
     </div>
   </>
