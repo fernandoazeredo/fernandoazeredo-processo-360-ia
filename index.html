@@ -11,6 +11,17 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      (function () {
+        var hostname = window.location.hostname;
+        var isPreview =
+          hostname.indexOf('--') !== -1 &&
+          (hostname.endsWith('.web.app') || hostname.endsWith('.firebaseapp.com'));
+        if (isPreview) {
+          self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
