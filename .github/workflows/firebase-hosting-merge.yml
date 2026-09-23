@@ -1,4 +1,4 @@
-name: Deploy Firebase Completo
+name: Deploy Firebase Gratuito
 
 on:
   push:
@@ -18,16 +18,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
-          cache: npm
 
       - name: Instalar frontend
-        run: npm ci
+        run: npm install
 
       - name: Build frontend
         run: npm run build
@@ -38,12 +37,6 @@ jobs:
           VITE_FIREBASE_STORAGE_BUCKET: "processo-360-ia.firebasestorage.app"
           VITE_FIREBASE_MESSAGING_SENDER_ID: "685012306915"
           VITE_FIREBASE_APP_ID: "1:685012306915:web:e9c441be57f15b41ee6ed6"
-
-      - name: Instalar backend
-        run: npm install --prefix functions
-
-      - name: Build backend
-        run: npm run build --prefix functions
 
       - name: Preparar credencial Firebase
         shell: bash
@@ -56,25 +49,15 @@ jobs:
           fi
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-service-account.json"
 
-      - name: Deploy completo em produção
+      - name: Deploy Hosting e regras do Firestore
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
           CI: "true"
         run: |
           npx --yes firebase-tools@latest deploy \
             --project processo-360-ia \
-            --only "hosting,functions,firestore:rules,storage" \
+            --only "hosting,firestore:rules" \
             --non-interactive
-
-      - name: Carregar prompts jurídicos padrão
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
-        run: node functions/scripts/seed-prompts.mjs
-
-      - name: Diagnosticar latência recente
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
-        run: node functions/scripts/diagnose-processes.mjs
 
       - name: Remover credencial temporária
         if: always()
