@@ -24,10 +24,38 @@ export async function analyzeUploadedProcess(
   perspective: string,
   onProgress?: (value: number, stage: string) => void
 ): Promise<AnalysisReport> {
-  if (!auth?.currentUser) throw new Error('AUTH_REQUIRED')
+  const analysisId = crypto.randomUUID()
+
+  // Fase 1 da migração para Gemini: PDFs pequenos são processados diretamente
+  // sem exigir login do usuário. O App Check protege a chamada ao Firebase AI Logic.
+  // pelo Firebase AI Logic. Arquivos maiores continuam temporariamente no fluxo
+  // legado até validarmos o processamento por lotes com Gemini.
+  const GEMINI_INLINE_MAX_BYTES = 12 * 1024 * 1024
+  if (file.size <= GEMINI_INLINE_MAX_BYTES) {
+    onProgress?.(32, 'Preparando PDF e prompts jurídicos para o Gemini')
+
+    const geminiReport = await analyzeSmallPdfWithGemini(
+      file,
+      area,
+      perspective,
+      (value, stage) => onProgress?.(value, stage)
+    )
+
+    onProgress?.(100, 'Relatório jurídico concluído com Gemini')
+    return {
+      analysisId,
+      fileName: file.name,
+      area,
+      perspective,
+      ...geminiReport
+    }
+  }
+
+  // PDFs maiores ainda dependem do fluxo legado enquanto a etapa de lotes
+  // com Gemini não é migrada. Esse fluxo permanece restrito ao administrador.
+  if (!auth?.currentUser) throw new Error('GEMINI_LARGE_PDF_NOT_READY')
   if (!storage || !functionsClient || !db) throw new Error('FIREBASE_NOT_READY')
 
-  const analysisId = crypto.randomUUID()
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, '_')
   const storagePath = `processos/${auth.currentUser.uid}/${analysisId}/${safeName}`
   const storageRef = ref(storage, storagePath)
@@ -58,76 +86,6 @@ export async function analyzeUploadedProcess(
   })
 
   onProgress?.(32, 'Preparando lotes e prompts jurídicos')
-
-  // Fase 1 da migração para Gemini: PDFs pequenos são processados diretamente
-  // pelo Firebase AI Logic. Arquivos maiores continuam temporariamente no fluxo
-  // legado até validarmos o processamento por lotes com Gemini.
-  const GEMINI_INLINE_MAX_BYTES = 12 * 1024 * 1024
-  if (file.size <= GEMINI_INLINE_MAX_BYTES) {
-    const analysisRef = doc(db, 'processos', analysisId)
-
-    try {
-      await setDoc(analysisRef, {
-        status: 'analisando_gemini',
-        stage: 'Analisando PDF com Gemini via Firebase AI Logic',
-        progress: 40,
-        provider: 'firebase-ai-logic',
-        model: 'gemini-3.8-flash',
-        updatedAt: serverTimestamp()
-      }, { merge: true })
-
-      const geminiReport = await analyzeSmallPdfWithGemini(
-        file,
-        area,
-        perspective,
-        async (value, stage) => {
-          onProgress?.(value, stage)
-          await setDoc(analysisRef, {
-            status: 'analisando_gemini',
-            stage,
-            progress: value,
-            provider: 'firebase-ai-logic',
-            model: 'gemini-3.8-flash',
-            updatedAt: serverTimestamp()
-          }, { merge: true }).catch(() => undefined)
-        }
-      )
-
-      const report: AnalysisReport = {
-        analysisId,
-        fileName: file.name,
-        area,
-        perspective,
-        ...geminiReport
-      }
-
-      await setDoc(analysisRef, {
-        status: 'concluido',
-        stage: 'Relatório jurídico concluído com Gemini',
-        progress: 100,
-        provider: 'firebase-ai-logic',
-        model: 'gemini-3.8-flash',
-        processedLots: 1,
-        report: geminiReport,
-        completedAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      }, { merge: true })
-
-      onProgress?.(100, 'Relatório jurídico concluído com Gemini')
-      return report
-    } catch (error: any) {
-      const message = String(error?.message || 'Falha ao processar PDF com Gemini.')
-      await setDoc(analysisRef, {
-        status: 'erro',
-        stage: 'Falha durante o processamento com Gemini',
-        provider: 'firebase-ai-logic',
-        model: 'gemini-3.8-flash',
-        error: message,
-        updatedAt: serverTimestamp()
-      }, { merge: true }).catch(() => undefined)
-      throw error
-    }
-  }
 
   const analysisRef = doc(db, 'processos', analysisId)
   let unsubscribe = () => {}
