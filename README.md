@@ -1,40 +1,75 @@
 # Processo 360 IA
 
-Aplicação web/PWA para análise processual especializada, com leitura de PDFs extensos, divisão automática em lotes, consolidação documental e diagnóstico jurídico global.
+Aplicação web para análise processual especializada, com leitura de PDFs extensos, divisão automática em lotes, consolidação documental e diagnóstico jurídico global.
 
-## Estado desta versão
+## Arquitetura gratuita
 
-Esta primeira versão entrega a interface responsiva, identidade visual, seleção de área e perspectiva, protetor de processamento e acesso discreto à Área ADM. O processamento jurídico e o armazenamento dos prompts serão conectados nas próximas etapas.
+A análise jurídica não depende mais de OpenAI, Cloud Functions ou Cloud Storage.
+
+Fluxo atual:
+
+1. o PDF permanece no navegador do usuário;
+2. o navegador divide o documento em lotes usando `pdf-lib`;
+3. cada lote é enviado ao Firebase AI Logic;
+4. o modelo usado é `gemini-3.5-flash` pelo Gemini Developer API Free Tier;
+5. cada lote concluído é salvo no `localStorage` para retomada;
+6. após todos os lotes, o Gemini consolida o processo inteiro nas 7 seções do relatório.
+
+Para PDFs grandes, a divisão considera simultaneamente páginas e tamanho do lote. O limite operacional inicial é de até 80 páginas e até 8 MB por lote.
+
+## Por que Gemini 3.5 Flash
+
+O projeto usa `gemini-3.5-flash` porque ele está disponível no nível sem custo financeiro, possui janela de contexto de 1 milhão de tokens e é um modelo estável. Os modelos Gemini 2.5 estão em processo de desativação em outubro de 2026.
+
+## Firebase
+
+Recursos usados:
+
+- Firebase Hosting;
+- Firebase Authentication somente para a Área ADM;
+- Cloud Firestore para prompts publicados;
+- Firebase App Check;
+- Firebase AI Logic com Gemini Developer API.
+
+Recursos removidos do fluxo de produção:
+
+- Cloud Functions;
+- Cloud Storage;
+- OpenAI API.
+
+### Requisito para o Free Tier do Gemini
+
+O projeto Firebase precisa estar no plano **Spark**, sem conta de faturamento do Google Cloud vinculada. Se houver faturamento/prepayment ativo no projeto, o Gemini Developer API deixa de usar a faixa gratuita e pode retornar erro de billing.
 
 ## Administração
 
-O acesso administrativo é reservado a `fernandoazeredo64@gmail.com`. A senha deve ser criada no Firebase Authentication e nunca deve ser gravada no código ou no repositório.
+O acesso administrativo continua reservado a `fernandoazeredo64@gmail.com`. O login é necessário apenas para cadastrar, editar ou excluir prompts. A análise normal de PDFs não exige login.
 
-## Configuração
+## Configuração local
 
 1. Copie `.env.example` para `.env.local`.
-2. Preencha as credenciais públicas do aplicativo Web no Firebase.
-3. No Firebase Authentication, habilite **E-mail/senha**.
-4. Crie o usuário administrador com o e-mail autorizado.
-5. Publique as regras do Firestore e Storage.
+2. Preencha as credenciais públicas do app Web do Firebase.
+3. Configure o App Check com reCAPTCHA Enterprise.
+4. Ative Firebase AI Logic usando Gemini Developer API.
+5. Mantenha o projeto no plano Spark para o Free Tier.
 
 ```bash
 npm install
 npm run build
-firebase deploy --project processo-360-ia
+firebase deploy --only hosting,firestore:rules --project processo-360-ia
 ```
 
-## Deploy automático
+## Retomada
 
-Os workflows publicam a branch `main` no Firebase Hosting e criam canais de pré-visualização para pull requests. Cadastre estes segredos no GitHub Actions:
-
-- `FIREBASE_SERVICE_ACCOUNT_PROCESSO_360_IA` — JSON completo da conta de serviço;
-- `VITE_FIREBASE_API_KEY` — chave pública do aplicativo Web;
-- `VITE_FIREBASE_MESSAGING_SENDER_ID` — identificador do remetente;
-- `VITE_FIREBASE_APP_ID` — identificador do aplicativo Web.
-
-Não grave esses valores no código, no histórico do Git ou em arquivos enviados ao repositório.
+Os resultados intermediários dos lotes são gravados no navegador. Se uma cota gratuita temporária for atingida, o usuário pode tentar novamente depois; os lotes já concluídos serão reutilizados automaticamente quando o mesmo arquivo, área e perspectiva forem selecionados.
 
 ## Princípio de análise
 
-Os lotes servem apenas para extração e catalogação provisória. O diagnóstico jurídico é produzido somente após a consolidação integral do processo. Cada área e perspectiva utiliza prompts próprios, cadastrados e versionados pela Área ADM.
+Os lotes servem para extração e catalogação provisória. O diagnóstico jurídico é produzido somente após a consolidação integral do processo. Cada área e perspectiva utiliza os prompts publicados na Área ADM.
+
+Regras centrais:
+
+- não inventar fatos, páginas, datas, documentos, valores ou precedentes;
+- usar exatamente `Informação não constante nos dados fornecidos` quando faltar dado necessário;
+- classificar risco somente como `Alta`, `Média` ou `Baixa`;
+- considerar todos os lotes antes da conclusão final.
