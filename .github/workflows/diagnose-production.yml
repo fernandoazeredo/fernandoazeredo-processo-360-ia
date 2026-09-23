@@ -1,0 +1,51 @@
+name: Diagnóstico Produção
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/diagnose-production.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Instalar backend
+        run: npm install --prefix functions
+
+      - name: Preparar credencial Firebase
+        shell: bash
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PROCESSO_360_IA }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "Segredo FIREBASE_SERVICE_ACCOUNT_PROCESSO_360_IA não configurado."
+            exit 1
+          fi
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-service-account.json"
+
+      - name: Diagnosticar processos recentes no Firestore
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
+        run: node functions/scripts/diagnose-processes.mjs
+
+      - name: Ler logs recentes da Function
+        continue-on-error: true
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
+        run: npx --yes firebase-tools@latest functions:log --project processo-360-ia --only analyzeProcess --lines 80
+
+      - name: Remover credencial temporária
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/firebase-service-account.json"
