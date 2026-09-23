@@ -26,6 +26,18 @@ const app = firebaseConfigured ? (getApps()[0] ?? initializeApp(firebaseConfig))
 // A chave do site reCAPTCHA Enterprise é pública por definição; ela identifica
 // o app Web e não substitui credenciais privadas.
 if (app && typeof window !== 'undefined') {
+  // Em canais de preview do Firebase Hosting, use o provedor de depuração do
+  // App Check. Isso evita falhas 401 por domínio temporário do preview sem
+  // reduzir a proteção do domínio oficial de produção.
+  const hostname = window.location.hostname
+  const isFirebasePreview =
+    hostname.includes('--') &&
+    (hostname.endsWith('.web.app') || hostname.endsWith('.firebaseapp.com'))
+
+  if (isFirebasePreview) {
+    ;(self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true
+  }
+
   try {
     initializeAppCheck(app, {
       provider: new ReCaptchaEnterpriseProvider(RECAPTCHA_ENTERPRISE_SITE_KEY),
