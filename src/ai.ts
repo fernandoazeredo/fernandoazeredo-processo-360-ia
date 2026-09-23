@@ -39,26 +39,37 @@ export async function analyzeUploadedProcess(
     perspective
   ].join('|')
 
-  let analysisId = window.localStorage.getItem(resumeKey) || crypto.randomUUID()
+  const storedAnalysisId = window.localStorage.getItem(resumeKey)
+  let analysisId = storedAnalysisId || crypto.randomUUID()
   let analysisRef = doc(db, 'processos', analysisId)
-  let existingAnalysis = await getDoc(analysisRef)
-  let existingData = existingAnalysis.exists() ? existingAnalysis.data() : null
+  let existingData: Record<string, any> | null = null
+  let canResume = false
 
-  let canResume = Boolean(
-    existingData &&
-    existingData.ownerUid === currentUser.uid &&
-    existingData.fileName === file.name &&
-    existingData.area === area &&
-    existingData.perspective === perspective &&
-    existingData.status !== 'concluido' &&
-    existingData.storagePath
-  )
+  if (storedAnalysisId) {
+    try {
+      const existingAnalysis = await getDoc(analysisRef)
+      existingData = existingAnalysis.exists() ? existingAnalysis.data() : null
+      canResume = Boolean(
+        existingData &&
+        existingData.ownerUid === currentUser.uid &&
+        existingData.fileName === file.name &&
+        existingData.area === area &&
+        existingData.perspective === perspective &&
+        existingData.status !== 'concluido' &&
+        existingData.storagePath
+      )
+    } catch {
+      // Um ID antigo pode apontar para um documento inexistente ou inacessível.
+      // Nesse caso iniciamos uma nova análise sem bloquear o upload.
+      existingData = null
+      canResume = false
+    }
+  }
 
   if (!canResume) {
     window.localStorage.removeItem(resumeKey)
     analysisId = crypto.randomUUID()
     analysisRef = doc(db, 'processos', analysisId)
-    existingAnalysis = await getDoc(analysisRef)
     existingData = null
   }
 
