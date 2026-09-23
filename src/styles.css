@@ -320,14 +320,14 @@ footer button:hover{color:var(--blue)}
 
 .brain-circuit-overlay .blue-circuits path{
   stroke-dasharray:5 3;
-  animation:circuitFlow 2.2s linear infinite;
+  animation:circuitFlow 1.35s linear infinite;
 }
 
 .brain-circuit-overlay .blue-circuits circle{
   fill:#ffbe3d;
   stroke:#fff;
   stroke-width:.35;
-  animation:nodePulse 1.4s ease-in-out infinite;
+  animation:nodePulse .85s ease-in-out infinite;
 }
 
 @media(max-width:700px){
@@ -347,3 +347,11 @@ footer button:hover{color:var(--blue)}
   }
 }
 
+
+/* AJUSTE FINAL — posição do percentual no processamento */
+.processing-overlay .live-progress{
+  margin-top:18px!important;
+}
+.processing-overlay .live-progress strong{
+  line-height:1.05;
+}
