@@ -284,26 +284,18 @@ export const analyzeProcess = onCall(
     }
 
     const analysisRef = db.collection('processos').doc(String(analysisId))
-    const existingAnalysis = await analysisRef.get()
-    const initialState: Record<string, unknown> = {
+    await analysisRef.set({
       ownerUid: request.auth.uid,
       fileName,
       storagePath,
       area,
       perspective,
       status: 'preparando',
-      stage: existingAnalysis.exists
-        ? 'Retomando análise e verificando lotes já concluídos'
-        : 'Preparando arquivo e prompts jurídicos',
+      stage: 'Preparando arquivo e prompts jurídicos',
       progress: 33,
-      error: null,
+      createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp()
-    }
-    if (!existingAnalysis.exists) initialState.createdAt = FieldValue.serverTimestamp()
-    await analysisRef.set(initialState, { merge: true })
-
-    let preservedLotsOnFailure = 0
-    let expectedLotCount = 0
+    }, { merge: true })
 
     try {
       const [fileBuffer] = await bucket.file(String(storagePath)).download()
@@ -321,43 +313,7 @@ export const analyzeProcess = onCall(
 
       const client = new OpenAI({ apiKey })
       const lotResults: unknown[] = new Array(lots.length)
-      expectedLotCount = lots.length
-
-      const savedLotsSnapshot = await analysisRef.collection('lotes').get()
-      for (const savedLotDoc of savedLotsSnapshot.docs) {
-        const saved = savedLotDoc.data()
-        const lotNumber = Number(saved.lotNumber)
-        if (
-          saved.status === 'completed' &&
-          Number.isInteger(lotNumber) &&
-          lotNumber >= 1 &&
-          lotNumber <= lots.length &&
-          saved.result !== undefined
-        ) {
-          const expectedLot = lots[lotNumber - 1]
-          if (
-            Number(saved.start) === expectedLot.start &&
-            Number(saved.end) === expectedLot.end
-          ) {
-            lotResults[lotNumber - 1] = saved.result
-          }
-        }
-      }
-
-      let completedLots = lotResults.filter(result => result !== undefined).length
-      preservedLotsOnFailure = completedLots
-
-      if (completedLots > 0) {
-        await analysisRef.set({
-          status: 'extraindo',
-          completedLots,
-          stage: `Retomando análise: ${completedLots} de ${lots.length} lote(s) já concluído(s) e preservado(s)`,
-          progress: 38 + Math.round((completedLots / lots.length) * 42),
-          resumeAvailable: true,
-          updatedAt: FieldValue.serverTimestamp()
-        }, { merge: true })
-      }
-
+      let completedLots = 0
       const extractionInstructions = promptText(
         prompts,
         ['Preparação e leitura inicial','Extração por lote','Catalogação documental'],
@@ -368,8 +324,6 @@ Preserve referências de página quando identificáveis e declare incerteza quan
       )
 
       const processLot = async (lot: typeof lots[number]) => {
-        if (lotResults[lot.number - 1] !== undefined) return
-
         const lotStartedAt = Date.now()
         const uploadStartedAt = Date.now()
         const uploaded = await client.files.create({
@@ -453,47 +407,25 @@ Analise este lote sem antecipar o diagnóstico final. O resultado deve ser uma e
             openaiTimings: FieldValue.arrayUnion(timing)
           }, { merge: true })
 
-          const parsedLotResult = JSON.parse(response.output_text)
-          await analysisRef.collection('lotes').doc(String(lot.number)).set({
-            status: 'completed',
-            lotNumber: lot.number,
-            start: lot.start,
-            end: lot.end,
-            pages: `${lot.start}-${lot.end}`,
-            model: DEFAULT_MODEL,
-            responseId: response.id,
-            result: parsedLotResult,
-            timing,
-            completedAt: FieldValue.serverTimestamp(),
-            updatedAt: FieldValue.serverTimestamp()
-          }, { merge: true })
-
-          lotResults[lot.number - 1] = parsedLotResult
+          lotResults[lot.number - 1] = JSON.parse(response.output_text)
         } finally {
           await client.files.delete(uploaded.id).catch(() => undefined)
         }
 
         completedLots += 1
-        preservedLotsOnFailure = completedLots
         const progress = 38 + Math.round((completedLots / lots.length) * 42)
         await analysisRef.set({
           status: 'extraindo',
           currentLot: lot.number,
           completedLots,
-          stage: `${completedLots} de ${lots.length} lote(s) concluído(s) e preservado(s)`,
+          stage: `${completedLots} de ${lots.length} lote(s) concluído(s)`,
           progress,
-          resumeAvailable: completedLots < lots.length,
           updatedAt: FieldValue.serverTimestamp()
         }, { merge: true })
       }
 
       for (let index = 0; index < lots.length; index += LOT_CONCURRENCY) {
-        const batch = lots
-          .slice(index, index + LOT_CONCURRENCY)
-          .filter(lot => lotResults[lot.number - 1] === undefined)
-
-        if (batch.length === 0) continue
-
+        const batch = lots.slice(index, index + LOT_CONCURRENCY)
         await analysisRef.set({
           status: 'extraindo',
           stage: batch.length > 1
@@ -504,11 +436,6 @@ Analise este lote sem antecipar o diagnóstico final. O resultado deve ser uma e
         }, { merge: true })
 
         await Promise.all(batch.map(processLot))
-      }
-
-      const missingLots = lots.filter(lot => lotResults[lot.number - 1] === undefined)
-      if (missingLots.length > 0) {
-        throw new Error(`Não foi possível recuperar ou concluir os lotes: ${missingLots.map(lot => lot.number).join(', ')}`)
       }
 
       await analysisRef.set({
@@ -625,8 +552,6 @@ ${JSON.stringify(lotResults)}`
         promptCount: prompts.length,
         globalRigorVersion: GLOBAL_RIGOR_VERSION,
         processedLots: lots.length,
-        completedLots: lots.length,
-        resumeAvailable: false,
         report,
         completedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp()
@@ -641,15 +566,10 @@ ${JSON.stringify(lotResults)}`
       }
     } catch (error: any) {
       console.error('Processo 360 IA - analyzeProcess', error)
-      const preservedStage = preservedLotsOnFailure > 0 && expectedLotCount > 0
-        ? `Falha durante o processamento. ${preservedLotsOnFailure} de ${expectedLotCount} lote(s) foram preservados para retomada.`
-        : 'Falha durante o processamento'
       await analysisRef.set({
         status: 'erro',
-        stage: preservedStage,
+        stage: 'Falha durante o processamento',
         error: error?.message || 'Falha desconhecida',
-        completedLots: preservedLotsOnFailure,
-        resumeAvailable: preservedLotsOnFailure > 0,
         updatedAt: FieldValue.serverTimestamp()
       }, { merge: true }).catch(() => undefined)
       if (error instanceof HttpsError) throw error
@@ -658,11 +578,11 @@ ${JSON.stringify(lotResults)}`
       const status = Number(error?.status || error?.statusCode || 0)
       if (
         status === 429 ||
-        /no credits remaining|credit_balance_exhausted|insufficient_quota|account is not active|billing details/i.test(message)
+        /no credits remaining|credit_balance_exhausted|insufficient_quota/i.test(message)
       ) {
         throw new HttpsError(
           'resource-exhausted',
-          'A conta da OpenAI API está inativa ou sem créditos disponíveis. Verifique o faturamento da API e tente novamente. Os lotes já concluídos permanecerão preservados para retomada.'
+          'A conta da OpenAI API está sem créditos disponíveis. Adicione saldo no faturamento da API e tente novamente em alguns minutos.'
         )
       }
 
