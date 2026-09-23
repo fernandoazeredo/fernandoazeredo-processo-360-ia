@@ -296,23 +296,23 @@ footer button:hover{color:var(--blue)}
          drop-shadow(0 0 48px rgba(27,99,255,.18));
 }
 
-.brain-loader-blue > .brain-network{
+.brain-loader.brain-loader-blue > svg.brain-network{
   position:absolute!important;
   inset:0!important;
-  z-index:3!important;
   width:100%!important;
   height:100%!important;
+  z-index:3!important;
+  display:block!important;
   overflow:visible;
   pointer-events:none;
-  display:block;
+  margin:0!important;
+  transform:none!important;
 }
 
 .neural-guides path{
   fill:none;
-  stroke:rgba(109,203,255,.06);
-  stroke-width:3;
-  stroke-linecap:round;
-  stroke-linejoin:round;
+  stroke:transparent;
+  stroke-width:0;
   vector-effect:non-scaling-stroke;
 }
 
