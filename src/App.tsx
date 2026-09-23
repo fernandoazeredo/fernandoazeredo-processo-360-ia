@@ -48,10 +48,10 @@ const promptPurposes = [
 
 const stages = [
   'Preparando o processo',
-  'Enviando o processo com segurança',
-  'Dividindo o PDF em lotes de até 170 páginas',
-  'Extraindo e catalogando os documentos',
-  'Construindo a linha do tempo processual',
+  'Lendo o PDF localmente',
+  'Dividindo o PDF em lotes seguros no navegador',
+  'Extraindo e catalogando os documentos com Gemini',
+  'Salvando lotes concluídos para retomada',
   'Confrontando alegações, provas e decisões',
   'Elaborando a análise jurídica global',
   'Preparando o relatório final'
@@ -203,20 +203,14 @@ function App() {
     } catch (error: any) {
       const message = String(error?.message || '')
       const code = String(error?.code || '')
-      const billingBlocked =
-        code.includes('resource-exhausted') ||
-        /no credits remaining|credit_balance_exhausted|insufficient_quota/i.test(message)
-
-      if (billingBlocked) {
-        setAnalysisError('A análise foi interrompida porque a conta da OpenAI API está sem créditos. Adicione saldo no faturamento da API e tente novamente em alguns minutos.')
-      } else if (message.includes('OPENAI_API_KEY')) {
-        setAnalysisError('O motor de IA está pronto, mas a chave da OpenAI ainda precisa ser configurada no backend.')
-      } else if (message.includes('GEMINI_LARGE_PDF_NOT_READY')) {
-        setAnalysisError('O teste atual do Gemini está liberado sem login para PDFs de até 12 MB. O processamento de PDFs grandes por lotes será migrado na próxima etapa.')
-      } else if (message.includes('AUTH_REQUIRED')) {
-        setAnalysisError('O fluxo legado de arquivos grandes ainda exige acesso administrativo.')
+      if (message.includes('GEMINI_FREE_TIER_NOT_ACTIVE')) {
+        setAnalysisError('O Gemini gratuito ainda não está ativo neste projeto. O projeto Firebase precisa ficar no plano Spark, sem conta de faturamento vinculada, para usar o Free Tier.')
+      } else if (message.includes('GEMINI_FREE_TIER_LIMIT')) {
+        setAnalysisError('A cota gratuita do Gemini foi atingida temporariamente. Aguarde a renovação e tente novamente: os lotes já concluídos ficaram salvos neste navegador para retomada automática.')
+      } else if (message.includes('FIREBASE_AI_NOT_READY')) {
+        setAnalysisError('O Firebase AI Logic ainda não está configurado corretamente para o aplicativo.')
       } else {
-        setAnalysisError('Não foi possível concluir a análise. ' + (message || 'Verifique a configuração do backend e tente novamente.'))
+        setAnalysisError('Não foi possível concluir a análise. ' + (message || 'Verifique a configuração do Gemini e tente novamente.'))
       }
     } finally {
       setProcessing(false)
@@ -248,7 +242,7 @@ function App() {
             <input type="file" accept="application/pdf,.pdf" onChange={e => setFile(e.target.files?.[0] ?? null)} />
             {file
               ? <><FileText size={34}/><b>{file.name}</b><small>{(file.size / 1024 / 1024).toFixed(2)} MB · PDF selecionado</small></>
-              : <><UploadCloud size={38}/><b>Arraste o processo ou selecione o PDF</b><small>O sistema organizará os lotes de até 170 páginas</small></>}
+              : <><UploadCloud size={38}/><b>Arraste o processo ou selecione o PDF</b><small>O sistema dividirá automaticamente o PDF em lotes seguros por páginas e tamanho</small></>}
           </label>
 
           <div className="step-heading second"><span>2</span><div><b>Escolha a área e a perspectiva</b><small>Cada opção acionará seu próprio conjunto de prompts especializados.</small></div></div>
