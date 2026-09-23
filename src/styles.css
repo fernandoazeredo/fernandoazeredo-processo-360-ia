@@ -268,7 +268,7 @@ footer button:hover{color:var(--blue)}
   .markdown-table th{background:#f3f3f3!important}
 }
 
-/* PROCESSO 360 IA — cérebro azul estático com fluxo neural */
+/* PROCESSO 360 IA — cérebro azul estático com animação neural original */
 .brain-loader-blue{
   width:min(64vh,76vw,600px);
   aspect-ratio:1;
@@ -296,51 +296,54 @@ footer button:hover{color:var(--blue)}
          drop-shadow(0 0 48px rgba(27,99,255,.18));
 }
 
-.brain-loader.brain-loader-blue > svg.brain-network{
+.brain-loader.brain-loader-blue > svg.brain-circuit-overlay{
   position:absolute!important;
-  inset:0!important;
-  width:100%!important;
-  height:100%!important;
+  left:11%!important;
+  top:9%!important;
+  width:78%!important;
+  height:72%!important;
   z-index:3!important;
   display:block!important;
-  overflow:visible;
   pointer-events:none;
   margin:0!important;
   transform:none!important;
+  overflow:visible;
 }
 
-.neural-guides path{
+.brain-circuit-overlay .blue-circuits{
   fill:none;
-  stroke:transparent;
-  stroke-width:0;
-  vector-effect:non-scaling-stroke;
+  stroke:#42ceff;
+  stroke-width:.72;
+  stroke-linecap:round;
+  stroke-linejoin:round;
 }
 
-.neural-light{
-  fill:#8fdbff;
+.brain-circuit-overlay .blue-circuits path{
+  stroke-dasharray:5 3;
+  animation:circuitFlow 2.2s linear infinite;
+}
+
+.brain-circuit-overlay .blue-circuits circle{
+  fill:#ffbe3d;
   stroke:#fff;
-  stroke-width:1.5;
-  opacity:.98;
-}
-
-.neural-light-gold{
-  fill:#ffc74d;
-  stroke:#fff5cc;
-}
-
-.neural-light-small{
-  fill:#d8f4ff;
-  stroke:#8ddcff;
-  stroke-width:1;
-  opacity:.88;
+  stroke-width:.35;
+  animation:nodePulse 1.4s ease-in-out infinite;
 }
 
 @media(max-width:700px){
   .brain-loader-blue{width:min(82vw,520px)}
-  .neural-guides path{stroke-width:3.5}
+  .brain-loader.brain-loader-blue > svg.brain-circuit-overlay{
+    left:10%!important;
+    top:8%!important;
+    width:80%!important;
+    height:74%!important;
+  }
 }
 
 @media(prefers-reduced-motion:reduce){
-  .neural-travelers{display:none}
+  .brain-circuit-overlay .blue-circuits path,
+  .brain-circuit-overlay .blue-circuits circle{
+    animation:none!important;
+  }
 }
 
