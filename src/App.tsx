@@ -187,12 +187,6 @@ function App() {
     setAnalysisError('')
     setAnalysis(null)
 
-    if (!auth?.currentUser) {
-      setAnalysisError('Para processar o PDF, entre primeiro na Área ADM. O acesso de usuários será habilitado em uma etapa própria.')
-      setAdminOpen(true)
-      return
-    }
-
     setProgress(0)
     setProcessingStage(stages[0])
     setProcessing(true)
@@ -217,9 +211,10 @@ function App() {
         setAnalysisError('A análise foi interrompida porque a conta da OpenAI API está sem créditos. Adicione saldo no faturamento da API e tente novamente em alguns minutos.')
       } else if (message.includes('OPENAI_API_KEY')) {
         setAnalysisError('O motor de IA está pronto, mas a chave da OpenAI ainda precisa ser configurada no backend.')
+      } else if (message.includes('GEMINI_LARGE_PDF_NOT_READY')) {
+        setAnalysisError('O teste atual do Gemini está liberado sem login para PDFs de até 12 MB. O processamento de PDFs grandes por lotes será migrado na próxima etapa.')
       } else if (message.includes('AUTH_REQUIRED')) {
-        setAnalysisError('É necessário entrar na Área ADM antes de iniciar a análise.')
-        setAdminOpen(true)
+        setAnalysisError('O fluxo legado de arquivos grandes ainda exige acesso administrativo.')
       } else {
         setAnalysisError('Não foi possível concluir a análise. ' + (message || 'Verifique a configuração do backend e tente novamente.'))
       }
