@@ -312,10 +312,11 @@ footer button:hover{color:var(--blue)}
 
 .brain-circuit-overlay .blue-circuits{
   fill:none;
-  stroke:#42ceff;
-  stroke-width:.72;
+  stroke:#B7FF00;
+  stroke-width:.82;
   stroke-linecap:round;
   stroke-linejoin:round;
+  filter:drop-shadow(0 0 3px rgba(183,255,0,.75));
 }
 
 .brain-circuit-overlay .blue-circuits path{
