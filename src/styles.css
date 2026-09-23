@@ -321,14 +321,14 @@ footer button:hover{color:var(--blue)}
 
 .brain-circuit-overlay .blue-circuits path{
   stroke-dasharray:5 3;
-  animation:circuitFlow 1.35s linear infinite;
+  animation:circuitFlowNeon 2.2s linear infinite;
 }
 
 .brain-circuit-overlay .blue-circuits circle{
   fill:#ffbe3d;
   stroke:#fff;
   stroke-width:.35;
-  animation:nodePulse .85s ease-in-out infinite;
+  animation:nodePulseNeon 1.4s ease-in-out infinite;
 }
 
 @media(max-width:700px){
@@ -341,10 +341,22 @@ footer button:hover{color:var(--blue)}
   }
 }
 
+@keyframes circuitFlowNeon{
+  from{stroke-dashoffset:0}
+  to{stroke-dashoffset:-16}
+}
+
+@keyframes nodePulseNeon{
+  0%,100%{r:1.35;opacity:.65}
+  50%{r:2.2;opacity:1}
+}
+
 @media(prefers-reduced-motion:reduce){
-  .brain-circuit-overlay .blue-circuits path,
+  .brain-circuit-overlay .blue-circuits path{
+    animation:circuitFlowNeon 2.2s linear infinite!important;
+  }
   .brain-circuit-overlay .blue-circuits circle{
-    animation:none!important;
+    animation:nodePulseNeon 1.4s ease-in-out infinite!important;
   }
 }
 
