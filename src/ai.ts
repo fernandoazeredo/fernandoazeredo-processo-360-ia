@@ -2,6 +2,7 @@ import { httpsCallable } from 'firebase/functions'
 import { doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore'
 import { ref, uploadBytesResumable } from 'firebase/storage'
 import { auth, db, functionsClient, storage } from './firebase'
+import { analyzeSmallPdfWithGemini } from './gemini'
 
 export type AnalysisReport = {
   analysisId: string
@@ -57,6 +58,76 @@ export async function analyzeUploadedProcess(
   })
 
   onProgress?.(32, 'Preparando lotes e prompts jurídicos')
+
+  // Fase 1 da migração para Gemini: PDFs pequenos são processados diretamente
+  // pelo Firebase AI Logic. Arquivos maiores continuam temporariamente no fluxo
+  // legado até validarmos o processamento por lotes com Gemini.
+  const GEMINI_INLINE_MAX_BYTES = 12 * 1024 * 1024
+  if (file.size <= GEMINI_INLINE_MAX_BYTES) {
+    const analysisRef = doc(db, 'processos', analysisId)
+
+    try {
+      await setDoc(analysisRef, {
+        status: 'analisando_gemini',
+        stage: 'Analisando PDF com Gemini via Firebase AI Logic',
+        progress: 40,
+        provider: 'firebase-ai-logic',
+        model: 'gemini-3.8-flash',
+        updatedAt: serverTimestamp()
+      }, { merge: true })
+
+      const geminiReport = await analyzeSmallPdfWithGemini(
+        file,
+        area,
+        perspective,
+        async (value, stage) => {
+          onProgress?.(value, stage)
+          await setDoc(analysisRef, {
+            status: 'analisando_gemini',
+            stage,
+            progress: value,
+            provider: 'firebase-ai-logic',
+            model: 'gemini-3.8-flash',
+            updatedAt: serverTimestamp()
+          }, { merge: true }).catch(() => undefined)
+        }
+      )
+
+      const report: AnalysisReport = {
+        analysisId,
+        fileName: file.name,
+        area,
+        perspective,
+        ...geminiReport
+      }
+
+      await setDoc(analysisRef, {
+        status: 'concluido',
+        stage: 'Relatório jurídico concluído com Gemini',
+        progress: 100,
+        provider: 'firebase-ai-logic',
+        model: 'gemini-3.8-flash',
+        processedLots: 1,
+        report: geminiReport,
+        completedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      }, { merge: true })
+
+      onProgress?.(100, 'Relatório jurídico concluído com Gemini')
+      return report
+    } catch (error: any) {
+      const message = String(error?.message || 'Falha ao processar PDF com Gemini.')
+      await setDoc(analysisRef, {
+        status: 'erro',
+        stage: 'Falha durante o processamento com Gemini',
+        provider: 'firebase-ai-logic',
+        model: 'gemini-3.8-flash',
+        error: message,
+        updatedAt: serverTimestamp()
+      }, { merge: true }).catch(() => undefined)
+      throw error
+    }
+  }
 
   const analysisRef = doc(db, 'processos', analysisId)
   let unsubscribe = () => {}
