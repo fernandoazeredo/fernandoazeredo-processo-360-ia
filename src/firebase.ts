@@ -22,11 +22,12 @@ const app = firebaseConfigured ? (getApps()[0] ?? initializeApp(firebaseConfig))
 
 if (app && typeof window !== 'undefined') {
   const hostname = window.location.hostname
-  const isFirebasePreview =
-    hostname.includes('--') &&
-    (hostname.endsWith('.web.app') || hostname.endsWith('.firebaseapp.com'))
+  const isLocalDevelopment =
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '[::1]'
 
-  if (isFirebasePreview) {
+  if (isLocalDevelopment) {
     ;(self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true
   }
 
