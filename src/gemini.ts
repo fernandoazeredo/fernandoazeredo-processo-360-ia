@@ -3,18 +3,19 @@ import { collection, getDocs, query, where } from 'firebase/firestore'
 import { PDFDocument } from 'pdf-lib'
 import { aiClient, db } from './firebase'
 
-export const FREE_TIER_MODEL = 'gemini-3.8-flash'
+export const CONSOLIDATION_MODEL = 'gemini-3.8-flash'
+export const EXTRACTION_MODEL = 'gemini-3.5-flash-lite'
 const EXTRACTION_MODELS = [
-  'gemini-3.5-flash-lite',
-  FREE_TIER_MODEL,
+  EXTRACTION_MODEL,
+  CONSOLIDATION_MODEL,
   'gemini-3.5-flash'
 ] as const
 const CONSOLIDATION_MODELS = [
-  FREE_TIER_MODEL,
+  CONSOLIDATION_MODEL,
   'gemini-3.5-flash',
-  'gemini-3.5-flash-lite'
+  EXTRACTION_MODEL
 ] as const
-const ARCHITECTURE_VERSION = 'free-tier-browser-lots-v3-quality-prompts'
+const ARCHITECTURE_VERSION = 'blaze-browser-lots-v4-quality-prompts'
 const MAX_LOT_PAGES = 80
 const MAX_LOT_BYTES = 8 * 1024 * 1024
 const REQUEST_TIMEOUT_MS = 90_000
@@ -179,7 +180,7 @@ function classifyGeminiError(error: any) {
   // Google's 429 message can also contain "billing details".
   if (isQuotaError(message)) {
     return new Error(
-      'GEMINI_FREE_TIER_LIMIT: a cota gratuita do Gemini foi atingida temporariamente. Isso não significa erro de faturamento. Aguarde a liberação da cota e retome a análise; os lotes já concluídos permanecem salvos neste navegador.'
+      'GEMINI_RATE_LIMIT: o Gemini atingiu temporariamente um limite de requisições ou cota do serviço. Aguarde a liberação e retome a análise; os lotes já concluídos permanecem salvos neste navegador.'
     )
   }
 
@@ -203,7 +204,7 @@ function classifyGeminiError(error: any) {
 
   if (/404|model.*not.*(found|available)|unsupported model/i.test(message)) {
     return new Error(
-      'GEMINI_MODEL_UNAVAILABLE: os modelos gratuitos configurados não estão disponíveis para esta chamada no momento.'
+      'GEMINI_MODEL_UNAVAILABLE: os modelos Gemini configurados não estão disponíveis para esta chamada no momento.'
     )
   }
 
@@ -402,7 +403,7 @@ function makeResumeKey(file: File, area: string, perspective: string) {
   return [
     'processo360',
     ARCHITECTURE_VERSION,
-    FREE_TIER_MODEL,
+    CONSOLIDATION_MODEL,
     file.name,
     file.size,
     file.lastModified,
@@ -431,7 +432,7 @@ function writeResumeState(key: string, state: ResumeState) {
 function initialResumeState(file: File, area: string, perspective: string): ResumeState {
   return {
     version: ARCHITECTURE_VERSION,
-    model: FREE_TIER_MODEL,
+    model: CONSOLIDATION_MODEL,
     fileName: file.name,
     fileSize: file.size,
     lastModified: file.lastModified,
@@ -655,7 +656,7 @@ ${JSON.stringify(lotResults)}
   return parsed
 }
 
-export async function analyzePdfWithGeminiFreeTier(
+export async function analyzePdfWithGemini(
   file: File,
   area: string,
   perspective: string,
@@ -663,25 +664,18 @@ export async function analyzePdfWithGeminiFreeTier(
 ): Promise<GeminiAnalysisReport> {
   if (!aiClient) throw new Error('FIREBASE_AI_NOT_READY')
 
-  onProgress?.(3, 'Preparando análise gratuita no navegador')
+  onProgress?.(3, 'Preparando análise no navegador')
   const prompts = await loadPublishedPrompts(area, perspective)
 
   const { pageCount, lots } = await splitPdfInBrowser(file, onProgress)
   if (!lots.length) throw new Error('PDF_SEM_PAGINAS')
-
-  if (lots.length > 1) {
-    const proceed = window.confirm(
-      `Este processo será analisado em ${lots.length} lotes. No plano gratuito, análises com vários lotes podem pausar temporariamente por limite de cota. Os lotes concluídos ficam salvos e serão reaproveitados na retomada. Deseja continuar?`
-    )
-    if (!proceed) throw new Error('ANALYSIS_CANCELLED')
-  }
 
   const resumeKey = makeResumeKey(file, area, perspective)
   const existing = readResumeState(resumeKey)
   const resume =
     existing &&
     existing.version === ARCHITECTURE_VERSION &&
-    existing.model === FREE_TIER_MODEL &&
+    existing.model === CONSOLIDATION_MODEL &&
     existing.fileSize === file.size &&
     existing.lastModified === file.lastModified
       ? existing
@@ -704,7 +698,7 @@ export async function analyzePdfWithGeminiFreeTier(
     const beforeProgress = 15 + Math.round(((lot.number - 1) / lots.length) * 65)
     onProgress?.(
       beforeProgress,
-      `Analisando lote ${lot.number} de ${lots.length} com ${FREE_TIER_MODEL}`
+      `Analisando lote ${lot.number} de ${lots.length}`
     )
 
     const extraction = await analyzeLot(
