@@ -207,6 +207,8 @@ function App() {
         setAnalysisError('O Gemini gratuito ainda não está ativo neste projeto. O projeto Firebase precisa ficar no plano Spark, sem conta de faturamento vinculada, para usar o Free Tier.')
       } else if (message.includes('GEMINI_FREE_TIER_LIMIT')) {
         setAnalysisError('A cota gratuita do Gemini foi atingida temporariamente. Aguarde a renovação e tente novamente: os lotes já concluídos ficaram salvos neste navegador para retomada automática.')
+      } else if (message.includes('GEMINI_TEMPORARILY_BUSY')) {
+        setAnalysisError('O Gemini está temporariamente com alta demanda. O sistema já tentou novamente automaticamente. Tente mais tarde; os lotes concluídos ficaram salvos para retomada.')
       } else if (message.includes('FIREBASE_AI_NOT_READY')) {
         setAnalysisError('O Firebase AI Logic ainda não está configurado corretamente para o aplicativo.')
       } else {
