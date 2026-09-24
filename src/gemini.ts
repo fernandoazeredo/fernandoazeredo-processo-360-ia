@@ -504,7 +504,7 @@ O JSON deve respeitar exatamente o schema solicitado.
     8192,
     `lote ${lot.number} de ${lotCount}`,
     EXTRACTION_MODELS,
-    (modelName, attempt, total) => {
+    (_modelName, attempt, total) => {
       onAttempt?.(
         `Lote ${lot.number} de ${lotCount} — tentativa ${attempt} de ${total}`
       )
@@ -611,7 +611,7 @@ ${JSON.stringify(lotResults)}
     24576,
     'consolidação final',
     CONSOLIDATION_MODELS,
-    (modelName, attempt, total) => {
+    (_modelName, attempt, total) => {
       onAttempt?.(
         `Consolidação final — tentativa ${attempt} de ${total}`
       )
