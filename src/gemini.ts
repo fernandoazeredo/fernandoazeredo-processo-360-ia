@@ -258,7 +258,7 @@ async function generateContentWithFallback(
         context,
         model: modelName,
         attempt,
-        totalAttempts: FREE_TIER_MODELS.length,
+        totalAttempts: models.length,
         message,
         error
       })
