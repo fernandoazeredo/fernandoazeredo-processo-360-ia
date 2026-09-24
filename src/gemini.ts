@@ -169,16 +169,6 @@ function isBillingError(message: string) {
   return /prepayment credits are depleted|account.*not active|payment required|billing account required|billing (?:is )?not enabled|no billing account|billing.*(?:disabled|inactive)/i.test(message)
 }
 
-function getSuggestedRetryDelayMs(message: string, fallbackMs: number) {
-  const match = message.match(/retry in\s+([\d.]+)s/i)
-  if (!match) return fallbackMs
-
-  const seconds = Number(match[1])
-  if (!Number.isFinite(seconds) || seconds <= 0) return fallbackMs
-
-  return Math.min(120_000, Math.ceil(seconds * 1000) + 1000)
-}
-
 function classifyGeminiError(error: any) {
   const message = String(error?.message || error || '')
 
@@ -285,23 +275,25 @@ async function generateContentWithFallback(
         error
       })
 
-      if (/401|app check token is invalid|appcheck/i.test(message) || isBillingError(message)) {
+      if (
+        /401|app check token is invalid|appcheck/i.test(message) ||
+        isBillingError(message) ||
+        isQuotaError(message)
+      ) {
+        // 429/quota is not retried automatically: additional calls only
+        // consume more of the Free Tier. Completed lots stay saved and
+        // the user can resume later from the next unfinished lot.
         throw classifyGeminiError(error)
       }
 
       const retryable =
-        isQuotaError(message) ||
         /500|503|high demand|temporarily unavailable|service unavailable|internal error|GEMINI_REQUEST_TIMEOUT|404|model.*not.*(found|available)|unsupported model/i.test(message)
 
       if (!retryable || index >= models.length - 1) {
         throw classifyGeminiError(error)
       }
 
-      const retryDelayMs = isQuotaError(message)
-        ? getSuggestedRetryDelayMs(message, RETRY_DELAYS_MS[index] ?? 0)
-        : (RETRY_DELAYS_MS[index] ?? 0)
-
-      await sleep(retryDelayMs)
+      await sleep(RETRY_DELAYS_MS[index] ?? 0)
     }
   }
 
@@ -514,7 +506,7 @@ O JSON deve respeitar exatamente o schema solicitado.
     EXTRACTION_MODELS,
     (modelName, attempt, total) => {
       onAttempt?.(
-        `Lote ${lot.number} de ${lotCount}: tentativa ${attempt}/${total} com ${modelName}`
+        `Lote ${lot.number} de ${lotCount} — tentativa ${attempt} de ${total}`
       )
     }
   )
@@ -621,7 +613,7 @@ ${JSON.stringify(lotResults)}
     CONSOLIDATION_MODELS,
     (modelName, attempt, total) => {
       onAttempt?.(
-        `Consolidação final: tentativa ${attempt}/${total} com ${modelName}`
+        `Consolidação final — tentativa ${attempt} de ${total}`
       )
     }
   )
@@ -664,6 +656,13 @@ export async function analyzePdfWithGeminiFreeTier(
 
   const { pageCount, lots } = await splitPdfInBrowser(file, onProgress)
   if (!lots.length) throw new Error('PDF_SEM_PAGINAS')
+
+  if (lots.length > 1) {
+    const proceed = window.confirm(
+      `Este processo será analisado em ${lots.length} lotes. No plano gratuito, análises com vários lotes podem pausar temporariamente por limite de cota. Os lotes concluídos ficam salvos e serão reaproveitados na retomada. Deseja continuar?`
+    )
+    if (!proceed) throw new Error('ANALYSIS_CANCELLED')
+  }
 
   const resumeKey = makeResumeKey(file, area, perspective)
   const existing = readResumeState(resumeKey)
