@@ -4,10 +4,15 @@ import { PDFDocument } from 'pdf-lib'
 import { aiClient, db } from './firebase'
 
 export const FREE_TIER_MODEL = 'gemini-3.8-flash'
-const FREE_TIER_MODELS = [
+const EXTRACTION_MODELS = [
+  'gemini-3.5-flash-lite',
   FREE_TIER_MODEL,
-  'gemini-3.7-flash',
   'gemini-3.5-flash'
+] as const
+const CONSOLIDATION_MODELS = [
+  FREE_TIER_MODEL,
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite'
 ] as const
 const ARCHITECTURE_VERSION = 'free-tier-browser-lots-v2'
 const MAX_LOT_PAGES = 80
@@ -214,16 +219,17 @@ async function generateContentWithFallback(
   maxOutputTokens: number,
   context: string,
   thinkingLevel: string,
+  models: readonly string[],
   onAttempt?: (modelName: string, attempt: number, total: number) => void
 ) {
   if (!aiClient) throw new Error('FIREBASE_AI_NOT_READY')
 
   let lastError: any
 
-  for (let index = 0; index < FREE_TIER_MODELS.length; index++) {
-    const modelName = FREE_TIER_MODELS[index]
+  for (let index = 0; index < models.length; index++) {
+    const modelName = models[index]
     const attempt = index + 1
-    onAttempt?.(modelName, attempt, FREE_TIER_MODELS.length)
+    onAttempt?.(modelName, attempt, models.length)
 
     const model = getGenerativeModel(aiClient, {
       model: modelName,
@@ -264,7 +270,7 @@ async function generateContentWithFallback(
       const retryable =
         /429|resource.?exhausted|rate.?limit|quota|500|503|high demand|temporarily unavailable|service unavailable|internal error|GEMINI_REQUEST_TIMEOUT|404|model.*not.*(found|available)|unsupported model/i.test(message)
 
-      if (!retryable || index >= FREE_TIER_MODELS.length - 1) {
+      if (!retryable || index >= models.length - 1) {
         throw classifyGeminiError(error)
       }
 
@@ -477,6 +483,7 @@ O JSON deve respeitar exatamente o schema solicitado.
     8192,
     `lote ${lot.number} de ${lotCount}`,
     ThinkingLevel.LOW,
+    EXTRACTION_MODELS,
     (modelName, attempt, total) => {
       onAttempt?.(
         `Lote ${lot.number} de ${lotCount}: tentativa ${attempt}/${total} com ${modelName}`
@@ -571,6 +578,7 @@ ${JSON.stringify(lotResults)}
     24576,
     'consolidação final',
     ThinkingLevel.MEDIUM,
+    CONSOLIDATION_MODELS,
     (modelName, attempt, total) => {
       onAttempt?.(
         `Consolidação final: tentativa ${attempt}/${total} com ${modelName}`
