@@ -2,7 +2,7 @@
 
 Aplicação web para análise processual especializada, com leitura de PDFs extensos, divisão automática em lotes, consolidação documental e diagnóstico jurídico global.
 
-## Arquitetura gratuita
+## Arquitetura Gemini / Firebase AI Logic
 
 A análise jurídica não depende mais de OpenAI, Cloud Functions ou Cloud Storage.
 
@@ -39,7 +39,7 @@ Recursos removidos do fluxo de produção:
 
 ### Requisito para o Free Tier do Gemini
 
-O projeto Firebase precisa estar no plano **Spark**, sem conta de faturamento do Google Cloud vinculada. Se houver faturamento/prepayment ativo no projeto, o Gemini Developer API deixa de usar a faixa gratuita e pode retornar erro de billing.
+O projeto Firebase usa o plano **Blaze (pague pelo uso)** com Firebase AI Logic e Gemini Developer API. O faturamento e os limites de gasto são administrados no Firebase/Google Cloud; o aplicativo não precisa receber nenhuma chave ou sinalização adicional para saber que o projeto está no Blaze.
 
 ## Administração
 
@@ -61,7 +61,7 @@ firebase deploy --only hosting,firestore:rules --project processo-360-ia
 
 ## Retomada
 
-Os resultados intermediários dos lotes são gravados no navegador. Se uma cota gratuita temporária for atingida, o usuário pode tentar novamente depois; os lotes já concluídos serão reutilizados automaticamente quando o mesmo arquivo, área e perspectiva forem selecionados.
+Os resultados intermediários dos lotes são gravados no navegador. Se houver limite temporário de requisições, indisponibilidade ou interrupção, o usuário pode tentar novamente depois; os lotes já concluídos serão reutilizados automaticamente quando o mesmo arquivo, área e perspectiva forem selecionados.
 
 ## Princípio de análise
 
