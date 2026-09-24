@@ -49,6 +49,7 @@ type LotMeta = {
 }
 
 type LotExtraction = {
+  processNumber: string
   lotNumber: number
   pages: string
   synopsis: string
@@ -93,6 +94,7 @@ PROCESSO 360 IA — PADRÃO GLOBAL DE RIGOR
 
 const extractionSchema = Schema.object({
   properties: {
+    processNumber: Schema.string(),
     lotNumber: Schema.integer(),
     pages: Schema.string(),
     synopsis: Schema.string(),
@@ -447,6 +449,7 @@ function initialResumeState(file: File, area: string, perspective: string): Resu
 function isValidLotExtraction(value: any): value is LotExtraction {
   return Boolean(
     value &&
+    typeof value.processNumber === 'string' &&
     Number.isFinite(Number(value.lotNumber)) &&
     typeof value.pages === 'string' &&
     typeof value.synopsis === 'string' &&
@@ -492,6 +495,7 @@ OBJETIVO:
 Extraia e catalogue somente o que está efetivamente presente neste lote.
 Não produza diagnóstico global, probabilidade final ou estratégia definitiva antes da consolidação de todos os lotes.
 Mantenha referências de página/peça sempre que identificáveis.
+- Em processNumber, extraia o número do processo (padrão CNJ, ex: 0000000-00.0000.0.00.0000) exatamente como consta neste lote. Se não constar neste lote, use exatamente: "Informação não constante nos dados fornecidos".
 O JSON deve respeitar exatamente o schema solicitado.
 `.trim()
 
@@ -548,6 +552,14 @@ function isValidReport(value: any): value is GeminiAnalysisReport {
   )
 }
 
+function getConsolidatedProcessNumber(lotResults: LotExtraction[]) {
+  const missing = 'Informação não constante nos dados fornecidos'
+  const valid = lotResults.find(
+    lot => lot.processNumber?.trim() && lot.processNumber.trim() !== missing
+  )
+  return valid?.processNumber.trim() || missing
+}
+
 async function consolidateLots(
   lotResults: LotExtraction[],
   lots: LotMeta[],
@@ -571,6 +583,8 @@ async function consolidateLots(
     ]
   )
 
+  const consolidatedProcessNumber = getConsolidatedProcessNumber(lotResults)
+
   const instruction = `
 Produza o RELATÓRIO JURÍDICO FINAL do Processo 360 IA somente após considerar TODOS os lotes abaixo.
 
@@ -591,7 +605,8 @@ REGRAS OBRIGATÓRIAS:
 - Quando faltar informação necessária, use exatamente: "Informação não constante nos dados fornecidos".
 - Em risks.level use exclusivamente Alta, Média ou Baixa.
 - Entregue exatamente as 8 seções representadas no JSON.
-- Em processNumber, extraia o número do processo judicial (padrão CNJ, ex: 0000000-00.0000.0.00.0000) exatamente como consta no documento. Se não constar, use exatamente: "Informação não constante nos dados fornecidos".
+- Em processNumber, use o valor de processNumber informado pelo primeiro lote que contenha um número válido, diferente de "Informação não constante nos dados fornecidos". Se nenhum lote tiver essa informação, use exatamente essa frase.
+- O valor consolidado já determinado pelo sistema é: "${consolidatedProcessNumber}".
 - Em sources, haverá uma entrada por lote efetivamente considerado.
 
 DADOS ESTRUTURADOS DE TODOS OS LOTES:
@@ -624,6 +639,8 @@ ${JSON.stringify(lotResults)}
   if (!isValidReport(parsed)) {
     throw new Error('GEMINI_INVALID_FINAL_SCHEMA')
   }
+
+  parsed.processNumber = consolidatedProcessNumber
 
   parsed.sources = lots.map(lot => ({
     lot: lot.number,
