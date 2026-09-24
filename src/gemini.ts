@@ -155,12 +155,40 @@ function sleep(ms: number) {
   return new Promise(resolve => window.setTimeout(resolve, ms))
 }
 
+function isQuotaError(message: string) {
+  return /429|resource.?exhausted|rate.?limit|quota|generate_content_free_tier_requests/i.test(message)
+}
+
+function isBillingError(message: string) {
+  if (isQuotaError(message)) return false
+
+  return /prepayment credits are depleted|account.*not active|payment required|billing account required|billing (?:is )?not enabled|no billing account|billing.*(?:disabled|inactive)/i.test(message)
+}
+
+function getSuggestedRetryDelayMs(message: string, fallbackMs: number) {
+  const match = message.match(/retry in\s+([\d.]+)s/i)
+  if (!match) return fallbackMs
+
+  const seconds = Number(match[1])
+  if (!Number.isFinite(seconds) || seconds <= 0) return fallbackMs
+
+  return Math.min(120_000, Math.ceil(seconds * 1000) + 1000)
+}
+
 function classifyGeminiError(error: any) {
   const message = String(error?.message || error || '')
 
-  if (/prepayment credits are depleted|billing|payment|account.*not active/i.test(message)) {
+  // Quota/rate-limit must be checked before any billing wording because
+  // Google's 429 message can also contain "billing details".
+  if (isQuotaError(message)) {
     return new Error(
-      'GEMINI_BILLING_STATE_MISMATCH: o Google retornou um erro de estado de faturamento, embora o projeto possa estar no nível gratuito. Não ative cobrança automaticamente; confirme o nível no AI Studio e tente novamente após a propagação.'
+      'GEMINI_FREE_TIER_LIMIT: a cota gratuita do Gemini foi atingida temporariamente. Isso não significa erro de faturamento. Aguarde a liberação da cota e retome a análise; os lotes já concluídos permanecem salvos neste navegador.'
+    )
+  }
+
+  if (isBillingError(message)) {
+    return new Error(
+      'GEMINI_BILLING_STATE_MISMATCH: o Google retornou um erro específico de faturamento sem indicação de quota/rate-limit.'
     )
   }
 
@@ -185,12 +213,6 @@ function classifyGeminiError(error: any) {
   if (/500|503|high demand|temporarily unavailable|service unavailable|internal error/i.test(message)) {
     return new Error(
       'GEMINI_TEMPORARILY_BUSY: o serviço Gemini está temporariamente sobrecarregado. A análise pode ser retomada sem perder os lotes já concluídos.'
-    )
-  }
-
-  if (/429|resource.?exhausted|rate.?limit|quota/i.test(message)) {
-    return new Error(
-      'GEMINI_FREE_TIER_LIMIT: o limite gratuito do Gemini foi atingido temporariamente. Aguarde a renovação da cota e retome a análise; os lotes já concluídos permanecem salvos neste navegador.'
     )
   }
 
@@ -259,18 +281,23 @@ async function generateContentWithFallback(
         error
       })
 
-      if (/prepayment credits are depleted|billing|payment|account.*not active|401|app check token is invalid|appcheck/i.test(message)) {
+      if (/401|app check token is invalid|appcheck/i.test(message) || isBillingError(message)) {
         throw classifyGeminiError(error)
       }
 
       const retryable =
-        /429|resource.?exhausted|rate.?limit|quota|500|503|high demand|temporarily unavailable|service unavailable|internal error|GEMINI_REQUEST_TIMEOUT|404|model.*not.*(found|available)|unsupported model/i.test(message)
+        isQuotaError(message) ||
+        /500|503|high demand|temporarily unavailable|service unavailable|internal error|GEMINI_REQUEST_TIMEOUT|404|model.*not.*(found|available)|unsupported model/i.test(message)
 
       if (!retryable || index >= models.length - 1) {
         throw classifyGeminiError(error)
       }
 
-      await sleep(RETRY_DELAYS_MS[index] ?? 0)
+      const retryDelayMs = isQuotaError(message)
+        ? getSuggestedRetryDelayMs(message, RETRY_DELAYS_MS[index] ?? 0)
+        : (RETRY_DELAYS_MS[index] ?? 0)
+
+      await sleep(retryDelayMs)
     }
   }
 
