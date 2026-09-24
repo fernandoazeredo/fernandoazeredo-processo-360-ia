@@ -206,15 +206,15 @@ function App() {
       if (message.includes('ANALYSIS_CANCELLED')) {
         setAnalysisError('')
       } else if (message.includes('GEMINI_BILLING_STATE_MISMATCH')) {
-        setAnalysisError('O Google retornou um estado de faturamento inconsistente, mas o projeto está configurado no Nível gratuito. Não ative cobrança. Aguarde a propagação do Free Tier e tente novamente.')
-      } else if (message.includes('GEMINI_FREE_TIER_LIMIT')) {
-        setAnalysisError('A cota gratuita do Gemini foi atingida temporariamente. Não é erro de faturamento. Aguarde a liberação da cota e tente novamente: os lotes já concluídos ficaram salvos para retomada automática.')
+        setAnalysisError('O Google retornou um estado de faturamento inconsistente para o projeto. Verifique o faturamento do Firebase/Google Cloud e tente novamente.')
+      } else if (message.includes('GEMINI_RATE_LIMIT')) {
+        setAnalysisError('O Gemini atingiu temporariamente um limite de requisições ou cota do serviço. Aguarde alguns instantes e tente novamente: os lotes já concluídos ficaram salvos para retomada automática.')
       } else if (message.includes('GEMINI_TEMPORARILY_BUSY')) {
-        setAnalysisError('O Gemini está temporariamente com alta demanda. Foram feitas no máximo 3 tentativas usando modelos gratuitos alternativos. Tente novamente; os lotes concluídos ficaram salvos para retomada.')
+        setAnalysisError('O Gemini está temporariamente com alta demanda. Foram feitas tentativas com os modelos de fallback configurados. Tente novamente; os lotes concluídos ficaram salvos para retomada.')
       } else if (message.includes('GEMINI_REQUEST_TIMEOUT')) {
         setAnalysisError('O Gemini não respondeu dentro do limite de 90 segundos por tentativa. Tente novamente; os lotes já concluídos foram preservados.')
       } else if (message.includes('GEMINI_MODEL_UNAVAILABLE')) {
-        setAnalysisError('Nenhum dos modelos Gemini gratuitos configurados respondeu corretamente nesta tentativa. Tente novamente mais tarde.')
+        setAnalysisError('Nenhum dos modelos Gemini configurados respondeu corretamente nesta tentativa. Tente novamente mais tarde.')
       } else if (message.includes('GEMINI_APP_CHECK_INVALID')) {
         setAnalysisError('O Firebase App Check rejeitou a chamada ao Gemini. Recarregue a página e tente novamente.')
       } else if (message.includes('FIREBASE_AI_NOT_READY')) {
