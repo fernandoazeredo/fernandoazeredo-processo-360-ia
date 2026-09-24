@@ -3,11 +3,11 @@ import { collection, getDocs, query, where } from 'firebase/firestore'
 import { PDFDocument } from 'pdf-lib'
 import { aiClient, db } from './firebase'
 
-export const FREE_TIER_MODEL = 'gemini-3.5-flash'
+export const FREE_TIER_MODEL = 'gemini-3.8-flash'
 const ARCHITECTURE_VERSION = 'free-tier-browser-lots-v1'
 const MAX_LOT_PAGES = 80
 const MAX_LOT_BYTES = 8 * 1024 * 1024
-const RETRY_DELAYS_MS = [15000, 30000, 60000]
+const RETRY_DELAYS_MS = [15000, 30000, 60000, 120000]
 
 export type GeminiAnalysisReport = {
   executiveSummary: string
@@ -153,6 +153,12 @@ function classifyGeminiError(error: any) {
     )
   }
 
+  if (/500|503|high demand|temporarily unavailable|service unavailable|internal error/i.test(message)) {
+    return new Error(
+      'GEMINI_TEMPORARILY_BUSY: o serviço Gemini está temporariamente sobrecarregado. A análise pode ser retomada sem perder os lotes já concluídos.'
+    )
+  }
+
   if (/429|resource.?exhausted|rate.?limit|quota/i.test(message)) {
     return new Error(
       'GEMINI_FREE_TIER_LIMIT: o limite gratuito do Gemini foi atingido temporariamente. Aguarde a renovação da cota e retome a análise; os lotes já concluídos permanecem salvos neste navegador.'
@@ -176,7 +182,8 @@ async function withFreeTierRetry<T>(operation: () => Promise<T>): Promise<T> {
         throw classifyGeminiError(error)
       }
 
-      const retryable = /429|resource.?exhausted|rate.?limit|quota/i.test(message)
+      const retryable =
+        /429|resource.?exhausted|rate.?limit|quota|500|503|high demand|temporarily unavailable|service unavailable|internal error/i.test(message)
       if (!retryable || attempt >= RETRY_DELAYS_MS.length) {
         throw classifyGeminiError(error)
       }
