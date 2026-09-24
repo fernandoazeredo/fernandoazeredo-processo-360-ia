@@ -203,8 +203,8 @@ function App() {
     } catch (error: any) {
       const message = String(error?.message || '')
       console.error('[Processo 360 IA] Falha na análise', error)
-      if (message.includes('GEMINI_FREE_TIER_NOT_ACTIVE')) {
-        setAnalysisError('O Gemini gratuito ainda não está ativo neste projeto. O projeto Firebase precisa ficar no plano Spark, sem conta de faturamento vinculada, para usar o Free Tier.')
+      if (message.includes('GEMINI_BILLING_STATE_MISMATCH')) {
+        setAnalysisError('O Google retornou um estado de faturamento inconsistente, mas o projeto está configurado no Nível gratuito. Não ative cobrança. Aguarde a propagação do Free Tier e tente novamente.')
       } else if (message.includes('GEMINI_FREE_TIER_LIMIT')) {
         setAnalysisError('A cota gratuita do Gemini foi atingida temporariamente. Aguarde a renovação e tente novamente: os lotes já concluídos ficaram salvos neste navegador para retomada automática.')
       } else if (message.includes('GEMINI_TEMPORARILY_BUSY')) {
