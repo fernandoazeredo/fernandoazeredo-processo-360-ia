@@ -1,4 +1,4 @@
-import { getGenerativeModel, Schema } from 'firebase/ai'
+import { getGenerativeModel, Schema, ThinkingLevel } from 'firebase/ai'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { PDFDocument } from 'pdf-lib'
 import { aiClient, db } from './firebase'
@@ -213,6 +213,7 @@ async function generateContentWithFallback(
   responseSchema: any,
   maxOutputTokens: number,
   context: string,
+  thinkingLevel: string,
   onAttempt?: (modelName: string, attempt: number, total: number) => void
 ) {
   if (!aiClient) throw new Error('FIREBASE_AI_NOT_READY')
@@ -230,7 +231,10 @@ async function generateContentWithFallback(
       generationConfig: {
         responseMimeType: 'application/json',
         responseSchema,
-        maxOutputTokens
+        maxOutputTokens,
+        thinkingConfig: {
+          thinkingLevel
+        }
       }
     })
 
@@ -472,6 +476,7 @@ O JSON deve respeitar exatamente o schema solicitado.
     extractionSchema,
     8192,
     `lote ${lot.number} de ${lotCount}`,
+    ThinkingLevel.LOW,
     (modelName, attempt, total) => {
       onAttempt?.(
         `Lote ${lot.number} de ${lotCount}: tentativa ${attempt}/${total} com ${modelName}`
@@ -563,8 +568,9 @@ ${JSON.stringify(lotResults)}
   const result = await generateContentWithFallback(
     instruction,
     reportSchema,
-    32768,
+    24576,
     'consolidação final',
+    ThinkingLevel.MEDIUM,
     (modelName, attempt, total) => {
       onAttempt?.(
         `Consolidação final: tentativa ${attempt}/${total} com ${modelName}`
