@@ -160,7 +160,7 @@ function classifyGeminiError(error: any) {
 
   if (/prepayment credits are depleted|billing|payment|account.*not active/i.test(message)) {
     return new Error(
-      'GEMINI_FREE_TIER_NOT_ACTIVE: este projeto ainda está vinculado a faturamento pago. Para usar a faixa gratuita, deixe o projeto Firebase no plano Spark sem conta de faturamento vinculada.'
+      'GEMINI_BILLING_STATE_MISMATCH: o Google retornou um erro de estado de faturamento, embora o projeto possa estar no nível gratuito. Não ative cobrança automaticamente; confirme o nível no AI Studio e tente novamente após a propagação.'
     )
   }
 
