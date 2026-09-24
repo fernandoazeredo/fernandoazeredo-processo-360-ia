@@ -14,7 +14,7 @@ const CONSOLIDATION_MODELS = [
   'gemini-3.5-flash',
   'gemini-3.5-flash-lite'
 ] as const
-const ARCHITECTURE_VERSION = 'free-tier-browser-lots-v2'
+const ARCHITECTURE_VERSION = 'free-tier-browser-lots-v3-quality-prompts'
 const MAX_LOT_PAGES = 80
 const MAX_LOT_BYTES = 8 * 1024 * 1024
 const REQUEST_TIMEOUT_MS = 90_000
@@ -90,6 +90,9 @@ PROCESSO 360 IA — PADRÃO GLOBAL DE RIGOR
 10. Para risco, probabilidade de êxito, solidez ou classificação equivalente, use exclusivamente: "Alta", "Média" ou "Baixa".
 11. Identifique contradições, lacunas, duplicidades e limitações de prova.
 12. Antes de entregar, verifique internamente completude, rastreabilidade e ausência de invenções.
+13. Quando a data exata de um evento não constar, não invente a data. Use no campo date exatamente "Informação não constante nos dados fornecidos" e, somente se a relação temporal estiver claramente sustentada pelo contexto, registre no evento ou na referência uma "Inferência cronológica" objetiva (ex.: posterior à contestação de 12/03/2026), deixando explícito que se trata de inferência.
+14. Valores monetários devem ser transcritos exatamente como constam no material, com sua natureza e referência sempre que identificáveis. Não calcule, complete ou estime valores ausentes.
+15. Não invente súmulas, OJs, precedentes, números de julgados ou entendimentos jurisprudenciais. Só cite referência jurisprudencial específica quando ela constar nos dados fornecidos ou nos prompts jurídicos publicados.
 `.trim()
 
 const extractionSchema = Schema.object({
@@ -488,6 +491,10 @@ Extraia e catalogue somente o que está efetivamente presente neste lote.
 Não produza diagnóstico global, probabilidade final ou estratégia definitiva antes da consolidação de todos os lotes.
 Mantenha referências de página/peça sempre que identificáveis.
 - Em processNumber, extraia o número do processo (padrão CNJ, ex: 0000000-00.0000.0.00.0000) exatamente como consta neste lote. Se não constar neste lote, use exatamente: "Informação não constante nos dados fornecidos".
+- Em timeline, use data exata apenas quando ela estiver expressamente identificada. Se a data exata não constar, use em date exatamente "Informação não constante nos dados fornecidos". Quando o contexto permitir estabelecer com segurança uma posição relativa, registre no event ou reference "Inferência cronológica: ..." e indique o evento/data que sustenta essa ordenação.
+- Em monetaryValues, capture de forma individualizada todos os valores expressamente identificados, especialmente valor da causa, valor de cada pedido, condenação, acordo, depósito, custas, honorários e demais quantias relevantes. Para cada valor, informe sua natureza, a parte ou pedido relacionado e a referência de página/peça quando identificável. Não some, estime ou complete valores que não estejam expressos.
+- Em claims, catalogue cada pedido ou pretensão separadamente quando isso for possível, preservando o vínculo com os respectivos valores, fundamentos, provas e decisões encontrados no lote.
+- Se houver súmula, OJ, precedente ou entendimento jurisprudencial expressamente citado no lote ou nos prompts jurídicos fornecidos, preserve a referência com exatidão. Não crie nem complete referência jurisprudencial ausente.
 O JSON deve respeitar exatamente o schema solicitado.
 `.trim()
 
@@ -596,6 +603,11 @@ REGRAS OBRIGATÓRIAS:
 - Não invente fatos, páginas, documentos, datas, valores ou precedentes.
 - Quando faltar informação necessária, use exatamente: "Informação não constante nos dados fornecidos".
 - Em risks.level use exclusivamente Alta, Média ou Baixa.
+- Em risks.basis, justifique cada risco com elementos concretos dos lotes: prova existente ou ausente, distribuição do ônus probatório, decisão já proferida, contradição, documento faltante e exposição monetária expressamente identificada. Não crie percentual numérico de êxito ou condenação.
+- Na linha do tempo final, não invente datas. Quando um evento não tiver data exata, mantenha em date exatamente "Informação não constante nos dados fornecidos" e utilize relações temporais inferidas apenas quando sustentadas pelos lotes, identificando-as expressamente como "Inferência cronológica".
+- Em claimsEvidenceDecisions, consolide separadamente o valor da causa e o valor de cada pedido quando constarem dos lotes, eliminando duplicidades e preservando a referência documental. Não estime quantias ausentes.
+- Ao mencionar legislação, súmulas, OJs ou jurisprudência, utilize somente referências específicas presentes nos lotes ou nos prompts jurídicos publicados. Não invente número, tribunal, enunciado ou precedente. Se a referência específica não estiver disponível, exponha a questão jurídica sem fabricar citação.
+- Em conclusionStrategy, além da conclusão jurídica, apresente de 2 a 3 próximos passos práticos e objetivos coerentes com a perspectiva informada, vinculando cada ação a uma lacuna, prova, pedido ou risco identificado nos lotes (por exemplo: juntar documento já mencionado, requerer prova/perícia pertinente ou impugnar ponto documentalmente identificado). Não recomende medida sem suporte nos dados processados.
 - Entregue exatamente as 8 seções representadas no JSON.
 - Em processNumber, use o valor de processNumber informado pelo primeiro lote que contenha um número válido, diferente de "Informação não constante nos dados fornecidos". Se nenhum lote tiver essa informação, use exatamente essa frase.
 - O valor consolidado já determinado pelo sistema é: "${consolidatedProcessNumber}".
