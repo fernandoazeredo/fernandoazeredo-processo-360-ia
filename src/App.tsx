@@ -203,7 +203,9 @@ function App() {
     } catch (error: any) {
       const message = String(error?.message || '')
       console.error('[Processo 360 IA] Falha na análise', error)
-      if (message.includes('GEMINI_BILLING_STATE_MISMATCH')) {
+      if (message.includes('ANALYSIS_CANCELLED')) {
+        setAnalysisError('')
+      } else if (message.includes('GEMINI_BILLING_STATE_MISMATCH')) {
         setAnalysisError('O Google retornou um estado de faturamento inconsistente, mas o projeto está configurado no Nível gratuito. Não ative cobrança. Aguarde a propagação do Free Tier e tente novamente.')
       } else if (message.includes('GEMINI_FREE_TIER_LIMIT')) {
         setAnalysisError('A cota gratuita do Gemini foi atingida temporariamente. Não é erro de faturamento. Aguarde a liberação da cota e tente novamente: os lotes já concluídos ficaram salvos para retomada automática.')
