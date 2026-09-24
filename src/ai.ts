@@ -1,4 +1,4 @@
-import { analyzePdfWithGeminiFreeTier } from './gemini'
+import { analyzePdfWithGemini } from './gemini'
 
 export type AnalysisReport = {
   analysisId: string
@@ -23,7 +23,7 @@ export async function analyzeUploadedProcess(
 ): Promise<AnalysisReport> {
   const analysisId = crypto.randomUUID()
 
-  const geminiReport = await analyzePdfWithGeminiFreeTier(
+  const geminiReport = await analyzePdfWithGemini(
     file,
     area,
     perspective,
