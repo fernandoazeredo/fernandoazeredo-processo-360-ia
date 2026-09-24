@@ -206,7 +206,7 @@ function App() {
       if (message.includes('GEMINI_BILLING_STATE_MISMATCH')) {
         setAnalysisError('O Google retornou um estado de faturamento inconsistente, mas o projeto está configurado no Nível gratuito. Não ative cobrança. Aguarde a propagação do Free Tier e tente novamente.')
       } else if (message.includes('GEMINI_FREE_TIER_LIMIT')) {
-        setAnalysisError('A cota gratuita do Gemini foi atingida temporariamente. Aguarde a renovação e tente novamente: os lotes já concluídos ficaram salvos neste navegador para retomada automática.')
+        setAnalysisError('A cota gratuita do Gemini foi atingida temporariamente. Não é erro de faturamento. Aguarde a liberação da cota e tente novamente: os lotes já concluídos ficaram salvos para retomada automática.')
       } else if (message.includes('GEMINI_TEMPORARILY_BUSY')) {
         setAnalysisError('O Gemini está temporariamente com alta demanda. Foram feitas no máximo 3 tentativas usando modelos gratuitos alternativos. Tente novamente; os lotes concluídos ficaram salvos para retomada.')
       } else if (message.includes('GEMINI_REQUEST_TIMEOUT')) {
