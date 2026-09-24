@@ -4,10 +4,16 @@ import { PDFDocument } from 'pdf-lib'
 import { aiClient, db } from './firebase'
 
 export const FREE_TIER_MODEL = 'gemini-3.8-flash'
-const ARCHITECTURE_VERSION = 'free-tier-browser-lots-v1'
+const FREE_TIER_MODELS = [
+  FREE_TIER_MODEL,
+  'gemini-3.7-flash',
+  'gemini-3.5-flash'
+] as const
+const ARCHITECTURE_VERSION = 'free-tier-browser-lots-v2'
 const MAX_LOT_PAGES = 80
 const MAX_LOT_BYTES = 8 * 1024 * 1024
-const RETRY_DELAYS_MS = [15000, 30000, 60000, 120000]
+const REQUEST_TIMEOUT_MS = 90_000
+const RETRY_DELAYS_MS = [3000, 7000]
 
 export type GeminiAnalysisReport = {
   executiveSummary: string
@@ -153,6 +159,24 @@ function classifyGeminiError(error: any) {
     )
   }
 
+  if (/401|app check token is invalid|appcheck/i.test(message)) {
+    return new Error(
+      'GEMINI_APP_CHECK_INVALID: o Firebase App Check rejeitou a chamada ao Gemini.'
+    )
+  }
+
+  if (/GEMINI_REQUEST_TIMEOUT/i.test(message)) {
+    return new Error(
+      'GEMINI_REQUEST_TIMEOUT: o Gemini não respondeu dentro de 90 segundos. A análise foi interrompida sem perder os lotes já concluídos.'
+    )
+  }
+
+  if (/404|model.*not.*(found|available)|unsupported model/i.test(message)) {
+    return new Error(
+      'GEMINI_MODEL_UNAVAILABLE: os modelos gratuitos configurados não estão disponíveis para esta chamada no momento.'
+    )
+  }
+
   if (/500|503|high demand|temporarily unavailable|service unavailable|internal error/i.test(message)) {
     return new Error(
       'GEMINI_TEMPORARILY_BUSY: o serviço Gemini está temporariamente sobrecarregado. A análise pode ser retomada sem perder os lotes já concluídos.'
@@ -168,27 +192,79 @@ function classifyGeminiError(error: any) {
   return error instanceof Error ? error : new Error(message || 'Falha desconhecida no Gemini.')
 }
 
-async function withFreeTierRetry<T>(operation: () => Promise<T>): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, modelName: string, context: string): Promise<T> {
+  let timeoutId = 0
+
+  const timeout = new Promise<T>((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error(
+        `GEMINI_REQUEST_TIMEOUT: ${context} excedeu 90 segundos no modelo ${modelName}.`
+      ))
+    }, REQUEST_TIMEOUT_MS)
+  })
+
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId) window.clearTimeout(timeoutId)
+  })
+}
+
+async function generateContentWithFallback(
+  contents: any,
+  responseSchema: any,
+  maxOutputTokens: number,
+  context: string,
+  onAttempt?: (modelName: string, attempt: number, total: number) => void
+) {
+  if (!aiClient) throw new Error('FIREBASE_AI_NOT_READY')
+
   let lastError: any
 
-  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+  for (let index = 0; index < FREE_TIER_MODELS.length; index++) {
+    const modelName = FREE_TIER_MODELS[index]
+    const attempt = index + 1
+    onAttempt?.(modelName, attempt, FREE_TIER_MODELS.length)
+
+    const model = getGenerativeModel(aiClient, {
+      model: modelName,
+      systemInstruction: GLOBAL_RIGOR,
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema,
+        maxOutputTokens
+      }
+    })
+
     try {
-      return await operation()
+      return await withTimeout(
+        model.generateContent(contents),
+        modelName,
+        context
+      )
     } catch (error: any) {
       lastError = error
       const message = String(error?.message || error || '')
 
-      if (/prepayment credits are depleted|billing|payment|account.*not active/i.test(message)) {
+      console.error('[Processo 360 IA][Gemini]', {
+        context,
+        model: modelName,
+        attempt,
+        totalAttempts: FREE_TIER_MODELS.length,
+        message,
+        error
+      })
+
+      if (/prepayment credits are depleted|billing|payment|account.*not active|401|app check token is invalid|appcheck/i.test(message)) {
         throw classifyGeminiError(error)
       }
 
       const retryable =
-        /429|resource.?exhausted|rate.?limit|quota|500|503|high demand|temporarily unavailable|service unavailable|internal error/i.test(message)
-      if (!retryable || attempt >= RETRY_DELAYS_MS.length) {
+        /429|resource.?exhausted|rate.?limit|quota|500|503|high demand|temporarily unavailable|service unavailable|internal error|GEMINI_REQUEST_TIMEOUT|404|model.*not.*(found|available)|unsupported model/i.test(message)
+
+      if (!retryable || index >= FREE_TIER_MODELS.length - 1) {
         throw classifyGeminiError(error)
       }
 
-      await sleep(RETRY_DELAYS_MS[attempt])
+      await sleep(RETRY_DELAYS_MS[index] ?? 0)
     }
   }
 
@@ -356,19 +432,10 @@ async function analyzeLot(
   lotCount: number,
   area: string,
   perspective: string,
-  prompts: PromptDoc[]
+  prompts: PromptDoc[],
+  onAttempt?: (stage: string) => void
 ): Promise<LotExtraction> {
   if (!aiClient) throw new Error('FIREBASE_AI_NOT_READY')
-
-  const model = getGenerativeModel(aiClient, {
-    model: FREE_TIER_MODEL,
-    systemInstruction: GLOBAL_RIGOR,
-    generationConfig: {
-      responseMimeType: 'application/json',
-      responseSchema: extractionSchema,
-      maxOutputTokens: 8192
-    }
-  })
 
   const extractionInstructions = promptsToText(
     prompts,
@@ -400,7 +467,17 @@ O JSON deve respeitar exatamente o schema solicitado.
     }
   }
 
-  const result = await withFreeTierRetry(() => model.generateContent([instruction, pdfPart]))
+  const result = await generateContentWithFallback(
+    [instruction, pdfPart],
+    extractionSchema,
+    8192,
+    `lote ${lot.number} de ${lotCount}`,
+    (modelName, attempt, total) => {
+      onAttempt?.(
+        `Lote ${lot.number} de ${lotCount}: tentativa ${attempt}/${total} com ${modelName}`
+      )
+    }
+  )
   const text = result.response.text()
 
   if (!text?.trim()) throw new Error(`GEMINI_EMPTY_RESPONSE_LOT_${lot.number}`)
@@ -441,19 +518,10 @@ async function consolidateLots(
   pageCount: number,
   area: string,
   perspective: string,
-  prompts: PromptDoc[]
+  prompts: PromptDoc[],
+  onAttempt?: (stage: string) => void
 ): Promise<GeminiAnalysisReport> {
   if (!aiClient) throw new Error('FIREBASE_AI_NOT_READY')
-
-  const model = getGenerativeModel(aiClient, {
-    model: FREE_TIER_MODEL,
-    systemInstruction: GLOBAL_RIGOR,
-    generationConfig: {
-      responseMimeType: 'application/json',
-      responseSchema: reportSchema,
-      maxOutputTokens: 32768
-    }
-  })
 
   const finalInstructions = promptsToText(
     prompts,
@@ -492,7 +560,17 @@ DADOS ESTRUTURADOS DE TODOS OS LOTES:
 ${JSON.stringify(lotResults)}
 `.trim()
 
-  const result = await withFreeTierRetry(() => model.generateContent(instruction))
+  const result = await generateContentWithFallback(
+    instruction,
+    reportSchema,
+    32768,
+    'consolidação final',
+    (modelName, attempt, total) => {
+      onAttempt?.(
+        `Consolidação final: tentativa ${attempt}/${total} com ${modelName}`
+      )
+    }
+  )
   const text = result.response.text()
 
   if (!text?.trim()) throw new Error('GEMINI_EMPTY_FINAL_RESPONSE')
@@ -567,7 +645,8 @@ export async function analyzePdfWithGeminiFreeTier(
       lots.length,
       area,
       perspective,
-      prompts
+      prompts,
+      stage => onProgress?.(beforeProgress, stage)
     )
 
     lotResults[lot.number - 1] = extraction
@@ -589,7 +668,8 @@ export async function analyzePdfWithGeminiFreeTier(
     pageCount,
     area,
     perspective,
-    prompts
+    prompts,
+    stage => onProgress?.(84, stage)
   )
 
   onProgress?.(100, 'Relatório jurídico consolidado concluído')
