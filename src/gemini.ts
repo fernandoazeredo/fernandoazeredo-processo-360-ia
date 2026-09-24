@@ -21,6 +21,7 @@ const REQUEST_TIMEOUT_MS = 90_000
 const RETRY_DELAYS_MS = [3000, 7000]
 
 export type GeminiAnalysisReport = {
+  processNumber: string
   executiveSummary: string
   timeline: Array<{ date: string; event: string; reference: string }>
   claimsEvidenceDecisions: string
@@ -117,6 +118,7 @@ const extractionSchema = Schema.object({
 
 const reportSchema = Schema.object({
   properties: {
+    processNumber: Schema.string(),
     executiveSummary: Schema.string(),
     timeline: Schema.array({
       items: Schema.object({
@@ -535,6 +537,7 @@ O JSON deve respeitar exatamente o schema solicitado.
 function isValidReport(value: any): value is GeminiAnalysisReport {
   return Boolean(
     value &&
+    typeof value.processNumber === 'string' &&
     typeof value.executiveSummary === 'string' &&
     Array.isArray(value.timeline) &&
     typeof value.claimsEvidenceDecisions === 'string' &&
@@ -587,7 +590,8 @@ REGRAS OBRIGATÓRIAS:
 - Não invente fatos, páginas, documentos, datas, valores ou precedentes.
 - Quando faltar informação necessária, use exatamente: "Informação não constante nos dados fornecidos".
 - Em risks.level use exclusivamente Alta, Média ou Baixa.
-- Entregue exatamente as 7 seções representadas no JSON.
+- Entregue exatamente as 8 seções representadas no JSON.
+- Em processNumber, extraia o número do processo judicial (padrão CNJ, ex: 0000000-00.0000.0.00.0000) exatamente como consta no documento. Se não constar, use exatamente: "Informação não constante nos dados fornecidos".
 - Em sources, haverá uma entrada por lote efetivamente considerado.
 
 DADOS ESTRUTURADOS DE TODOS OS LOTES:
