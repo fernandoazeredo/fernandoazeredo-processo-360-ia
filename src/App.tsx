@@ -308,6 +308,38 @@ function App() {
   )
 }
 
+function buildExportFileName(report: AnalysisReport) {
+  const fallback = `processo-${report.analysisId.slice(0, 8)}`
+  const rawProcessNumber = report.processNumber?.trim()
+  const hasProcessNumber = Boolean(
+    rawProcessNumber &&
+    rawProcessNumber !== 'Informação não constante nos dados fornecidos'
+  )
+  const processLabel = (hasProcessNumber ? rawProcessNumber! : fallback)
+    .replace(/[\\/:*?"<>|]/g, '-')
+    .trim()
+
+  const lotNumbers = Array.from(new Set(report.sources.map(s => s.lot))).sort((a, b) => a - b)
+  const loteLabel = lotNumbers.length <= 1
+    ? 'lote único'
+    : lotNumbers.map(n => `lote ${n}`).join(', ')
+
+  return `${processLabel} - ${loteLabel}`
+}
+
+function exportAnalysisAsPdf(report: AnalysisReport) {
+  const previousTitle = document.title
+  document.title = buildExportFileName(report)
+
+  const restoreTitle = () => {
+    document.title = previousTitle
+    window.removeEventListener('afterprint', restoreTitle)
+  }
+  window.addEventListener('afterprint', restoreTitle)
+
+  window.print()
+}
+
 function AnalysisResult({report}:{report:AnalysisReport}) {
   return <section className="analysis-result" id="analysis-result">
     <div className="analysis-toolbar no-print">
@@ -315,13 +347,14 @@ function AnalysisResult({report}:{report:AnalysisReport}) {
         <span className="eyebrow"><FileText size={16}/> Resultado da análise</span>
         <h2>Relatório jurídico consolidado</h2>
       </div>
-      <button className="export-button" onClick={() => window.print()}><Download size={18}/> Exportar análise em PDF</button>
+      <button className="export-button" onClick={() => exportAnalysisAsPdf(report)}><Download size={18}/> Exportar análise em PDF</button>
     </div>
 
     <div className="analysis-meta">
       <span><b>Arquivo:</b> {report.fileName}</span>
       <span><b>Área:</b> {report.area}</span>
       <span><b>Perspectiva:</b> {report.perspective}</span>
+      <span><b>Nº do processo:</b> {report.processNumber}</span>
       <span><b>ID:</b> {report.analysisId}</span>
     </div>
 
