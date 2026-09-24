@@ -202,13 +202,19 @@ function App() {
       }, 150)
     } catch (error: any) {
       const message = String(error?.message || '')
-      const code = String(error?.code || '')
+      console.error('[Processo 360 IA] Falha na análise', error)
       if (message.includes('GEMINI_FREE_TIER_NOT_ACTIVE')) {
         setAnalysisError('O Gemini gratuito ainda não está ativo neste projeto. O projeto Firebase precisa ficar no plano Spark, sem conta de faturamento vinculada, para usar o Free Tier.')
       } else if (message.includes('GEMINI_FREE_TIER_LIMIT')) {
         setAnalysisError('A cota gratuita do Gemini foi atingida temporariamente. Aguarde a renovação e tente novamente: os lotes já concluídos ficaram salvos neste navegador para retomada automática.')
       } else if (message.includes('GEMINI_TEMPORARILY_BUSY')) {
-        setAnalysisError('O Gemini está temporariamente com alta demanda. O sistema já tentou novamente automaticamente. Tente mais tarde; os lotes concluídos ficaram salvos para retomada.')
+        setAnalysisError('O Gemini está temporariamente com alta demanda. Foram feitas no máximo 3 tentativas usando modelos gratuitos alternativos. Tente novamente; os lotes concluídos ficaram salvos para retomada.')
+      } else if (message.includes('GEMINI_REQUEST_TIMEOUT')) {
+        setAnalysisError('O Gemini não respondeu dentro do limite de 90 segundos por tentativa. Tente novamente; os lotes já concluídos foram preservados.')
+      } else if (message.includes('GEMINI_MODEL_UNAVAILABLE')) {
+        setAnalysisError('Nenhum dos modelos Gemini gratuitos configurados respondeu corretamente nesta tentativa. Tente novamente mais tarde.')
+      } else if (message.includes('GEMINI_APP_CHECK_INVALID')) {
+        setAnalysisError('O Firebase App Check rejeitou a chamada ao Gemini. Recarregue a página e tente novamente.')
       } else if (message.includes('FIREBASE_AI_NOT_READY')) {
         setAnalysisError('O Firebase AI Logic ainda não está configurado corretamente para o aplicativo.')
       } else {
@@ -264,7 +270,14 @@ function App() {
           <button className="primary-button" disabled={!file || processing} onClick={startAnalysis}>
             {processing ? 'Analisando processo...' : 'Iniciar análise completa'} <ChevronRight size={18}/>
           </button>
-          {analysisError && <p className="analysis-error">{analysisError}</p>}
+          {analysisError && (
+            <div className="analysis-error-actions">
+              <p className="analysis-error">{analysisError}</p>
+              <button type="button" className="retry-analysis-button" disabled={!file || processing} onClick={startAnalysis}>
+                Tentar novamente
+              </button>
+            </div>
+          )}
         </section>
 
         {analysis && <AnalysisResult report={analysis} />}
