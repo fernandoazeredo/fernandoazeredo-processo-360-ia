@@ -5,6 +5,7 @@ export type AnalysisReport = {
   fileName: string
   area: string
   perspective: string
+  processNumber: string
   executiveSummary: string
   timeline: Array<{ date: string; event: string; reference: string }>
   claimsEvidenceDecisions: string
