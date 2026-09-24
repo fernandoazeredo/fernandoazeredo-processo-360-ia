@@ -11,15 +11,15 @@ Fluxo atual:
 1. o PDF permanece no navegador do usuário;
 2. o navegador divide o documento em lotes usando `pdf-lib`;
 3. cada lote é enviado ao Firebase AI Logic;
-4. o modelo usado é `gemini-3.5-flash` pelo Gemini Developer API Free Tier;
+4. o modelo usado é `gemini-3.8-flash` pelo Gemini Developer API Free Tier;
 5. cada lote concluído é salvo no `localStorage` para retomada;
 6. após todos os lotes, o Gemini consolida o processo inteiro nas 7 seções do relatório.
 
 Para PDFs grandes, a divisão considera simultaneamente páginas e tamanho do lote. O limite operacional inicial é de até 80 páginas e até 8 MB por lote.
 
-## Por que Gemini 3.5 Flash
+## Por que Gemini 3.8 Flash
 
-O projeto usa `gemini-3.5-flash` porque ele está disponível no nível sem custo financeiro, possui janela de contexto de 1 milhão de tokens e é um modelo estável. Os modelos Gemini 2.5 estão em processo de desativação em outubro de 2026.
+O projeto usa `gemini-3.8-flash` porque é o modelo Flash mais inteligente atualmente documentado pelo Google e está disponível no Free Tier. A aplicação também faz retentativas automáticas em erros transitórios de alta demanda (500/503), sem descartar os lotes já concluídos.
 
 ## Firebase
 
