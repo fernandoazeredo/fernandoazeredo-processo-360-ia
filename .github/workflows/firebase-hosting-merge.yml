@@ -37,6 +37,12 @@ jobs:
           VITE_FIREBASE_STORAGE_BUCKET: "processo-360-ia.firebasestorage.app"
           VITE_FIREBASE_MESSAGING_SENDER_ID: "685012306915"
           VITE_FIREBASE_APP_ID: "1:685012306915:web:e9c441be57f15b41ee6ed6"
+          VITE_APP_BUILD: ${{ github.sha }}
+
+      - name: Gerar identificador de versão
+        shell: bash
+        run: |
+          printf '{"build":"%s"}\n' "${GITHUB_SHA}" > dist/version.json
 
       - name: Preparar credencial Firebase
         shell: bash
