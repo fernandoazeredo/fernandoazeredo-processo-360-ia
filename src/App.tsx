@@ -359,6 +359,11 @@ function AnalysisResult({report}:{report:AnalysisReport}) {
       <span><b>Nº do processo:</b> {report.processNumber}</span>
       <span><b>ID:</b> {report.analysisId}</span>
     </div>
+    {report.processNumberWarning && (
+      <div className="analysis-warning">
+        <b>Divergência detectada:</b> {report.processNumberWarning}
+      </div>
+    )}
 
     <div className="analysis-section-full">
       <h3>1. Resumo executivo</h3>
