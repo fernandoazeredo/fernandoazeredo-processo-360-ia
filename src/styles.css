@@ -1136,3 +1136,52 @@ select:focus,input:focus,textarea:focus{
     border-color:#cfd6df!important;
   }
 }
+
+
+/* PDF PADRÃO 1 — limpo, sem sombra ou glow */
+@media print{
+  .analysis-result,
+  .analysis-result *,
+  .analysis-result *::before,
+  .analysis-result *::after{
+    box-shadow:none!important;
+    text-shadow:none!important;
+    filter:none!important;
+    backdrop-filter:none!important;
+  }
+
+  .analysis-result{
+    background:#fff!important;
+    border:1px solid #d7e5ef!important;
+    border-radius:18px!important;
+  }
+
+  .analysis-section-full,
+  .analysis-grid article{
+    background:#fff!important;
+    border:0!important;
+    border-radius:0!important;
+  }
+
+  .risk-item{
+    background:#fff!important;
+    border:1px solid #eadfd8!important;
+    border-radius:12px!important;
+  }
+
+  .analysis-warning{
+    background:#fffaf0!important;
+    border:1px solid #e7c77f!important;
+  }
+
+  .markdown-table-wrap{
+    background:#fff!important;
+    border:1px solid #d7dde5!important;
+  }
+
+  .analysis-result:before,
+  .workspace-card:before,
+  .hero:before{
+    display:none!important;
+  }
+}
