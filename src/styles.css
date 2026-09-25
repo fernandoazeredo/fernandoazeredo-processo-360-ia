@@ -705,3 +705,45 @@ footer{
   body:before{display:none!important}
   .analysis-result:before{display:none!important}
 }
+
+
+/* TRUST ROW — destaque verde */
+.trust-row{
+  gap:18px;
+  padding:42px 0 62px;
+}
+.trust-row span{
+  font-size:.96rem;
+  font-weight:800;
+  color:#0b7a4b;
+  padding:13px 18px;
+  border:1px solid rgba(24,214,123,.32);
+  border-radius:16px;
+  background:linear-gradient(135deg,rgba(24,214,123,.12),rgba(24,214,123,.05));
+  box-shadow:0 12px 30px rgba(24,214,123,.10);
+}
+.trust-row svg{
+  width:21px;
+  height:21px;
+  color:#18d67b;
+  filter:drop-shadow(0 0 8px rgba(24,214,123,.28));
+}
+:root[data-theme="dark"] .trust-row span{
+  color:#8ff2bf;
+  border-color:rgba(24,214,123,.30);
+  background:linear-gradient(135deg,rgba(24,214,123,.14),rgba(24,214,123,.06));
+  box-shadow:0 14px 34px rgba(0,0,0,.22),0 0 24px rgba(24,214,123,.05);
+}
+:root[data-theme="dark"] .trust-row svg{
+  color:#34e58c;
+}
+@media(max-width:700px){
+  .trust-row{gap:12px}
+  .trust-row span{
+    width:100%;
+    justify-content:center;
+    text-align:center;
+    font-size:.91rem;
+    padding:12px 14px;
+  }
+}
