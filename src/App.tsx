@@ -255,7 +255,7 @@ function App() {
               : <><UploadCloud size={38}/><b>Arraste o processo ou selecione o PDF</b><small>O sistema dividirá automaticamente o PDF em lotes seguros por páginas e tamanho</small></>}
           </label>
 
-          <div className="step-heading second"><span>2</span><div><b>Escolha a área e a perspectiva</b><small>Cada opção acionará seu próprio conjunto de prompts especializados.</small></div></div>
+          <div className="step-heading second"><span>2</span><div><b>Escolha a área e a perspectiva</b></div></div>
           <div className="form-grid">
             <label>Área do Direito
               <select value={area} onChange={e => changeArea(e.target.value as Area)}>
