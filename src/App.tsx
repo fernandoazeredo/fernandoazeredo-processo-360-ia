@@ -9,6 +9,7 @@ import { confirmClaimInOriginal, generateLegalPiece, pieceTypeOptions, suggestPi
 import type { LegalPieceDraft, PieceClaim } from './pieces'
 
 const ADMIN_EMAIL = 'fernandoazeredo64@gmail.com'
+const APP_BUILD = String(import.meta.env.VITE_APP_BUILD || 'dev')
 
 type Area = 'Trabalhista' | 'Cível' | 'Criminal' | 'Ambiental' | 'Tributário' | 'Administrativo' | 'Previdenciário' | 'Consumidor' | 'Família' | 'Empresarial'
 type PromptStatus = 'rascunho' | 'publicado' | 'inativo'
@@ -371,6 +372,31 @@ function escapeHtml(value: string) {
     .replace(/'/g, '&#039;')
 }
 
+async function ensureCurrentProductionBuild() {
+  if (APP_BUILD === 'dev') return true
+
+  try {
+    const response = await fetch(`/version.json?ts=${Date.now()}`, { cache: 'no-store' })
+    if (!response.ok) return true
+    const latest = await response.json()
+    const latestBuild = String(latest?.build || '')
+
+    if (latestBuild && latestBuild !== APP_BUILD) {
+      window.alert(
+        'Existe uma versão mais nova do Processo 360 IA publicada. A página será recarregada antes da exportação para evitar gerar um PDF com código antigo.'
+      )
+      const url = new URL(window.location.href)
+      url.searchParams.set('v', latestBuild.slice(0, 12))
+      window.location.replace(url.toString())
+      return false
+    }
+  } catch (error) {
+    console.warn('[Processo 360 IA] Não foi possível conferir a versão publicada antes da exportação.', error)
+  }
+
+  return true
+}
+
 function buildPieceFileName(report: AnalysisReport, pieceType: string) {
   const process = report.processNumber && report.processNumber !== 'Informação não constante nos dados fornecidos'
     ? report.processNumber
@@ -379,6 +405,8 @@ function buildPieceFileName(report: AnalysisReport, pieceType: string) {
 }
 
 async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) {
+  if (!(await ensureCurrentProductionBuild())) return
+
   const fileName = buildPieceFileName(report, piece.pieceType)
   const banner = 'RASCUNHO DE PEÇA PROCESSUAL — Revisão jurídica por advogado é obrigatória antes de qualquer protocolo ou utilização processual.'
 
@@ -648,6 +676,7 @@ function AnalysisResult({report, originalFile}:{report:AnalysisReport;originalFi
       <span><b>Perspectiva:</b> {report.perspective}</span>
       <span><b>Nº do processo:</b> {report.processNumber}</span>
       <span><b>ID:</b> {report.analysisId}</span>
+      <span><b>Build:</b> {APP_BUILD.slice(0,12)}</span>
     </div>
     {report.processNumberWarning && (
       <div className="analysis-warning">
