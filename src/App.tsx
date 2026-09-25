@@ -1,10 +1,12 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, User } from 'firebase/auth'
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore'
-import { BrainCircuit, ChevronRight, Download, FileText, LockKeyhole, Moon, Pencil, Plus, Save, ShieldCheck, Sun, Trash2, UploadCloud, X } from 'lucide-react'
+import { AlertTriangle, BrainCircuit, CheckCircle2, ChevronRight, Download, FilePenLine, FileText, LockKeyhole, Moon, Pencil, Plus, Save, Search, ShieldCheck, Sun, Trash2, UploadCloud, X } from 'lucide-react'
 import { auth, db, firebaseConfigured } from './firebase'
 import { analyzeUploadedProcess } from './ai'
 import type { AnalysisReport } from './ai'
+import { confirmClaimInOriginal, generateLegalPiece, pieceTypeOptions, suggestPieceType } from './pieces'
+import type { LegalPieceDraft, PieceClaim } from './pieces'
 
 const ADMIN_EMAIL = 'fernandoazeredo64@gmail.com'
 
@@ -282,7 +284,7 @@ function App() {
           )}
         </section>
 
-        {analysis && <AnalysisResult report={analysis} />}
+        {analysis && <AnalysisResult report={analysis} originalFile={file} />}
 
         <section className="trust-row">
           <span><ShieldCheck/> Rastreabilidade documental</span>
@@ -360,14 +362,149 @@ async function exportAnalysisAsPdf(report: AnalysisReport) {
   }
 }
 
-function AnalysisResult({report}:{report:AnalysisReport}) {
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+function buildPieceFileName(report: AnalysisReport, pieceType: string) {
+  const process = report.processNumber && report.processNumber !== 'Informação não constante nos dados fornecidos'
+    ? report.processNumber
+    : `processo-${report.analysisId.slice(0, 8)}`
+  return `${process} - ${pieceType}`.replace(/[\\/:*?"<>|]/g, '-').trim()
+}
+
+async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) {
+  const root = document.documentElement
+  const previousTitle = document.title
+  const previousTheme = root.dataset.theme
+
+  document.title = buildPieceFileName(report, piece.pieceType)
+  root.dataset.theme = 'light'
+  root.classList.add('piece-pdf-exporting')
+
+  const restore = () => {
+    document.title = previousTitle
+    if (previousTheme) root.dataset.theme = previousTheme
+    else delete root.dataset.theme
+    root.classList.remove('piece-pdf-exporting')
+    window.removeEventListener('afterprint', restore)
+  }
+
+  window.addEventListener('afterprint', restore)
+  try {
+    if (document.fonts?.ready) await document.fonts.ready
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+    window.print()
+  } catch (error) {
+    restore()
+    throw error
+  }
+}
+
+function exportPieceAsWord(report: AnalysisReport, piece: LegalPieceDraft) {
+  const banner = 'RASCUNHO DE PEÇA PROCESSUAL — Revisão jurídica por advogado é obrigatória antes de qualquer protocolo ou utilização processual.'
+  const sections = piece.sections
+    .filter(section => section.title.trim() || section.content.trim())
+    .map(section => `<section><h2>${escapeHtml(section.title)}</h2><div>${escapeHtml(section.content).replace(/\n/g, '<br>')}</div></section>`)
+    .join('')
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+    body{font-family:Arial,sans-serif;font-size:12pt;line-height:1.5;color:#111;margin:2.5cm}
+    h1{text-align:center;font-size:14pt;margin:0 0 20pt}
+    h2{font-size:12pt;margin:18pt 0 8pt;border-bottom:1px solid #bbb;padding-bottom:4pt}
+    .warning{font-size:10pt;border:1px solid #bbb;padding:8pt;margin-bottom:18pt}
+    section{margin-bottom:12pt}
+  </style></head><body><div class="warning">${escapeHtml(banner)}</div><h1>${escapeHtml(piece.title)}</h1>${sections}</body></html>`
+
+  const blob = new Blob(['\ufeff', html], { type: 'application/msword;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${buildPieceFileName(report, piece.pieceType)}.doc`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+function AnalysisResult({report, originalFile}:{report:AnalysisReport;originalFile:File|null}) {
+  const [pieceOpen, setPieceOpen] = useState(false)
+  const [pieceType, setPieceType] = useState(() => suggestPieceType(report.area, report.perspective))
+  const [piece, setPiece] = useState<LegalPieceDraft | null>(null)
+  const [pieceBusy, setPieceBusy] = useState(false)
+  const [pieceStage, setPieceStage] = useState('')
+  const [pieceError, setPieceError] = useState('')
+  const [confirmingClaim, setConfirmingClaim] = useState<string | null>(null)
+  const [confirmation, setConfirmation] = useState<Record<string, string>>({})
+
+  const options = pieceTypeOptions(report.area, report.perspective)
+
+  async function handleGeneratePiece() {
+    setPieceError('')
+    setPiece(null)
+    setPieceBusy(true)
+    setPieceStage('Estruturando e redigindo o rascunho')
+    try {
+      window.setTimeout(() => setPieceStage('Validando fatos contra o relatório consolidado'), 900)
+      const generated = await generateLegalPiece(report, pieceType)
+      setPiece(generated)
+      setPieceStage('Rascunho validado')
+      window.setTimeout(() => document.getElementById('piece-review')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
+    } catch (error: any) {
+      console.error('[Processo 360 IA][Motor B] Falha', error)
+      setPieceError('Não foi possível gerar e validar o rascunho. ' + String(error?.message || 'Tente novamente.'))
+    } finally {
+      setPieceBusy(false)
+    }
+  }
+
+  function updatePieceSection(index: number, value: string) {
+    setPiece(current => current ? {
+      ...current,
+      sections: current.sections.map((section, sectionIndex) =>
+        sectionIndex === index ? { ...section, content: value } : section
+      )
+    } : current)
+  }
+
+  async function handleConfirmClaim(claim: PieceClaim) {
+    if (!originalFile) {
+      setConfirmation(current => ({ ...current, [claim.id]: 'O PDF original não está mais disponível nesta sessão.' }))
+      return
+    }
+    setConfirmingClaim(claim.id)
+    try {
+      const result = await confirmClaimInOriginal(originalFile, claim)
+      setConfirmation(current => ({
+        ...current,
+        [claim.id]: `${result.status} — páginas ${result.pages}: ${result.evidence}${result.note ? ` — ${result.note}` : ''}`
+      }))
+    } catch (error: any) {
+      const message = String(error?.message || '')
+      const friendly = message.includes('PIECE_TARGETED_SOURCE_NOT_AVAILABLE')
+        ? 'A confirmação pontual exige referência de página no relatório. O sistema não fará nova leitura integral do PDF.'
+        : 'Não foi possível confirmar este fato no trecho original.'
+      setConfirmation(current => ({ ...current, [claim.id]: friendly }))
+    } finally {
+      setConfirmingClaim(null)
+    }
+  }
+
   return <section className="analysis-result" id="analysis-result">
     <div className="analysis-toolbar no-print">
       <div>
         <span className="eyebrow"><FileText size={16}/> Resultado da análise</span>
         <h2>Relatório jurídico consolidado</h2>
       </div>
-      <button className="export-button" onClick={() => exportAnalysisAsPdf(report)}><Download size={18}/> Exportar análise em PDF</button>
+      <div className="analysis-toolbar-actions">
+        <button className="piece-launch-button" onClick={() => setPieceOpen(true)}><FilePenLine size={18}/> Gerar Peça Jurídica</button>
+        <button className="export-button" onClick={() => exportAnalysisAsPdf(report)}><Download size={18}/> Exportar análise em PDF</button>
+      </div>
     </div>
 
     <div className="analysis-meta">
@@ -428,6 +565,92 @@ function AnalysisResult({report}:{report:AnalysisReport}) {
           <div key={i}><b>Lote {source.lot}</b><span>Páginas {source.pages}</span><small>{source.note}</small></div>)}
       </div>
     </div>
+
+    {pieceOpen && <section className="piece-module" id="piece-module">
+      <div className="piece-controls no-print" data-ui-only="true">
+        <div>
+          <span className="eyebrow"><FilePenLine size={16}/> Módulo opcional</span>
+          <h2>Gerar Peça Jurídica</h2>
+          <p>O Motor B usa somente o relatório consolidado. O PDF original não será reprocessado.</p>
+        </div>
+        <div className="piece-context">
+          <span><b>Área:</b> {report.area}</span>
+          <span><b>Perspectiva:</b> {report.perspective}</span>
+        </div>
+        <label>Tipo de peça
+          <select value={pieceType} onChange={event => setPieceType(event.target.value)}>
+            {options.map(option => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+        <button className="primary-button" disabled={pieceBusy} onClick={handleGeneratePiece}>
+          {pieceBusy ? pieceStage || 'Gerando rascunho...' : 'Gerar Rascunho'} <ChevronRight size={18}/>
+        </button>
+        {pieceError && <p className="analysis-error">{pieceError}</p>}
+      </div>
+
+      {piece && <div className="piece-review" id="piece-review">
+        <div className="piece-draft-banner">
+          <AlertTriangle size={20}/>
+          <strong>RASCUNHO DE PEÇA PROCESSUAL — Revisão jurídica por advogado é obrigatória antes de qualquer protocolo ou utilização processual.</strong>
+        </div>
+
+        <div className="piece-review-heading">
+          <div>
+            <span className="eyebrow">Minuta validada</span>
+            <h2>{piece.title}</h2>
+            <small>Tipo: {piece.pieceType} · Prompt: {piece.promptVersion} · Modelo: {piece.model}</small>
+          </div>
+          <div className="piece-actions no-print" data-ui-only="true">
+            <button onClick={() => exportPieceAsWord(report, piece)}><Download size={17}/> Exportar Word</button>
+            <button onClick={() => exportPieceAsPdf(report, piece)}><Download size={17}/> Exportar PDF</button>
+          </div>
+        </div>
+
+        <div className="piece-validation-panel no-print" data-ui-only="true">
+          <h3>Validação factual automática</h3>
+          <div className="validation-counts">
+            <span><CheckCircle2 size={16}/> {piece.validation.confirmed} confirmadas</span>
+            <span>{piece.validation.partiallyConfirmed} parcialmente confirmadas</span>
+            <span>{piece.validation.unconfirmed} não confirmadas</span>
+            <span>{piece.validation.conflicting} conflitantes</span>
+          </div>
+          {(piece.validation.unconfirmed > 0 || piece.validation.conflicting > 0) &&
+            <p>Nenhum item não confirmado ou conflitante permanece silenciosamente como fato certo: o texto foi removido, reformulado ou marcado para confirmação.</p>}
+        </div>
+
+        <div className="piece-document">
+          {piece.sections.filter(section => section.title.trim() || section.content.trim()).map((section,index) =>
+            <section className="piece-section" key={`${section.title}-${index}`}>
+              <h3>{section.title}</h3>
+              <textarea
+                className="piece-editor no-print"
+                value={section.content}
+                onChange={event => updatePieceSection(index, event.target.value)}
+                rows={Math.max(5, Math.min(18, section.content.split('\n').length + 3))}
+              />
+              <div className="piece-content print-only"><MarkdownBlock text={section.content}/></div>
+            </section>)}
+        </div>
+
+        {piece.claims.length > 0 && <div className="piece-claims no-print" data-ui-only="true">
+          <h3>Rastreabilidade factual</h3>
+          {piece.claims.map(claim =>
+            <article className={`piece-claim status-${claim.status.toLowerCase().replace(/\s+/g,'-')}`} key={claim.id}>
+              <div className="piece-claim-top">
+                <strong>{claim.status}</strong>
+                <span>{claim.type}</span>
+              </div>
+              <p>{claim.text}</p>
+              <small><b>Origem:</b> {claim.sourceReference || 'Sem referência específica'}</small>
+              {claim.treatment && <small><b>Tratamento:</b> {claim.treatment}</small>}
+              <button onClick={() => handleConfirmClaim(claim)} disabled={confirmingClaim === claim.id}>
+                <Search size={15}/> {confirmingClaim === claim.id ? 'Confirmando...' : 'Confirmar este fato no documento original'}
+              </button>
+              {confirmation[claim.id] && <div className="piece-confirm-result">{confirmation[claim.id]}</div>}
+            </article>)}
+        </div>}
+      </div>}
+    </section>}
   </section>
 }
 
