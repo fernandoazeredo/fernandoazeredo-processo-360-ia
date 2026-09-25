@@ -1717,3 +1717,93 @@ select:focus,input:focus,textarea:focus{
 .form-grid > label{
   color:#ff5a00!important;
 }
+
+
+/* P360 PRINT HARDENING V1 */
+@media print{
+  /* Elementos exclusivos da interface nunca entram no documento impresso. */
+  .no-print,
+  .topbar,
+  .workspace-card,
+  .trust-row,
+  footer,
+  .processing-overlay,
+  .modal-backdrop,
+  .analysis-toolbar,
+  .piece-controls,
+  .piece-actions,
+  .piece-confirm-panel,
+  .piece-validation-panel.no-print,
+  button,
+  [data-ui-only="true"]{
+    display:none!important;
+  }
+
+  /* Remove integralmente efeitos decorativos de tela. */
+  html,body,#root,.app-shell,main,
+  .analysis-result,.piece-module,.piece-review,
+  .analysis-section-full,.analysis-grid article,
+  .timeline-item,.risk-item,.source-list>div,
+  .markdown-table-wrap{
+    background:#fff!important;
+    background-image:none!important;
+    box-shadow:none!important;
+    text-shadow:none!important;
+    filter:none!important;
+    backdrop-filter:none!important;
+  }
+
+  html::before,html::after,
+  body::before,body::after,
+  #root::before,#root::after,
+  .app-shell::before,.app-shell::after,
+  main::before,main::after,
+  .hero::before,.hero::after,
+  .workspace-card::before,.workspace-card::after,
+  .analysis-result::before,.analysis-result::after,
+  .analysis-section-full::before,.analysis-section-full::after,
+  .analysis-grid article::before,.analysis-grid article::after,
+  .piece-module::before,.piece-module::after,
+  .piece-review::before,.piece-review::after{
+    content:none!important;
+    display:none!important;
+  }
+
+  /* Não deixa cards/containers sem conteúdo ocuparem espaço no fim da página. */
+  .analysis-section-full:empty,
+  .analysis-grid article:empty,
+  .timeline-list:empty,
+  .risk-list:empty,
+  .source-list:empty,
+  .markdown-content:empty,
+  .markdown-table-wrap:empty,
+  .piece-section:empty,
+  .piece-content:empty{
+    display:none!important;
+  }
+
+  .analysis-result,
+  .piece-review{
+    border:0!important;
+    border-radius:0!important;
+    outline:0!important;
+  }
+
+  .analysis-section-full,
+  .analysis-grid article,
+  .risk-item,
+  .markdown-table-wrap,
+  .piece-section{
+    border:1px solid #d9dee5!important;
+    border-radius:0!important;
+  }
+
+  .analysis-section-full,
+  .analysis-grid article,
+  .markdown-content,
+  .piece-section,
+  .piece-content{
+    break-inside:auto!important;
+    page-break-inside:auto!important;
+  }
+}
