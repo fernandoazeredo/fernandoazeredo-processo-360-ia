@@ -1216,3 +1216,262 @@ select:focus,input:focus,textarea:focus{
     0 22px 48px rgba(20,140,255,.27),
     0 14px 38px rgba(255,90,31,.21)!important;
 }
+
+
+/* PDF MINIMALISTA — somente conteúdo, seções e cards */
+@media print{
+  /* Remove completamente molduras, glows, gradientes e efeitos decorativos. */
+  html,
+  body,
+  .analysis-result{
+    background:#fff!important;
+    color:#111!important;
+  }
+
+  body::before,
+  body::after,
+  .analysis-result::before,
+  .analysis-result::after,
+  .analysis-section-full::before,
+  .analysis-section-full::after,
+  .analysis-grid article::before,
+  .analysis-grid article::after{
+    content:none!important;
+    display:none!important;
+  }
+
+  .analysis-result,
+  .analysis-result *,
+  .analysis-result *::before,
+  .analysis-result *::after{
+    box-shadow:none!important;
+    text-shadow:none!important;
+    filter:none!important;
+    backdrop-filter:none!important;
+  }
+
+  .analysis-result{
+    border:0!important;
+    border-radius:0!important;
+    padding:0!important;
+    overflow:visible!important;
+  }
+
+  /* Cabeçalho do relatório limpo. */
+  .analysis-meta{
+    display:flex!important;
+    gap:5pt 14pt!important;
+    flex-wrap:wrap!important;
+    padding:0 0 10pt!important;
+    margin:0 0 12pt!important;
+    border:0!important;
+    border-bottom:1px solid #cfd5dc!important;
+    color:#222!important;
+    background:#fff!important;
+  }
+
+  .analysis-warning{
+    margin:0 0 12pt!important;
+    padding:9pt 10pt!important;
+    border:1px solid #d8dde3!important;
+    border-radius:6px!important;
+    background:#fff!important;
+    color:#333!important;
+  }
+
+  /* Cada assunto permanece organizado em sua própria seção/card,
+     sem cor decorativa nem moldura externa da página. */
+  .analysis-section-full,
+  .analysis-grid article{
+    display:block!important;
+    margin:0 0 12pt!important;
+    padding:11pt 12pt!important;
+    border:1px solid #d9dee5!important;
+    border-radius:6px!important;
+    background:#fff!important;
+    break-inside:auto!important;
+    page-break-inside:auto!important;
+    overflow:visible!important;
+  }
+
+  .analysis-section-full>h3,
+  .analysis-grid article>h3{
+    margin:0 0 8pt!important;
+    padding:0 0 5pt!important;
+    border:0!important;
+    border-bottom:1px solid #d9dee5!important;
+    background:none!important;
+    color:#172536!important;
+    -webkit-text-fill-color:initial!important;
+    font-weight:800!important;
+    break-after:avoid-page!important;
+    page-break-after:avoid!important;
+  }
+
+  .analysis-section-full>h3 + *,
+  .analysis-grid article>h3 + *{
+    break-before:avoid-page!important;
+    page-break-before:avoid!important;
+  }
+
+  /* Texto simples, legível e contínuo. */
+  .markdown-content,
+  .timeline-list,
+  .risk-list,
+  .source-list{
+    display:block!important;
+    background:#fff!important;
+    border:0!important;
+  }
+
+  .markdown-paragraph,
+  .analysis-section-full p,
+  .analysis-grid article p{
+    margin:0 0 7pt!important;
+    color:#222!important;
+    line-height:1.55!important;
+    orphans:4!important;
+    widows:4!important;
+    break-inside:auto!important;
+    page-break-inside:auto!important;
+  }
+
+  .markdown-heading{
+    margin:8pt 0 5pt!important;
+    color:#172536!important;
+    background:none!important;
+    -webkit-text-fill-color:initial!important;
+    break-after:avoid-page!important;
+    page-break-after:avoid!important;
+  }
+
+  .markdown-list{
+    margin:4pt 0 8pt 18pt!important;
+    color:#222!important;
+    break-inside:auto!important;
+    page-break-inside:auto!important;
+  }
+
+  /* Timeline: apenas linhas discretas, sem caixas decorativas. */
+  .timeline-item{
+    display:grid!important;
+    grid-template-columns:120pt 1fr!important;
+    gap:3pt 10pt!important;
+    padding:7pt 0!important;
+    margin:0!important;
+    border:0!important;
+    border-bottom:1px solid #e1e5ea!important;
+    border-radius:0!important;
+    background:#fff!important;
+    break-inside:avoid!important;
+    page-break-inside:avoid!important;
+  }
+
+  .timeline-item:last-child{
+    border-bottom:0!important;
+  }
+
+  .timeline-item strong,
+  .timeline-item span{
+    color:#222!important;
+  }
+
+  .timeline-item small{
+    grid-column:2!important;
+    color:#555!important;
+  }
+
+  /* Riscos permanecem em cards simples e neutros. */
+  .risk-list{
+    display:grid!important;
+    gap:7pt!important;
+  }
+
+  .risk-item{
+    margin:0!important;
+    padding:9pt 10pt!important;
+    border:1px solid #d9dee5!important;
+    border-radius:6px!important;
+    background:#fff!important;
+    break-inside:avoid!important;
+    page-break-inside:avoid!important;
+  }
+
+  .risk-item>div{
+    display:flex!important;
+    align-items:flex-start!important;
+    justify-content:space-between!important;
+    gap:10pt!important;
+  }
+
+  .risk-level{
+    border:1px solid #c9cfd6!important;
+    border-radius:999px!important;
+    padding:2pt 6pt!important;
+    background:#fff!important;
+    color:#333!important;
+  }
+
+  /* Rastreabilidade vira tabela limpa: sem caixa externa que atravesse páginas. */
+  .sources-block{
+    border:0!important;
+    border-radius:0!important;
+    padding:0!important;
+    background:#fff!important;
+  }
+
+  .sources-block>h3{
+    padding:0 0 5pt!important;
+    border-bottom:1px solid #cfd5dc!important;
+  }
+
+  .source-list>div{
+    display:grid!important;
+    grid-template-columns:70pt 105pt 1fr!important;
+    gap:8pt!important;
+    align-items:start!important;
+    padding:7pt 0!important;
+    margin:0!important;
+    border:0!important;
+    border-bottom:1px solid #e1e5ea!important;
+    border-radius:0!important;
+    background:#fff!important;
+    break-inside:avoid!important;
+    page-break-inside:avoid!important;
+  }
+
+  .source-list>div:last-child{
+    border-bottom:0!important;
+  }
+
+  .source-list b,
+  .source-list span,
+  .source-list small{
+    color:#222!important;
+  }
+
+  /* Tabelas sem efeitos. */
+  .markdown-table-wrap{
+    margin:5pt 0 8pt!important;
+    border:1px solid #d9dee5!important;
+    border-radius:0!important;
+    background:#fff!important;
+    overflow:visible!important;
+  }
+
+  .markdown-table{
+    min-width:0!important;
+    background:#fff!important;
+  }
+
+  .markdown-table th{
+    background:#f4f5f7!important;
+    color:#172536!important;
+  }
+
+  .markdown-table th,
+  .markdown-table td{
+    border-color:#d9dee5!important;
+    color:#222!important;
+  }
+}
