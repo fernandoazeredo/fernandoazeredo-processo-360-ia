@@ -12,12 +12,11 @@ jobs:
     if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
+      - run: npm install
       - run: npm run build
         env:
           VITE_FIREBASE_API_KEY: "AIzaSyDj9w8tjTqYubxGc3oOEoXAvlX5J70aQPU"
@@ -26,8 +25,28 @@ jobs:
           VITE_FIREBASE_STORAGE_BUCKET: "processo-360-ia.firebasestorage.app"
           VITE_FIREBASE_MESSAGING_SENDER_ID: "685012306915"
           VITE_FIREBASE_APP_ID: "1:685012306915:web:e9c441be57f15b41ee6ed6"
+      - name: Deploy Firestore rules para teste anônimo
+        shell: bash
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PROCESSO_360_IA }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "Segredo FIREBASE_SERVICE_ACCOUNT_PROCESSO_360_IA não configurado."
+            exit 1
+          fi
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-service-account.json"
+          GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebase-service-account.json" \
+            npx --yes firebase-tools@latest deploy \
+              --project processo-360-ia \
+              --only "firestore:rules" \
+              --non-interactive
+
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PROCESSO_360_IA }}
           projectId: processo-360-ia
+
+      - name: Remover credencial temporária
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-service-account.json"

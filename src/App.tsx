@@ -48,10 +48,10 @@ const promptPurposes = [
 
 const stages = [
   'Preparando o processo',
-  'Enviando o processo com segurança',
-  'Dividindo o PDF em lotes de até 170 páginas',
-  'Extraindo e catalogando os documentos',
-  'Construindo a linha do tempo processual',
+  'Lendo o PDF localmente',
+  'Dividindo o PDF em lotes seguros no navegador',
+  'Extraindo e catalogando os documentos com Gemini',
+  'Salvando lotes concluídos para retomada',
   'Confrontando alegações, provas e decisões',
   'Elaborando a análise jurídica global',
   'Preparando o relatório final'
@@ -187,12 +187,6 @@ function App() {
     setAnalysisError('')
     setAnalysis(null)
 
-    if (!auth?.currentUser) {
-      setAnalysisError('Para processar o PDF, entre primeiro na Área ADM. O acesso de usuários será habilitado em uma etapa própria.')
-      setAdminOpen(true)
-      return
-    }
-
     setProgress(0)
     setProcessingStage(stages[0])
     setProcessing(true)
@@ -208,20 +202,25 @@ function App() {
       }, 150)
     } catch (error: any) {
       const message = String(error?.message || '')
-      const code = String(error?.code || '')
-      const billingBlocked =
-        code.includes('resource-exhausted') ||
-        /no credits remaining|credit_balance_exhausted|insufficient_quota/i.test(message)
-
-      if (billingBlocked) {
-        setAnalysisError('A análise foi interrompida porque a conta da OpenAI API está sem créditos. Adicione saldo no faturamento da API e tente novamente em alguns minutos.')
-      } else if (message.includes('OPENAI_API_KEY')) {
-        setAnalysisError('O motor de IA está pronto, mas a chave da OpenAI ainda precisa ser configurada no backend.')
-      } else if (message.includes('AUTH_REQUIRED')) {
-        setAnalysisError('É necessário entrar na Área ADM antes de iniciar a análise.')
-        setAdminOpen(true)
+      console.error('[Processo 360 IA] Falha na análise', error)
+      if (message.includes('ANALYSIS_CANCELLED')) {
+        setAnalysisError('')
+      } else if (message.includes('GEMINI_BILLING_STATE_MISMATCH')) {
+        setAnalysisError('O Google retornou um estado de faturamento inconsistente para o projeto. Verifique o faturamento do Firebase/Google Cloud e tente novamente.')
+      } else if (message.includes('GEMINI_RATE_LIMIT')) {
+        setAnalysisError('O Gemini atingiu temporariamente um limite de requisições ou cota do serviço. Aguarde alguns instantes e tente novamente: os lotes já concluídos ficaram salvos para retomada automática.')
+      } else if (message.includes('GEMINI_TEMPORARILY_BUSY')) {
+        setAnalysisError('O Gemini está temporariamente com alta demanda. Foram feitas tentativas com os modelos de fallback configurados. Tente novamente; os lotes concluídos ficaram salvos para retomada.')
+      } else if (message.includes('GEMINI_REQUEST_TIMEOUT')) {
+        setAnalysisError('O Gemini não respondeu dentro do limite de 90 segundos por tentativa. Tente novamente; os lotes já concluídos foram preservados.')
+      } else if (message.includes('GEMINI_MODEL_UNAVAILABLE')) {
+        setAnalysisError('Nenhum dos modelos Gemini configurados respondeu corretamente nesta tentativa. Tente novamente mais tarde.')
+      } else if (message.includes('GEMINI_APP_CHECK_INVALID')) {
+        setAnalysisError('O Firebase App Check rejeitou a chamada ao Gemini. Recarregue a página e tente novamente.')
+      } else if (message.includes('FIREBASE_AI_NOT_READY')) {
+        setAnalysisError('O Firebase AI Logic ainda não está configurado corretamente para o aplicativo.')
       } else {
-        setAnalysisError('Não foi possível concluir a análise. ' + (message || 'Verifique a configuração do backend e tente novamente.'))
+        setAnalysisError('Não foi possível concluir a análise. ' + (message || 'Verifique a configuração do Gemini e tente novamente.'))
       }
     } finally {
       setProcessing(false)
@@ -253,7 +252,7 @@ function App() {
             <input type="file" accept="application/pdf,.pdf" onChange={e => setFile(e.target.files?.[0] ?? null)} />
             {file
               ? <><FileText size={34}/><b>{file.name}</b><small>{(file.size / 1024 / 1024).toFixed(2)} MB · PDF selecionado</small></>
-              : <><UploadCloud size={38}/><b>Arraste o processo ou selecione o PDF</b><small>O sistema organizará os lotes de até 170 páginas</small></>}
+              : <><UploadCloud size={38}/><b>Arraste o processo ou selecione o PDF</b><small>O sistema dividirá automaticamente o PDF em lotes seguros por páginas e tamanho</small></>}
           </label>
 
           <div className="step-heading second"><span>2</span><div><b>Escolha a área e a perspectiva</b><small>Cada opção acionará seu próprio conjunto de prompts especializados.</small></div></div>
@@ -273,7 +272,14 @@ function App() {
           <button className="primary-button" disabled={!file || processing} onClick={startAnalysis}>
             {processing ? 'Analisando processo...' : 'Iniciar análise completa'} <ChevronRight size={18}/>
           </button>
-          {analysisError && <p className="analysis-error">{analysisError}</p>}
+          {analysisError && (
+            <div className="analysis-error-actions">
+              <p className="analysis-error">{analysisError}</p>
+              <button type="button" className="retry-analysis-button" disabled={!file || processing} onClick={startAnalysis}>
+                Tentar novamente
+              </button>
+            </div>
+          )}
         </section>
 
         {analysis && <AnalysisResult report={analysis} />}
@@ -304,6 +310,38 @@ function App() {
   )
 }
 
+function buildExportFileName(report: AnalysisReport) {
+  const fallback = `processo-${report.analysisId.slice(0, 8)}`
+  const rawProcessNumber = report.processNumber?.trim()
+  const hasProcessNumber = Boolean(
+    rawProcessNumber &&
+    rawProcessNumber !== 'Informação não constante nos dados fornecidos'
+  )
+  const processLabel = (hasProcessNumber ? rawProcessNumber! : fallback)
+    .replace(/[\\/:*?"<>|]/g, '-')
+    .trim()
+
+  const lotNumbers = Array.from(new Set(report.sources.map(s => s.lot))).sort((a, b) => a - b)
+  const loteLabel = lotNumbers.length <= 1
+    ? 'lote único'
+    : lotNumbers.map(n => `lote ${n}`).join(', ')
+
+  return `${processLabel} - ${loteLabel}`
+}
+
+function exportAnalysisAsPdf(report: AnalysisReport) {
+  const previousTitle = document.title
+  document.title = buildExportFileName(report)
+
+  const restoreTitle = () => {
+    document.title = previousTitle
+    window.removeEventListener('afterprint', restoreTitle)
+  }
+  window.addEventListener('afterprint', restoreTitle)
+
+  window.print()
+}
+
 function AnalysisResult({report}:{report:AnalysisReport}) {
   return <section className="analysis-result" id="analysis-result">
     <div className="analysis-toolbar no-print">
@@ -311,15 +349,21 @@ function AnalysisResult({report}:{report:AnalysisReport}) {
         <span className="eyebrow"><FileText size={16}/> Resultado da análise</span>
         <h2>Relatório jurídico consolidado</h2>
       </div>
-      <button className="export-button" onClick={() => window.print()}><Download size={18}/> Exportar análise em PDF</button>
+      <button className="export-button" onClick={() => exportAnalysisAsPdf(report)}><Download size={18}/> Exportar análise em PDF</button>
     </div>
 
     <div className="analysis-meta">
       <span><b>Arquivo:</b> {report.fileName}</span>
       <span><b>Área:</b> {report.area}</span>
       <span><b>Perspectiva:</b> {report.perspective}</span>
+      <span><b>Nº do processo:</b> {report.processNumber}</span>
       <span><b>ID:</b> {report.analysisId}</span>
     </div>
+    {report.processNumberWarning && (
+      <div className="analysis-warning">
+        <b>Divergência detectada:</b> {report.processNumberWarning}
+      </div>
+    )}
 
     <div className="analysis-section-full">
       <h3>1. Resumo executivo</h3>

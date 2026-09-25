@@ -8,7 +8,8 @@ service cloud.firestore {
     }
 
     match /prompts/{promptId} {
-      allow read, write: if isAdmin();
+      allow read: if resource.data.status == 'publicado';
+      allow write: if isAdmin();
     }
 
     match /processos/{processoId} {
