@@ -1475,3 +1475,239 @@ select:focus,input:focus,textarea:focus{
     color:#222!important;
   }
 }
+
+
+/* PDF FINAL LIMPO — override absoluto sem enfeites */
+@media print{
+  /* Toda a árvore visível do PDF fica branca e sem efeitos de tela. */
+  html,
+  body,
+  #root,
+  .app-shell,
+  main{
+    width:100%!important;
+    max-width:none!important;
+    margin:0!important;
+    padding:0!important;
+    background:#fff!important;
+    background-image:none!important;
+    box-shadow:none!important;
+    text-shadow:none!important;
+    filter:none!important;
+    backdrop-filter:none!important;
+  }
+
+  html::before,
+  html::after,
+  body::before,
+  body::after,
+  #root::before,
+  #root::after,
+  .app-shell::before,
+  .app-shell::after,
+  main::before,
+  main::after,
+  .analysis-result::before,
+  .analysis-result::after{
+    content:none!important;
+    display:none!important;
+    background:none!important;
+    box-shadow:none!important;
+    filter:none!important;
+  }
+
+  .analysis-result{
+    width:100%!important;
+    max-width:none!important;
+    margin:0!important;
+    padding:0!important;
+    border:0!important;
+    border-radius:0!important;
+    outline:0!important;
+    background:#fff!important;
+    background-image:none!important;
+    box-shadow:none!important;
+    filter:none!important;
+    backdrop-filter:none!important;
+    overflow:visible!important;
+    color:#111!important;
+  }
+
+  .analysis-result,
+  .analysis-result *{
+    box-shadow:none!important;
+    text-shadow:none!important;
+    filter:none!important;
+    backdrop-filter:none!important;
+    background-image:none!important;
+  }
+
+  .analysis-result *::before,
+  .analysis-result *::after{
+    box-shadow:none!important;
+    text-shadow:none!important;
+    filter:none!important;
+    backdrop-filter:none!important;
+    background-image:none!important;
+  }
+
+  /* Cabeçalho somente texto e linha discreta. */
+  .analysis-meta{
+    margin:0 0 12pt!important;
+    padding:0 0 9pt!important;
+    border:0!important;
+    border-bottom:1px solid #d9dee5!important;
+    border-radius:0!important;
+    background:#fff!important;
+    color:#111!important;
+  }
+
+  .analysis-meta span,
+  .analysis-meta b{
+    color:#111!important;
+    background:none!important;
+    -webkit-text-fill-color:initial!important;
+  }
+
+  /* Aviso sem cor de destaque decorativa. */
+  .analysis-warning{
+    margin:0 0 12pt!important;
+    padding:9pt 10pt!important;
+    border:1px solid #d9dee5!important;
+    border-radius:4px!important;
+    background:#fff!important;
+    color:#222!important;
+  }
+
+  .analysis-warning b{
+    color:#222!important;
+    background:none!important;
+    -webkit-text-fill-color:initial!important;
+  }
+
+  /* Cards de assunto: somente borda cinza fina. */
+  .analysis-section-full,
+  .analysis-grid article{
+    display:block!important;
+    margin:0 0 10pt!important;
+    padding:10pt 11pt!important;
+    border:1px solid #d9dee5!important;
+    border-radius:4px!important;
+    outline:0!important;
+    background:#fff!important;
+    overflow:visible!important;
+    break-inside:auto!important;
+    page-break-inside:auto!important;
+  }
+
+  .analysis-section-full::before,
+  .analysis-section-full::after,
+  .analysis-grid article::before,
+  .analysis-grid article::after{
+    content:none!important;
+    display:none!important;
+  }
+
+  .analysis-section-full>h3,
+  .analysis-grid article>h3,
+  .markdown-heading{
+    margin:0 0 7pt!important;
+    padding:0 0 5pt!important;
+    border:0!important;
+    border-bottom:1px solid #e1e5ea!important;
+    background:none!important;
+    color:#172536!important;
+    -webkit-text-fill-color:initial!important;
+    font-weight:800!important;
+    break-after:avoid-page!important;
+    page-break-after:avoid!important;
+  }
+
+  .analysis-section-full>h3 + *,
+  .analysis-grid article>h3 + *{
+    break-before:avoid-page!important;
+    page-break-before:avoid!important;
+  }
+
+  .markdown-paragraph,
+  .analysis-section-full p,
+  .analysis-grid article p,
+  .timeline-item span,
+  .timeline-item small,
+  .source-list span,
+  .source-list small{
+    color:#222!important;
+    background:#fff!important;
+    line-height:1.5!important;
+  }
+
+  /* Itens internos simples. */
+  .timeline-item,
+  .risk-item,
+  .source-list>div{
+    background:#fff!important;
+    border-color:#e1e5ea!important;
+    border-radius:0!important;
+  }
+
+  .risk-item{
+    border:1px solid #d9dee5!important;
+    border-radius:4px!important;
+  }
+
+  .risk-level{
+    background:#fff!important;
+    border:1px solid #cfd5dc!important;
+    color:#333!important;
+    -webkit-text-fill-color:initial!important;
+  }
+
+  /* Rastreabilidade não recebe um card externo alto. */
+  .sources-block{
+    margin:0!important;
+    padding:0!important;
+    border:0!important;
+    border-radius:0!important;
+    background:#fff!important;
+  }
+
+  .sources-block>h3{
+    margin:0 0 5pt!important;
+    padding:0 0 5pt!important;
+    border-bottom:1px solid #d9dee5!important;
+  }
+
+  .source-list{
+    display:block!important;
+    background:#fff!important;
+  }
+
+  .source-list>div{
+    display:grid!important;
+    grid-template-columns:70pt 105pt 1fr!important;
+    gap:8pt!important;
+    padding:7pt 0!important;
+    margin:0!important;
+    border:0!important;
+    border-bottom:1px solid #e1e5ea!important;
+    break-inside:avoid!important;
+    page-break-inside:avoid!important;
+  }
+
+  .markdown-table-wrap{
+    border:1px solid #d9dee5!important;
+    border-radius:0!important;
+    background:#fff!important;
+  }
+
+  .markdown-table,
+  .markdown-table td{
+    background:#fff!important;
+    color:#222!important;
+  }
+
+  .markdown-table th{
+    background:#f5f6f7!important;
+    color:#172536!important;
+  }
+}
