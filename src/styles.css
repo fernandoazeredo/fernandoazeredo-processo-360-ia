@@ -857,3 +857,94 @@ select:focus,input:focus,textarea:focus{
     var(--spec-grad) border-box!important;
   color:#f7fbff!important;
 }
+
+
+/* PRINT FLOW FIX — paginação contínua do relatório */
+@page{
+  size:A4;
+  margin:14mm 13mm 15mm;
+}
+
+@media print{
+  /* O relatório usa a impressão nativa do navegador (window.print).
+     Permitir que seções longas fluam entre páginas evita páginas quase vazias. */
+  .analysis-result{
+    overflow:visible!important;
+  }
+
+  .analysis-grid,
+  .analysis-section-full,
+  .analysis-grid article{
+    display:block!important;
+  }
+
+  .analysis-section-full,
+  .analysis-grid article{
+    break-inside:auto!important;
+    page-break-inside:auto!important;
+    background:#fff!important;
+    border:0!important;
+    border-radius:0!important;
+    box-shadow:none!important;
+    padding:0!important;
+    margin:0 0 12pt!important;
+    overflow:visible!important;
+  }
+
+  /* Nunca deixar o título sozinho no rodapé da página. */
+  .analysis-section-full > h3,
+  .analysis-grid article > h3,
+  .markdown-heading{
+    break-after:avoid-page!important;
+    page-break-after:avoid!important;
+    break-inside:avoid!important;
+    page-break-inside:avoid!important;
+    margin-top:8pt!important;
+    margin-bottom:5pt!important;
+  }
+
+  /* Reduz linhas órfãs/viúvas sem bloquear o fluxo do parágrafo. */
+  .markdown-paragraph,
+  .analysis-section-full p,
+  .analysis-grid article p,
+  .risk-item p,
+  .timeline-item span,
+  .timeline-item small{
+    orphans:3;
+    widows:3;
+    break-inside:auto!important;
+    page-break-inside:auto!important;
+  }
+
+  /* Itens curtos continuam juntos, mas sem prender uma seção inteira. */
+  .risk-item,
+  .timeline-item,
+  .source-list > div{
+    break-inside:avoid!important;
+    page-break-inside:avoid!important;
+  }
+
+  .markdown-content,
+  .timeline-list,
+  .risk-list,
+  .source-list{
+    display:block!important;
+  }
+
+  .markdown-content > *,
+  .timeline-list > *,
+  .risk-list > *,
+  .source-list > *{
+    margin-bottom:5pt;
+  }
+
+  .markdown-list{
+    break-inside:auto!important;
+    page-break-inside:auto!important;
+  }
+
+  .markdown-list li{
+    orphans:2;
+    widows:2;
+  }
+}
