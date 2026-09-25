@@ -1185,3 +1185,24 @@ select:focus,input:focus,textarea:focus{
     display:none!important;
   }
 }
+
+
+/* PDF — borda azul fina em toda a página */
+@media print{
+  body::after{
+    content:"";
+    position:fixed;
+    inset:6mm;
+    border:1px solid #2f80ed;
+    border-radius:0;
+    box-shadow:none!important;
+    filter:none!important;
+    pointer-events:none;
+    z-index:9999;
+  }
+
+  .analysis-result{
+    border:0!important;
+    box-shadow:none!important;
+  }
+}
