@@ -369,3 +369,6 @@ footer button:hover{color:var(--blue)}
 .processing-overlay .live-progress strong{
   line-height:1.05;
 }
+
+.analysis-warning{margin:12px 0 0;padding:12px 14px;border-radius:12px;border:1px solid rgba(210,146,24,.35);background:rgba(210,146,24,.10);color:var(--text);font-size:.86rem;line-height:1.5}
+.analysis-warning b{color:var(--gold)}
