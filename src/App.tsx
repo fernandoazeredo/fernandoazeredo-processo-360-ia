@@ -332,35 +332,91 @@ function buildExportFileName(report: AnalysisReport) {
   return `${processLabel} - ${loteLabel}`
 }
 
-async function exportAnalysisAsPdf(report: AnalysisReport) {
-  const root = document.documentElement
-  const previousTitle = document.title
-  const previousTheme = root.dataset.theme
+function exportAnalysisAsPdf(report: AnalysisReport) {
+  const fileName = buildExportFileName(report)
 
-  document.title = buildExportFileName(report)
-  root.dataset.theme = 'light'
-  root.classList.add('pdf-exporting')
-
-  const restoreExportState = () => {
-    document.title = previousTitle
-    if (previousTheme) root.dataset.theme = previousTheme
-    else delete root.dataset.theme
-    root.classList.remove('pdf-exporting')
-    window.removeEventListener('afterprint', restoreExportState)
+  // Abre a janela imediatamente no mesmo gesto do clique.
+  // Em navegadores móveis, especialmente Safari/iOS, adiar window.print()
+  // após awaits/requestAnimationFrame pode fazer o diálogo de impressão não abrir.
+  const printWindow = window.open('', '_blank', 'width=900,height=800')
+  if (!printWindow) {
+    window.alert('Não foi possível abrir a impressão. Verifique se o navegador está bloqueando pop-ups.')
+    return
   }
 
-  window.addEventListener('afterprint', restoreExportState)
-
-  try {
-    if (document.fonts?.ready) await document.fonts.ready
-    await new Promise<void>(resolve =>
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
-    )
-    window.print()
-  } catch (error) {
-    restoreExportState()
-    throw error
+  const source = document.getElementById('analysis-result')
+  if (!source) {
+    printWindow.close()
+    window.alert('O relatório não está disponível para exportação.')
+    return
   }
+
+  const clone = source.cloneNode(true) as HTMLElement
+
+  // A exportação da análise não deve incluir controles nem o módulo da peça.
+  clone.querySelectorAll('.no-print,[data-ui-only="true"],#piece-module,.piece-module').forEach(node => node.remove())
+
+  const styleNodes = Array.from(
+    document.querySelectorAll('link[rel="stylesheet"],style')
+  ).map(node => node.outerHTML).join('\n')
+
+  printWindow.document.open()
+  printWindow.document.write(`<!doctype html>
+<html lang="pt-BR" class="pdf-exporting" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escapeHtml(fileName)}</title>
+${styleNodes}
+<style>
+  html,body{
+    margin:0!important;
+    padding:0!important;
+    background:#fff!important;
+    color:#111!important;
+  }
+  body{
+    width:100%!important;
+  }
+  #analysis-result{
+    margin:0!important;
+    padding:0!important;
+    width:100%!important;
+    max-width:none!important;
+  }
+  .analysis-toolbar,
+  .analysis-toolbar-actions,
+  .piece-module,
+  .no-print,
+  [data-ui-only="true"]{
+    display:none!important;
+  }
+  @media print{
+    html,body{
+      background:#fff!important;
+      color:#111!important;
+      -webkit-print-color-adjust:exact!important;
+      print-color-adjust:exact!important;
+    }
+  }
+</style>
+</head>
+<body>
+${clone.outerHTML}
+<script>
+  window.addEventListener('load', function () {
+    setTimeout(function () {
+      window.focus();
+      window.print();
+    }, 120);
+  });
+  window.addEventListener('afterprint', function () {
+    window.close();
+  });
+<\/script>
+</body>
+</html>`)
+  printWindow.document.close()
 }
 
 function escapeHtml(value: string) {
