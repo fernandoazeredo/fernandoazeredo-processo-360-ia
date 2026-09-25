@@ -1187,16 +1187,20 @@ select:focus,input:focus,textarea:focus{
 }
 
 
-/* PDF — borda azul fina em toda a página */
+/* PDF — moldura azul fina em toda a página */
 @media print{
   body::after{
     content:"";
     position:fixed;
-    inset:6mm;
+    top:7mm;
+    right:7mm;
+    bottom:7mm;
+    left:7mm;
     border:1px solid #2f80ed;
-    border-radius:0;
+    border-radius:7px;
     box-shadow:none!important;
     filter:none!important;
+    background:transparent!important;
     pointer-events:none;
     z-index:9999;
   }
