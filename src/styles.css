@@ -2009,3 +2009,73 @@ select:focus,input:focus,textarea:focus{
     display:none!important;
   }
 }
+
+
+/* P360 PIECE PDF BODY HARD RESET V3 */
+@media print{
+  html.piece-pdf-exporting .piece-content,
+  html.piece-pdf-exporting .piece-content *,
+  html.piece-pdf-exporting .piece-content p,
+  html.piece-pdf-exporting .piece-content span,
+  html.piece-pdf-exporting .piece-content strong,
+  html.piece-pdf-exporting .piece-content em,
+  html.piece-pdf-exporting .piece-content ul,
+  html.piece-pdf-exporting .piece-content ol,
+  html.piece-pdf-exporting .piece-content li,
+  html.piece-pdf-exporting .piece-content div,
+  html.piece-pdf-exporting .piece-content blockquote,
+  html.piece-pdf-exporting .piece-content .markdown-content,
+  html.piece-pdf-exporting .piece-content .markdown-paragraph,
+  html.piece-pdf-exporting .piece-content .markdown-heading,
+  html.piece-pdf-exporting .piece-content .markdown-list{
+    background:#fff!important;
+    background-color:#fff!important;
+    background-image:none!important;
+    border:0!important;
+    border-left:0!important;
+    border-right:0!important;
+    border-top:0!important;
+    border-bottom:0!important;
+    border-radius:0!important;
+    box-shadow:none!important;
+    text-shadow:none!important;
+    filter:none!important;
+    outline:0!important;
+    color:#111!important;
+    -webkit-text-fill-color:#111!important;
+    text-decoration:none!important;
+  }
+
+  html.piece-pdf-exporting .piece-content *::before,
+  html.piece-pdf-exporting .piece-content *::after,
+  html.piece-pdf-exporting .piece-content::before,
+  html.piece-pdf-exporting .piece-content::after{
+    content:none!important;
+    display:none!important;
+    background:none!important;
+    border:0!important;
+    box-shadow:none!important;
+  }
+
+  html.piece-pdf-exporting .piece-content .markdown-paragraph{
+    margin:0 0 7pt!important;
+    padding:0!important;
+    line-height:1.55!important;
+  }
+
+  html.piece-pdf-exporting .piece-content .markdown-list{
+    margin:4pt 0 8pt 18pt!important;
+    padding:0!important;
+  }
+
+  html.piece-pdf-exporting .piece-content .markdown-list li{
+    margin:0 0 4pt!important;
+    padding:0!important;
+  }
+
+  html.piece-pdf-exporting .piece-content .markdown-heading{
+    margin:9pt 0 5pt!important;
+    padding:0!important;
+    font-weight:700!important;
+  }
+}
