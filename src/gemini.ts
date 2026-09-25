@@ -430,6 +430,14 @@ function writeResumeState(key: string, state: ResumeState) {
   }
 }
 
+function clearResumeState(key: string) {
+  try {
+    localStorage.removeItem(key)
+  } catch (error) {
+    console.warn('Processo 360 IA - não foi possível limpar retomada local', error)
+  }
+}
+
 function initialResumeState(file: File, area: string, perspective: string): ResumeState {
   return {
     version: ARCHITECTURE_VERSION,
@@ -765,6 +773,7 @@ export async function analyzePdfWithGemini(
     stage => onProgress?.(84, stage)
   )
 
+  clearResumeState(resumeKey)
   onProgress?.(100, 'Relatório jurídico consolidado concluído')
   return report
 }
