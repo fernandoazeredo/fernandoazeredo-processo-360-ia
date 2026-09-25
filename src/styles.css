@@ -1717,3 +1717,159 @@ select:focus,input:focus,textarea:focus{
 .form-grid > label{
   color:#ff5a00!important;
 }
+
+
+/* P360 PRINT HARDENING V1 */
+@media print{
+  /* Elementos exclusivos da interface nunca entram no documento impresso. */
+  .no-print,
+  .topbar,
+  .workspace-card,
+  .trust-row,
+  footer,
+  .processing-overlay,
+  .modal-backdrop,
+  .analysis-toolbar,
+  .piece-controls,
+  .piece-actions,
+  .piece-confirm-panel,
+  .piece-validation-panel.no-print,
+  button,
+  [data-ui-only="true"]{
+    display:none!important;
+  }
+
+  /* Remove integralmente efeitos decorativos de tela. */
+  html,body,#root,.app-shell,main,
+  .analysis-result,.piece-module,.piece-review,
+  .analysis-section-full,.analysis-grid article,
+  .timeline-item,.risk-item,.source-list>div,
+  .markdown-table-wrap{
+    background:#fff!important;
+    background-image:none!important;
+    box-shadow:none!important;
+    text-shadow:none!important;
+    filter:none!important;
+    backdrop-filter:none!important;
+  }
+
+  html::before,html::after,
+  body::before,body::after,
+  #root::before,#root::after,
+  .app-shell::before,.app-shell::after,
+  main::before,main::after,
+  .hero::before,.hero::after,
+  .workspace-card::before,.workspace-card::after,
+  .analysis-result::before,.analysis-result::after,
+  .analysis-section-full::before,.analysis-section-full::after,
+  .analysis-grid article::before,.analysis-grid article::after,
+  .piece-module::before,.piece-module::after,
+  .piece-review::before,.piece-review::after{
+    content:none!important;
+    display:none!important;
+  }
+
+  /* Não deixa cards/containers sem conteúdo ocuparem espaço no fim da página. */
+  .analysis-section-full:empty,
+  .analysis-grid article:empty,
+  .timeline-list:empty,
+  .risk-list:empty,
+  .source-list:empty,
+  .markdown-content:empty,
+  .markdown-table-wrap:empty,
+  .piece-section:empty,
+  .piece-content:empty{
+    display:none!important;
+  }
+
+  .analysis-result,
+  .piece-review{
+    border:0!important;
+    border-radius:0!important;
+    outline:0!important;
+  }
+
+  .analysis-section-full,
+  .analysis-grid article,
+  .risk-item,
+  .markdown-table-wrap,
+  .piece-section{
+    border:1px solid #d9dee5!important;
+    border-radius:0!important;
+  }
+
+  .analysis-section-full,
+  .analysis-grid article,
+  .markdown-content,
+  .piece-section,
+  .piece-content{
+    break-inside:auto!important;
+    page-break-inside:auto!important;
+  }
+}
+
+
+/* P360 PIECE MODULE V1 */
+.analysis-toolbar-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.piece-launch-button{border:1px solid color-mix(in srgb,var(--blue) 42%,var(--border));border-radius:13px;padding:14px 18px;background:var(--surface);color:var(--text);font-weight:800;display:flex;align-items:center;gap:8px;cursor:pointer}
+.piece-launch-button:hover{border-color:var(--blue);color:var(--blue)}
+.piece-module{margin-top:28px;padding-top:28px;border-top:1px solid var(--border)}
+.piece-controls{display:grid;gap:16px;padding:22px;border:1px solid var(--border);border-radius:18px;background:var(--surface-2)}
+.piece-controls h2{margin:6px 0 4px}.piece-controls p{margin:0;color:var(--muted);line-height:1.55}
+.piece-controls label{display:grid;gap:8px;font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em}
+.piece-context{display:flex;gap:16px;flex-wrap:wrap;color:var(--muted);font-size:.84rem}
+.piece-review{margin-top:22px}
+.piece-draft-banner{display:flex;align-items:flex-start;gap:10px;padding:14px 16px;border:1px solid #c9cfd6;background:var(--surface);border-radius:10px;line-height:1.45}
+.piece-draft-banner svg{flex:0 0 auto;margin-top:1px}
+.piece-review-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin:20px 0}
+.piece-review-heading h2{margin:5px 0}.piece-review-heading small{color:var(--muted)}
+.piece-actions{display:flex;gap:8px;flex-wrap:wrap}
+.piece-actions button,.piece-claim button{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:10px;padding:10px 12px;font-weight:800;display:flex;align-items:center;gap:7px;cursor:pointer}
+.piece-actions button:hover,.piece-claim button:hover{border-color:var(--blue)}
+.piece-validation-panel{padding:16px;border:1px solid var(--border);border-radius:14px;background:var(--surface-2);margin-bottom:18px}
+.piece-validation-panel h3{margin:0 0 10px}.piece-validation-panel p{color:var(--muted);margin:10px 0 0}
+.validation-counts{display:flex;gap:9px;flex-wrap:wrap}
+.validation-counts span{display:flex;align-items:center;gap:5px;padding:6px 9px;border:1px solid var(--border);border-radius:999px;background:var(--surface);font-size:.76rem;font-weight:800}
+.piece-document{display:grid;gap:14px}
+.piece-section{padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+.piece-section h3{margin:0 0 10px;padding-bottom:7px;border-bottom:1px solid var(--border)}
+.piece-editor{min-height:120px;background:var(--surface);text-transform:none;letter-spacing:normal;font-size:.96rem;line-height:1.6}
+.print-only{display:none}
+.piece-claims{margin-top:20px;display:grid;gap:10px}
+.piece-claims>h3{margin-bottom:2px}
+.piece-claim{padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--surface-2);display:grid;gap:8px}
+.piece-claim-top{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.piece-claim-top strong{font-size:.72rem;letter-spacing:.04em}.piece-claim-top span{color:var(--muted);font-size:.76rem}
+.piece-claim p{margin:0;line-height:1.5}.piece-claim small{color:var(--muted);line-height:1.45}
+.piece-claim button{justify-self:start;margin-top:3px}
+.piece-confirm-result{padding:9px 10px;border-left:3px solid var(--blue);background:var(--surface);font-size:.82rem;line-height:1.45}
+@media(max-width:900px){.analysis-toolbar-actions{width:100%;justify-content:stretch}.analysis-toolbar-actions button{flex:1;justify-content:center}.piece-review-heading{flex-direction:column}.piece-actions{width:100%}.piece-actions button{flex:1;justify-content:center}}
+@media(max-width:600px){.analysis-toolbar-actions{flex-direction:column}.piece-context{display:grid}.validation-counts{display:grid}.piece-actions{display:grid}}
+
+@media print{
+  .print-only{display:block!important}
+  .piece-editor{display:none!important}
+
+  /* Exportação do relatório: o módulo de peça não participa. */
+  html.pdf-exporting .piece-module{display:none!important}
+
+  /* Exportação da peça: somente o documento da peça é impresso. */
+  html.piece-pdf-exporting .analysis-result > :not(.piece-module){display:none!important}
+  html.piece-pdf-exporting .piece-module{display:block!important;margin:0!important;padding:0!important;border:0!important}
+  html.piece-pdf-exporting .piece-controls,
+  html.piece-pdf-exporting .piece-actions,
+  html.piece-pdf-exporting .piece-validation-panel,
+  html.piece-pdf-exporting .piece-claims{display:none!important}
+  html.piece-pdf-exporting .piece-review{display:block!important;margin:0!important;padding:0!important;border:0!important}
+  html.piece-pdf-exporting .piece-draft-banner{display:flex!important;margin:0 0 14pt!important;padding:8pt!important;border:1px solid #aaa!important;border-radius:0!important;background:#fff!important;color:#111!important;font-size:9pt!important}
+  html.piece-pdf-exporting .piece-review-heading{display:block!important;margin:0 0 16pt!important}
+  html.piece-pdf-exporting .piece-review-heading .eyebrow{display:none!important}
+  html.piece-pdf-exporting .piece-review-heading h2{margin:0!important;text-align:center!important;font-size:14pt!important;color:#111!important}
+  html.piece-pdf-exporting .piece-review-heading small{display:block!important;text-align:center!important;margin-top:5pt!important;color:#555!important}
+  html.piece-pdf-exporting .piece-document{display:block!important}
+  html.piece-pdf-exporting .piece-section{display:block!important;margin:0 0 12pt!important;padding:0!important;border:0!important;border-radius:0!important;background:#fff!important}
+  html.piece-pdf-exporting .piece-section:empty{display:none!important}
+  html.piece-pdf-exporting .piece-section h3{margin:0 0 6pt!important;padding:0 0 4pt!important;border:0!important;border-bottom:1px solid #bbb!important;color:#111!important;font-size:11.5pt!important;break-after:avoid-page!important}
+  html.piece-pdf-exporting .piece-content{display:block!important;color:#111!important;background:#fff!important}
+  html.piece-pdf-exporting .piece-content .markdown-paragraph{color:#111!important;background:#fff!important;line-height:1.55!important}
+}
