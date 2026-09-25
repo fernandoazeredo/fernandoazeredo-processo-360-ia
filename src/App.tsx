@@ -9,6 +9,7 @@ import { confirmClaimInOriginal, generateLegalPiece, pieceTypeOptions, suggestPi
 import type { LegalPieceDraft, PieceClaim } from './pieces'
 
 const ADMIN_EMAIL = 'fernandoazeredo64@gmail.com'
+const APP_BUILD = String(import.meta.env.VITE_APP_BUILD || 'dev')
 
 type Area = 'Trabalhista' | 'Cível' | 'Criminal' | 'Ambiental' | 'Tributário' | 'Administrativo' | 'Previdenciário' | 'Consumidor' | 'Família' | 'Empresarial'
 type PromptStatus = 'rascunho' | 'publicado' | 'inativo'
@@ -371,6 +372,26 @@ function escapeHtml(value: string) {
     .replace(/'/g, '&#039;')
 }
 
+async function ensureCurrentProductionBuild() {
+  if (APP_BUILD === 'dev') return true
+  try {
+    const response = await fetch(`/version.json?ts=${Date.now()}`, { cache: 'no-store' })
+    if (!response.ok) return true
+    const latest = await response.json()
+    const latestBuild = String(latest?.build || '')
+    if (latestBuild && latestBuild !== APP_BUILD) {
+      window.alert('Há uma versão mais nova publicada. A página será recarregada antes da exportação para evitar gerar PDF com código antigo.')
+      const url = new URL(window.location.href)
+      url.searchParams.set('v', latestBuild.slice(0, 12))
+      window.location.replace(url.toString())
+      return false
+    }
+  } catch (error) {
+    console.warn('[Processo 360 IA] Falha ao conferir versão publicada.', error)
+  }
+  return true
+}
+
 function buildPieceFileName(report: AnalysisReport, pieceType: string) {
   const process = report.processNumber && report.processNumber !== 'Informação não constante nos dados fornecidos'
     ? report.processNumber
@@ -379,6 +400,8 @@ function buildPieceFileName(report: AnalysisReport, pieceType: string) {
 }
 
 async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) {
+  if (!(await ensureCurrentProductionBuild())) return
+
   const fileName = buildPieceFileName(report, piece.pieceType)
   const banner = 'RASCUNHO DE PEÇA PROCESSUAL — Revisão jurídica por advogado é obrigatória antes de qualquer protocolo ou utilização processual.'
 
@@ -388,13 +411,13 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
       const body = escapeHtml(section.content)
         .replace(/\r?\n\r?\n/g, '</p><p>')
         .replace(/\r?\n/g, '<br>')
-      return `<section class="doc-section"><h2>${escapeHtml(section.title)}</h2><div class="doc-body"><p>${body}</p></div></section>`
+      return `<section class="p360-print-section"><h2>${escapeHtml(section.title)}</h2><div class="p360-print-body"><p>${body}</p></div></section>`
     })
     .join('')
 
   const traceabilityHtml = piece.claims.length
-    ? `<section class="traceability"><h2>Rastreabilidade factual</h2>${piece.claims.map(claim => `
-        <div class="trace-row">
+    ? `<section class="p360-print-traceability"><h2>Rastreabilidade factual</h2>${piece.claims.map(claim => `
+        <div class="p360-print-trace-row">
           <p><strong>${escapeHtml(claim.status)}</strong> — ${escapeHtml(claim.text)}</p>
           <p><b>Origem:</b> ${escapeHtml(claim.sourceReference || 'Sem referência específica')}</p>
           ${claim.treatment ? `<p><b>Tratamento:</b> ${escapeHtml(claim.treatment)}</p>` : ''}
@@ -409,6 +432,14 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
 <style>
   @page { size: A4; margin: 18mm 17mm 18mm 17mm; }
   * { box-sizing: border-box; }
+  #p360-print-root,
+  #p360-print-root * {
+    background-image: none !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    filter: none !important;
+    outline: 0 !important;
+  }
   html, body {
     margin: 0;
     padding: 0;
@@ -422,7 +453,7 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
     content: none !important;
     display: none !important;
   }
-  .warning {
+  .p360-print-warning {
     margin: 0 0 14pt;
     padding: 0 0 8pt;
     border: 0;
@@ -441,14 +472,14 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
     font-size: 14pt;
     line-height: 1.3;
   }
-  .meta {
+  .p360-print-meta {
     margin: 0 0 18pt;
     text-align: center;
     color: #444 !important;
     background: #fff !important;
     font-size: 9pt;
   }
-  .doc-section {
+  .p360-print-section {
     margin: 0 0 14pt;
     padding: 0;
     border: 0;
@@ -456,8 +487,8 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
     box-shadow: none !important;
     filter: none !important;
   }
-  .doc-section h2,
-  .traceability h2 {
+  .p360-print-section h2,
+  .p360-print-traceability h2 {
     margin: 0 0 7pt;
     padding: 0 0 4pt;
     border: 0;
@@ -467,7 +498,7 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
     font-size: 11.5pt;
     break-after: avoid-page;
   }
-  .doc-body, .doc-body *, .doc-body p {
+  .p360-print-body, .p360-print-body *, .p360-print-body p {
     margin-top: 0;
     background: #fff !important;
     background-image: none !important;
@@ -481,19 +512,19 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
     outline: 0 !important;
     -webkit-text-fill-color: #111 !important;
   }
-  .doc-body p {
+  .p360-print-body p {
     margin: 0 0 7pt;
     padding: 0;
     orphans: 3;
     widows: 3;
   }
-  .traceability {
+  .p360-print-traceability {
     margin: 20pt 0 0;
     padding: 0;
     border: 0;
     background: #fff !important;
   }
-  .trace-row {
+  .p360-print-trace-row {
     margin: 0 0 9pt;
     padding: 0 0 7pt;
     border: 0;
@@ -501,7 +532,7 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
     background: #fff !important;
     break-inside: avoid;
   }
-  .trace-row p, .trace-row strong, .trace-row b {
+  .p360-print-trace-row p, .p360-print-trace-row strong, .p360-print-trace-row b {
     margin: 0 0 3pt;
     padding: 0;
     background: #fff !important;
@@ -514,11 +545,13 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
 </style>
 </head>
 <body>
-  <div class="warning">${escapeHtml(banner)}</div>
+<div id="p360-print-root">
+  <div class="p360-print-warning">${escapeHtml(banner)}</div>
   <h1>${escapeHtml(piece.title)}</h1>
-  <div class="meta">Tipo: ${escapeHtml(piece.pieceType)} · Prompt: ${escapeHtml(piece.promptVersion)} · Modelo: ${escapeHtml(piece.model)}</div>
+  <div class="p360-print-meta">Tipo: ${escapeHtml(piece.pieceType)} · Prompt: ${escapeHtml(piece.promptVersion)} · Modelo: ${escapeHtml(piece.model)} · Build: ${escapeHtml(APP_BUILD.slice(0,12))}</div>
   ${sectionsHtml}
   ${traceabilityHtml}
+</div>
 <script>
   window.addEventListener('load', () => {
     setTimeout(() => {
@@ -554,7 +587,7 @@ function exportPieceAsWord(report: AnalysisReport, piece: LegalPieceDraft) {
     h2{font-size:12pt;margin:18pt 0 8pt;border-bottom:1px solid #bbb;padding-bottom:4pt}
     .warning{font-size:10pt;border:1px solid #bbb;padding:8pt;margin-bottom:18pt}
     section{margin-bottom:12pt}
-  </style></head><body><div class="warning">${escapeHtml(banner)}</div><h1>${escapeHtml(piece.title)}</h1>${sections}</body></html>`
+  </style></head><body><div class="p360-print-warning">${escapeHtml(banner)}</div><h1>${escapeHtml(piece.title)}</h1>${sections}</body></html>`
 
   const blob = new Blob(['\ufeff', html], { type: 'application/msword;charset=utf-8' })
   const url = URL.createObjectURL(blob)
@@ -648,6 +681,7 @@ function AnalysisResult({report, originalFile}:{report:AnalysisReport;originalFi
       <span><b>Perspectiva:</b> {report.perspective}</span>
       <span><b>Nº do processo:</b> {report.processNumber}</span>
       <span><b>ID:</b> {report.analysisId}</span>
+      <span><b>Build:</b> {APP_BUILD.slice(0,12)}</span>
     </div>
     {report.processNumberWarning && (
       <div className="analysis-warning">
