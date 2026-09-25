@@ -531,7 +531,7 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
 </body>
 </html>`
 
-  const printWindow = window.open('', '_blank', 'noopener,noreferrer')
+  const printWindow = window.open('', '_blank', 'width=900,height=800')
   if (!printWindow) {
     throw new Error('Não foi possível abrir a janela de impressão. Verifique o bloqueio de pop-ups do navegador.')
   }
