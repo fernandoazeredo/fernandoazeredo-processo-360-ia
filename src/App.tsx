@@ -632,23 +632,35 @@ function AnalysisResult({report, originalFile}:{report:AnalysisReport;originalFi
             </section>)}
         </div>
 
-        {piece.claims.length > 0 && <div className="piece-claims no-print" data-ui-only="true">
-          <h3>Rastreabilidade factual</h3>
-          {piece.claims.map(claim =>
-            <article className={`piece-claim status-${claim.status.toLowerCase().replace(/\s+/g,'-')}`} key={claim.id}>
-              <div className="piece-claim-top">
-                <strong>{claim.status}</strong>
-                <span>{claim.type}</span>
-              </div>
-              <p>{claim.text}</p>
-              <small><b>Origem:</b> {claim.sourceReference || 'Sem referência específica'}</small>
-              {claim.treatment && <small><b>Tratamento:</b> {claim.treatment}</small>}
-              <button onClick={() => handleConfirmClaim(claim)} disabled={confirmingClaim === claim.id}>
-                <Search size={15}/> {confirmingClaim === claim.id ? 'Confirmando...' : 'Confirmar este fato no documento original'}
-              </button>
-              {confirmation[claim.id] && <div className="piece-confirm-result">{confirmation[claim.id]}</div>}
-            </article>)}
-        </div>}
+        {piece.claims.length > 0 && <>
+          <div className="piece-claims no-print" data-ui-only="true">
+            <h3>Rastreabilidade factual</h3>
+            {piece.claims.map(claim =>
+              <article className={`piece-claim status-${claim.status.toLowerCase().replace(/\s+/g,'-')}`} key={claim.id}>
+                <div className="piece-claim-top">
+                  <strong>{claim.status}</strong>
+                  <span>{claim.type}</span>
+                </div>
+                <p>{claim.text}</p>
+                <small><b>Origem:</b> {claim.sourceReference || 'Sem referência específica'}</small>
+                {claim.treatment && <small><b>Tratamento:</b> {claim.treatment}</small>}
+                <button onClick={() => handleConfirmClaim(claim)} disabled={confirmingClaim === claim.id}>
+                  <Search size={15}/> {confirmingClaim === claim.id ? 'Confirmando...' : 'Confirmar este fato no documento original'}
+                </button>
+                {confirmation[claim.id] && <div className="piece-confirm-result">{confirmation[claim.id]}</div>}
+              </article>)}
+          </div>
+
+          <section className="piece-traceability-print print-only" aria-label="Rastreabilidade factual">
+            <h3>Rastreabilidade factual</h3>
+            {piece.claims.map(claim =>
+              <div className="piece-trace-row" key={`print-${claim.id}`}>
+                <p><strong>{claim.status}</strong> — {claim.text}</p>
+                <p><b>Origem:</b> {claim.sourceReference || 'Sem referência específica'}</p>
+                {claim.treatment && <p><b>Tratamento:</b> {claim.treatment}</p>}
+              </div>)}
+          </section>
+        </>}
       </div>}
     </section>}
   </section>
