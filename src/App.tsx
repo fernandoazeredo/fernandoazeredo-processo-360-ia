@@ -379,31 +379,166 @@ function buildPieceFileName(report: AnalysisReport, pieceType: string) {
 }
 
 async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) {
-  const root = document.documentElement
-  const previousTitle = document.title
-  const previousTheme = root.dataset.theme
+  const fileName = buildPieceFileName(report, piece.pieceType)
+  const banner = 'RASCUNHO DE PEÇA PROCESSUAL — Revisão jurídica por advogado é obrigatória antes de qualquer protocolo ou utilização processual.'
 
-  document.title = buildPieceFileName(report, piece.pieceType)
-  root.dataset.theme = 'light'
-  root.classList.add('piece-pdf-exporting')
+  const sectionsHtml = piece.sections
+    .filter(section => section.title.trim() || section.content.trim())
+    .map(section => {
+      const body = escapeHtml(section.content)
+        .replace(/\r?\n\r?\n/g, '</p><p>')
+        .replace(/\r?\n/g, '<br>')
+      return `<section class="doc-section"><h2>${escapeHtml(section.title)}</h2><div class="doc-body"><p>${body}</p></div></section>`
+    })
+    .join('')
 
-  const restore = () => {
-    document.title = previousTitle
-    if (previousTheme) root.dataset.theme = previousTheme
-    else delete root.dataset.theme
-    root.classList.remove('piece-pdf-exporting')
-    window.removeEventListener('afterprint', restore)
+  const traceabilityHtml = piece.claims.length
+    ? `<section class="traceability"><h2>Rastreabilidade factual</h2>${piece.claims.map(claim => `
+        <div class="trace-row">
+          <p><strong>${escapeHtml(claim.status)}</strong> — ${escapeHtml(claim.text)}</p>
+          <p><b>Origem:</b> ${escapeHtml(claim.sourceReference || 'Sem referência específica')}</p>
+          ${claim.treatment ? `<p><b>Tratamento:</b> ${escapeHtml(claim.treatment)}</p>` : ''}
+        </div>`).join('')}</section>`
+    : ''
+
+  const printHtml = `<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>${escapeHtml(fileName)}</title>
+<style>
+  @page { size: A4; margin: 18mm 17mm 18mm 17mm; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #fff !important;
+    color: #111 !important;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 11pt;
+    line-height: 1.5;
+  }
+  body::before, body::after, *::before, *::after {
+    content: none !important;
+    display: none !important;
+  }
+  .warning {
+    margin: 0 0 14pt;
+    padding: 0 0 8pt;
+    border: 0;
+    border-bottom: 1px solid #bdbdbd;
+    background: #fff !important;
+    color: #111 !important;
+    font-size: 9.5pt;
+    font-weight: 700;
+  }
+  h1 {
+    margin: 0 0 5pt;
+    padding: 0;
+    text-align: center;
+    color: #111 !important;
+    background: #fff !important;
+    font-size: 14pt;
+    line-height: 1.3;
+  }
+  .meta {
+    margin: 0 0 18pt;
+    text-align: center;
+    color: #444 !important;
+    background: #fff !important;
+    font-size: 9pt;
+  }
+  .doc-section {
+    margin: 0 0 14pt;
+    padding: 0;
+    border: 0;
+    background: #fff !important;
+    box-shadow: none !important;
+    filter: none !important;
+  }
+  .doc-section h2,
+  .traceability h2 {
+    margin: 0 0 7pt;
+    padding: 0 0 4pt;
+    border: 0;
+    border-bottom: 1px solid #cfcfcf;
+    background: #fff !important;
+    color: #111 !important;
+    font-size: 11.5pt;
+    break-after: avoid-page;
+  }
+  .doc-body, .doc-body *, .doc-body p {
+    margin-top: 0;
+    background: #fff !important;
+    background-image: none !important;
+    color: #111 !important;
+    border: 0 !important;
+    border-left: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    filter: none !important;
+    outline: 0 !important;
+    -webkit-text-fill-color: #111 !important;
+  }
+  .doc-body p {
+    margin: 0 0 7pt;
+    padding: 0;
+    orphans: 3;
+    widows: 3;
+  }
+  .traceability {
+    margin: 20pt 0 0;
+    padding: 0;
+    border: 0;
+    background: #fff !important;
+  }
+  .trace-row {
+    margin: 0 0 9pt;
+    padding: 0 0 7pt;
+    border: 0;
+    border-bottom: 1px solid #e2e2e2;
+    background: #fff !important;
+    break-inside: avoid;
+  }
+  .trace-row p, .trace-row strong, .trace-row b {
+    margin: 0 0 3pt;
+    padding: 0;
+    background: #fff !important;
+    color: #111 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    -webkit-text-fill-color: #111 !important;
+  }
+</style>
+</head>
+<body>
+  <div class="warning">${escapeHtml(banner)}</div>
+  <h1>${escapeHtml(piece.title)}</h1>
+  <div class="meta">Tipo: ${escapeHtml(piece.pieceType)} · Prompt: ${escapeHtml(piece.promptVersion)} · Modelo: ${escapeHtml(piece.model)}</div>
+  ${sectionsHtml}
+  ${traceabilityHtml}
+<script>
+  window.addEventListener('load', () => {
+    setTimeout(() => {
+      window.focus();
+      window.print();
+    }, 80);
+  });
+  window.addEventListener('afterprint', () => window.close());
+<\/script>
+</body>
+</html>`
+
+  const printWindow = window.open('', '_blank', 'width=900,height=800')
+  if (!printWindow) {
+    throw new Error('Não foi possível abrir a janela de impressão. Verifique o bloqueio de pop-ups do navegador.')
   }
 
-  window.addEventListener('afterprint', restore)
-  try {
-    if (document.fonts?.ready) await document.fonts.ready
-    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
-    window.print()
-  } catch (error) {
-    restore()
-    throw error
-  }
+  printWindow.document.open()
+  printWindow.document.write(printHtml)
+  printWindow.document.close()
 }
 
 function exportPieceAsWord(report: AnalysisReport, piece: LegalPieceDraft) {
