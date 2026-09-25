@@ -2195,3 +2195,170 @@ select:focus,input:focus,textarea:focus{
     box-shadow:none!important;
   }
 }
+
+
+/* P360 PIECE MODULE — SCREEN DESIGN SYSTEM ALIGNMENT V1 */
+/* Apenas TELA. Não alterar regras de impressão já homologadas. */
+.piece-module{
+  margin-top:28px;
+  padding-top:28px;
+  border-top:1px solid var(--border);
+  color:var(--text);
+}
+
+.piece-controls,
+.piece-validation-panel,
+.piece-section,
+.piece-claim,
+.piece-draft-banner{
+  background:var(--surface)!important;
+  color:var(--text)!important;
+  border:1px solid var(--border)!important;
+  box-shadow:var(--shadow);
+}
+
+.piece-controls{
+  padding:clamp(20px,3vw,28px)!important;
+  border-radius:18px!important;
+}
+
+.piece-controls h2,
+.piece-review-heading h2,
+.piece-validation-panel h3,
+.piece-claims>h3,
+.piece-section h3{
+  color:var(--text)!important;
+}
+
+.piece-controls p,
+.piece-review-heading small,
+.piece-validation-panel p,
+.piece-claim small,
+.piece-context{
+  color:var(--muted)!important;
+}
+
+.piece-controls label{
+  color:var(--muted)!important;
+}
+
+.piece-controls select,
+.piece-editor{
+  background:var(--surface-2)!important;
+  color:var(--text)!important;
+  border:1px solid var(--border)!important;
+  border-radius:12px!important;
+}
+
+.piece-controls select:focus,
+.piece-editor:focus{
+  border-color:var(--spec-2)!important;
+  box-shadow:0 0 0 4px rgba(20,140,255,.10),0 10px 28px rgba(93,98,255,.08)!important;
+  outline:none!important;
+}
+
+.piece-draft-banner{
+  border-radius:14px!important;
+  padding:16px 18px!important;
+}
+
+.piece-validation-panel{
+  border-radius:16px!important;
+  padding:18px!important;
+}
+
+.validation-counts span{
+  background:var(--surface-2)!important;
+  color:var(--text)!important;
+  border:1px solid var(--border)!important;
+}
+
+.piece-section{
+  border-radius:16px!important;
+  padding:20px!important;
+}
+
+.piece-section h3{
+  border-bottom:1px solid var(--border)!important;
+}
+
+.piece-claim{
+  border-radius:14px!important;
+  padding:16px!important;
+}
+
+.piece-confirm-result{
+  background:var(--surface-2)!important;
+  color:var(--text)!important;
+  border-left:3px solid var(--spec-2)!important;
+}
+
+/* Mesmo padrão visual dos botões principais do app. */
+.piece-launch-button,
+.piece-actions button,
+.piece-claim button{
+  color:#fff!important;
+  border:0!important;
+  border-radius:13px!important;
+  background:var(--spec-grad)!important;
+  background-size:180% 100%!important;
+  box-shadow:
+    0 18px 42px rgba(20,140,255,.20),
+    0 12px 34px rgba(255,90,31,.14)!important;
+  font-weight:800!important;
+  transition:transform .18s ease,box-shadow .18s ease,filter .18s ease,background-position .18s ease!important;
+}
+
+.piece-launch-button:hover,
+.piece-actions button:hover,
+.piece-claim button:hover{
+  transform:translateY(-2px);
+  background-position:100% 0!important;
+  filter:saturate(1.06) brightness(1.02);
+  box-shadow:
+    0 22px 48px rgba(20,140,255,.25),
+    0 14px 38px rgba(255,90,31,.18)!important;
+}
+
+.piece-actions button:disabled,
+.piece-claim button:disabled{
+  opacity:.62!important;
+  cursor:not-allowed!important;
+  transform:none!important;
+}
+
+/* Gerar Rascunho já usa .primary-button: manter o mesmo design system. */
+.piece-controls .primary-button{
+  margin-top:4px!important;
+}
+
+/* Tema escuro alinhado ao restante do app. */
+:root[data-theme="dark"] .piece-controls,
+:root[data-theme="dark"] .piece-validation-panel,
+:root[data-theme="dark"] .piece-section,
+:root[data-theme="dark"] .piece-claim,
+:root[data-theme="dark"] .piece-draft-banner{
+  background:var(--surface)!important;
+  color:var(--text)!important;
+}
+
+:root[data-theme="dark"] .piece-controls select,
+:root[data-theme="dark"] .piece-editor,
+:root[data-theme="dark"] .validation-counts span,
+:root[data-theme="dark"] .piece-confirm-result{
+  background:var(--surface-2)!important;
+  color:var(--text)!important;
+  border-color:var(--border)!important;
+}
+
+@media(max-width:900px){
+  .piece-controls{padding:20px!important}
+  .piece-section{padding:18px!important}
+}
+
+@media(max-width:600px){
+  .piece-controls{padding:18px!important}
+  .piece-actions button,
+  .piece-claim button,
+  .piece-launch-button{width:100%;justify-content:center}
+}
