@@ -980,3 +980,159 @@ select:focus,input:focus,textarea:focus{
   opacity:.72!important;
   filter:saturate(.92)!important;
 }
+
+
+/* PDF EXPORT DETERMINÍSTICO — layout contínuo e tema fixo */
+.pdf-exporting *,
+.pdf-exporting *::before,
+.pdf-exporting *::after{
+  animation:none!important;
+  transition:none!important;
+}
+
+@media print{
+  html,
+  body,
+  .pdf-exporting,
+  .pdf-exporting body{
+    background:#fff!important;
+    color:#111!important;
+    -webkit-print-color-adjust:exact!important;
+    print-color-adjust:exact!important;
+  }
+
+  .analysis-result{
+    background:#fff!important;
+    color:#111!important;
+    border:0!important;
+    box-shadow:none!important;
+    filter:none!important;
+    backdrop-filter:none!important;
+  }
+
+  .analysis-meta,
+  .analysis-warning,
+  .analysis-section-full,
+  .analysis-grid article,
+  .risk-item,
+  .timeline-item,
+  .source-list>div,
+  .markdown-table-wrap{
+    box-shadow:none!important;
+    filter:none!important;
+    backdrop-filter:none!important;
+  }
+
+  .analysis-section-full,
+  .analysis-grid article{
+    break-inside:auto!important;
+    page-break-inside:auto!important;
+    border:0!important;
+    padding:0!important;
+    margin:0 0 10pt!important;
+  }
+
+  /* Vincula o título ao primeiro bloco de conteúdo sem prender a seção inteira. */
+  .analysis-section-full>h3,
+  .analysis-grid article>h3{
+    break-after:avoid-page!important;
+    page-break-after:avoid!important;
+  }
+
+  .analysis-section-full>h3 + *,
+  .analysis-grid article>h3 + *{
+    break-before:avoid-page!important;
+    page-break-before:avoid!important;
+  }
+
+  .markdown-content,
+  .timeline-list,
+  .risk-list,
+  .source-list{
+    display:block!important;
+    break-inside:auto!important;
+    page-break-inside:auto!important;
+  }
+
+  .markdown-paragraph,
+  .analysis-section-full p,
+  .analysis-grid article p{
+    orphans:4!important;
+    widows:4!important;
+    break-inside:auto!important;
+    page-break-inside:auto!important;
+  }
+
+  .markdown-list{
+    break-inside:auto!important;
+    page-break-inside:auto!important;
+  }
+
+  .markdown-list li{
+    orphans:3!important;
+    widows:3!important;
+  }
+
+  /* Estilo fixo do PDF, independente do tema da tela. */
+  .analysis-meta{
+    color:#333!important;
+    border-bottom:1px solid #d8dde5!important;
+  }
+
+  .analysis-warning{
+    color:#6f4600!important;
+    background:#fff8e8!important;
+    border:1px solid #e4b74e!important;
+  }
+
+  .analysis-section-full h3,
+  .analysis-grid h3,
+  .markdown-heading{
+    color:#17324d!important;
+    background:none!important;
+    -webkit-text-fill-color:initial!important;
+    text-shadow:none!important;
+  }
+
+  .markdown-paragraph,
+  .analysis-section-full p,
+  .analysis-grid article p,
+  .timeline-item span,
+  .timeline-item small,
+  .source-list span,
+  .source-list small,
+  .markdown-table td{
+    color:#222!important;
+  }
+
+  .risk-item{
+    background:#fff!important;
+    border:1px solid #d8dde5!important;
+  }
+
+  .risk-level{
+    color:#b24a00!important;
+    background:#fff1e6!important;
+    border:1px solid #efb080!important;
+  }
+
+  .timeline-item,
+  .source-list>div{
+    border-color:#d8dde5!important;
+  }
+
+  .markdown-table-wrap{
+    background:#fff!important;
+    border:1px solid #cfd6df!important;
+  }
+
+  .markdown-table th{
+    background:#eef3f8!important;
+    color:#17324d!important;
+  }
+
+  .markdown-table th,
+  .markdown-table td{
+    border-color:#cfd6df!important;
+  }
+}
