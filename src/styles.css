@@ -1873,3 +1873,139 @@ select:focus,input:focus,textarea:focus{
   html.piece-pdf-exporting .piece-content{display:block!important;color:#111!important;background:#fff!important}
   html.piece-pdf-exporting .piece-content .markdown-paragraph{color:#111!important;background:#fff!important;line-height:1.55!important}
 }
+
+
+/* P360 PDF ABSOLUTAMENTE LIMPO V2 */
+/* Botão de exportação na TELA: visual neutro, sem laranja/gradiente. */
+.export-button{
+  background:#172536!important;
+  background-image:none!important;
+  border:1px solid #172536!important;
+  box-shadow:none!important;
+  filter:none!important;
+}
+.export-button:hover{
+  background:#22384f!important;
+  background-image:none!important;
+  border-color:#22384f!important;
+  box-shadow:none!important;
+  filter:none!important;
+}
+
+/* PDF: somente conteúdo documental. Nenhum enfeite, cor de UI ou moldura. */
+@media print{
+  .analysis-toolbar,
+  .analysis-toolbar-actions,
+  .export-button,
+  .piece-launch-button,
+  .piece-controls,
+  .piece-actions,
+  .piece-validation-panel,
+  .piece-claims,
+  .no-print,
+  button{
+    display:none!important;
+  }
+
+  html,body,#root,.app-shell,main,
+  .analysis-result,.piece-module,.piece-review,
+  .analysis-section-full,.analysis-grid article,
+  .analysis-warning,.timeline-item,.risk-item,
+  .source-list>div,.markdown-table-wrap,.piece-section,
+  .piece-draft-banner{
+    background:#fff!important;
+    background-image:none!important;
+    box-shadow:none!important;
+    text-shadow:none!important;
+    filter:none!important;
+    backdrop-filter:none!important;
+    outline:0!important;
+  }
+
+  /* Remove por completo bordas/molduras de cards na impressão. */
+  .analysis-result,
+  .analysis-section-full,
+  .analysis-grid article,
+  .analysis-warning,
+  .risk-item,
+  .markdown-table-wrap,
+  .piece-review,
+  .piece-section,
+  .piece-draft-banner{
+    border:0!important;
+    border-radius:0!important;
+  }
+
+  /* Sem qualquer cor de identidade visual no documento. */
+  .analysis-result,
+  .analysis-result *,
+  .piece-review,
+  .piece-review *{
+    color:#111!important;
+    -webkit-text-fill-color:#111!important;
+  }
+
+  /* Linhas finas apenas onde ajudam a leitura. */
+  .analysis-meta,
+  .analysis-section-full>h3,
+  .analysis-grid article>h3,
+  .sources-block>h3,
+  .piece-section>h3{
+    border:0!important;
+    border-bottom:1px solid #cfcfcf!important;
+  }
+
+  .timeline-item,
+  .source-list>div{
+    border:0!important;
+    border-bottom:1px solid #e2e2e2!important;
+  }
+
+  .risk-level{
+    border:0!important;
+    background:#fff!important;
+    color:#111!important;
+    border-radius:0!important;
+    padding:0!important;
+  }
+
+  .markdown-table-wrap{
+    overflow:visible!important;
+  }
+
+  .markdown-table th{
+    background:#fff!important;
+    color:#111!important;
+  }
+
+  .markdown-table th,
+  .markdown-table td{
+    border-color:#d8d8d8!important;
+  }
+
+  /* Nunca renderizar blocos vazios no fim da página. */
+  .analysis-section-full:empty,
+  .analysis-grid article:empty,
+  .analysis-warning:empty,
+  .timeline-list:empty,
+  .risk-list:empty,
+  .source-list:empty,
+  .markdown-content:empty,
+  .markdown-table-wrap:empty,
+  .piece-section:empty,
+  .piece-content:empty{
+    display:none!important;
+  }
+
+  /* Remove quaisquer pseudo-elementos decorativos remanescentes. */
+  .analysis-result::before,.analysis-result::after,
+  .analysis-section-full::before,.analysis-section-full::after,
+  .analysis-grid article::before,.analysis-grid article::after,
+  .analysis-warning::before,.analysis-warning::after,
+  .risk-item::before,.risk-item::after,
+  .piece-review::before,.piece-review::after,
+  .piece-section::before,.piece-section::after{
+    content:none!important;
+    display:none!important;
+  }
+}
