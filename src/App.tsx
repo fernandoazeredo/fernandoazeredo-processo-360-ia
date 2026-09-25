@@ -544,7 +544,7 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
 <body>
   <div class="warning">${escapeHtml(banner)}</div>
   <h1>${escapeHtml(piece.title)}</h1>
-  <div class="meta">Tipo: ${escapeHtml(piece.pieceType)} · Prompt: ${escapeHtml(piece.promptVersion)} · Modelo: ${escapeHtml(piece.model)}</div>
+  <div class="meta">Tipo: ${escapeHtml(piece.pieceType)} · Prompt: ${escapeHtml(piece.promptVersion)} · Modelo: ${escapeHtml(piece.model)} · Build: ${escapeHtml(APP_BUILD.slice(0,12))}</div>
   ${sectionsHtml}
   ${traceabilityHtml}
 <script>
