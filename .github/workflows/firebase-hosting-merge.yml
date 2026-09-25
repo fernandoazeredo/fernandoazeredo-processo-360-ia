@@ -49,6 +49,14 @@ jobs:
           fi
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-service-account.json"
 
+      - name: Instalar dependências de publicação de prompts
+        run: npm install --prefix functions
+
+      - name: Publicar prompt Trabalhista da Reclamada
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
+        run: node functions/scripts/publish-reclamada-v2.mjs
+
       - name: Deploy Hosting e regras do Firestore
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
