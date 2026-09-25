@@ -1711,3 +1711,9 @@ select:focus,input:focus,textarea:focus{
     color:#172536!important;
   }
 }
+
+
+/* Destaque laranja — rótulos Área do Direito e Perspectiva */
+.form-grid > label{
+  color:#ff5a00!important;
+}
