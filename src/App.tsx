@@ -252,7 +252,7 @@ function App() {
             <input type="file" accept="application/pdf,.pdf" onChange={e => setFile(e.target.files?.[0] ?? null)} />
             {file
               ? <><FileText size={34}/><b>{file.name}</b><small>{(file.size / 1024 / 1024).toFixed(2)} MB · PDF selecionado</small></>
-              : <><UploadCloud size={38}/><b>Arraste o processo ou selecione o PDF</b><small>O sistema dividirá automaticamente o PDF em lotes seguros por páginas e tamanho</small></>}
+              : <><UploadCloud size={38}/><b>Arraste o processo ou selecione o PDF</b><small>O sistema dividirá automaticamente o PDF em lotes seguros por páginas e tamanho e, ao final, entregará uma única análise consolidada com a conclusão do processo.</small></>}
           </label>
 
           <div className="step-heading second"><span>2</span><div><b>Escolha a área e a perspectiva</b></div></div>
