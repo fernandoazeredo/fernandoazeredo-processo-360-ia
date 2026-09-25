@@ -23,6 +23,7 @@ const RETRY_DELAYS_MS = [3000, 7000]
 
 export type GeminiAnalysisReport = {
   processNumber: string
+  processNumberWarning?: string
   executiveSummary: string
   timeline: Array<{ date: string; event: string; reference: string }>
   claimsEvidenceDecisions: string
@@ -552,12 +553,39 @@ function isValidReport(value: any): value is GeminiAnalysisReport {
   )
 }
 
-function getConsolidatedProcessNumber(lotResults: LotExtraction[]) {
+function getProcessNumberConsensus(lotResults: LotExtraction[]) {
   const missing = 'Informação não constante nos dados fornecidos'
-  const valid = lotResults.find(
-    lot => lot.processNumber?.trim() && lot.processNumber.trim() !== missing
-  )
-  return valid?.processNumber.trim() || missing
+  const values = lotResults
+    .map(lot => lot.processNumber?.trim())
+    .filter((value): value is string => Boolean(value && value !== missing))
+
+  if (!values.length) {
+    return {
+      processNumber: missing,
+      warning: undefined as string | undefined
+    }
+  }
+
+  const counts = new Map<string, number>()
+  const firstIndex = new Map<string, number>()
+
+  values.forEach((value, index) => {
+    counts.set(value, (counts.get(value) || 0) + 1)
+    if (!firstIndex.has(value)) firstIndex.set(value, index)
+  })
+
+  const ranked = [...counts.entries()].sort((a, b) => {
+    const countDiff = b[1] - a[1]
+    if (countDiff !== 0) return countDiff
+    return (firstIndex.get(a[0]) || 0) - (firstIndex.get(b[0]) || 0)
+  })
+
+  const processNumber = ranked[0][0]
+  const warning = ranked.length > 1
+    ? `Atenção: foram identificadas divergências no número do processo entre os lotes. Foi adotado o valor mais frequente: ${processNumber}. Valores encontrados: ${ranked.map(([value, count]) => `${value} (${count} lote${count === 1 ? '' : 's'})`).join('; ')}.`
+    : undefined
+
+  return { processNumber, warning }
 }
 
 async function consolidateLots(
@@ -583,7 +611,10 @@ async function consolidateLots(
     ]
   )
 
-  const consolidatedProcessNumber = getConsolidatedProcessNumber(lotResults)
+  const {
+    processNumber: consolidatedProcessNumber,
+    warning: processNumberWarning
+  } = getProcessNumberConsensus(lotResults)
 
   const instruction = `
 Produza o RELATÓRIO JURÍDICO FINAL do Processo 360 IA somente após considerar TODOS os lotes abaixo.
@@ -610,7 +641,7 @@ REGRAS OBRIGATÓRIAS:
 - Ao mencionar legislação, súmulas, OJs ou jurisprudência, utilize somente referências específicas presentes nos lotes ou nos prompts jurídicos publicados. Não invente número, tribunal, enunciado ou precedente. Se a referência específica não estiver disponível, exponha a questão jurídica sem fabricar citação.
 - Em conclusionStrategy, além da conclusão jurídica, apresente de 2 a 3 próximos passos práticos e objetivos coerentes com a perspectiva informada, vinculando cada ação a uma lacuna, prova, pedido ou risco identificado nos lotes (por exemplo: juntar documento já mencionado, requerer prova/perícia pertinente ou impugnar ponto documentalmente identificado). Não recomende medida sem suporte nos dados processados.
 - Entregue exatamente as 8 seções representadas no JSON.
-- Em processNumber, use o valor de processNumber informado pelo primeiro lote que contenha um número válido, diferente de "Informação não constante nos dados fornecidos". Se nenhum lote tiver essa informação, use exatamente essa frase.
+- Em processNumber, use o valor consolidado já determinado pelo sistema a partir do número mais frequente entre os lotes válidos. Em caso de empate, prevalece o valor que apareceu primeiro. Se nenhum lote tiver essa informação, use exatamente: "Informação não constante nos dados fornecidos".
 - O valor consolidado já determinado pelo sistema é: "${consolidatedProcessNumber}".
 - Em sources, haverá uma entrada por lote efetivamente considerado.
 
@@ -646,6 +677,7 @@ ${JSON.stringify(lotResults)}
   }
 
   parsed.processNumber = consolidatedProcessNumber
+  parsed.processNumberWarning = processNumberWarning
 
   parsed.sources = lots.map(lot => ({
     lot: lot.number,
