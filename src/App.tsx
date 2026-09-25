@@ -329,17 +329,35 @@ function buildExportFileName(report: AnalysisReport) {
   return `${processLabel} - ${loteLabel}`
 }
 
-function exportAnalysisAsPdf(report: AnalysisReport) {
+async function exportAnalysisAsPdf(report: AnalysisReport) {
+  const root = document.documentElement
   const previousTitle = document.title
+  const previousTheme = root.dataset.theme
+
   document.title = buildExportFileName(report)
+  root.dataset.theme = 'light'
+  root.classList.add('pdf-exporting')
 
-  const restoreTitle = () => {
+  const restoreExportState = () => {
     document.title = previousTitle
-    window.removeEventListener('afterprint', restoreTitle)
+    if (previousTheme) root.dataset.theme = previousTheme
+    else delete root.dataset.theme
+    root.classList.remove('pdf-exporting')
+    window.removeEventListener('afterprint', restoreExportState)
   }
-  window.addEventListener('afterprint', restoreTitle)
 
-  window.print()
+  window.addEventListener('afterprint', restoreExportState)
+
+  try {
+    if (document.fonts?.ready) await document.fonts.ready
+    await new Promise<void>(resolve =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    )
+    window.print()
+  } catch (error) {
+    restoreExportState()
+    throw error
+  }
 }
 
 function AnalysisResult({report}:{report:AnalysisReport}) {
