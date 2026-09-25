@@ -6,6 +6,7 @@ export type AnalysisReport = {
   area: string
   perspective: string
   processNumber: string
+  processNumberWarning?: string
   executiveSummary: string
   timeline: Array<{ date: string; event: string; reference: string }>
   claimsEvidenceDecisions: string
