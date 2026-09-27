@@ -195,6 +195,7 @@ function App() {
   const [analysis, setAnalysis] = useState<AnalysisReport | null>(null)
   const [analysisError, setAnalysisError] = useState('')
   const [adminOpen, setAdminOpen] = useState(false)
+  const [walletTopupOpen, setWalletTopupOpen] = useState(false)
   const [adminUser, setAdminUser] = useState<User | null>(null)
   const [appUser, setAppUser] = useState<User | null>(null)
   const [authReady, setAuthReady] = useState(false)
@@ -360,16 +361,7 @@ function App() {
   }
 
   if (!authReady) {
-    return <div className="auth-shell">
-      <div className="auth-card auth-loading-card">
-        <div className="auth-brand">
-          <img className="logo-light" src="/assets/logo-processo-360-ia.svg" alt="Processo 360 IA" />
-          <img className="logo-dark" src="/assets/logo-processo-360-ia-dark.svg" alt="Processo 360 IA" />
-        </div>
-        <div className="auth-loading-line" aria-hidden="true" />
-        <p className="muted">Carregando acesso...</p>
-      </div>
-    </div>
+    return null
   }
 
   if (!appUser) {
@@ -377,16 +369,7 @@ function App() {
   }
 
   if (appUser.email !== ADMIN_EMAIL && !walletReady) {
-    return <div className="auth-shell">
-      <div className="auth-card auth-loading-card">
-        <div className="auth-brand">
-          <img className="logo-light" src="/assets/logo-processo-360-ia.svg" alt="Processo 360 IA" />
-          <img className="logo-dark" src="/assets/logo-processo-360-ia-dark.svg" alt="Processo 360 IA" />
-        </div>
-        <div className="auth-loading-line" aria-hidden="true" />
-        <p className="muted">Carregando sua conta...</p>
-      </div>
-    </div>
+    return null
   }
 
   if (appUser.email !== ADMIN_EMAIL && wallet?.status !== 'ativo') {
@@ -402,7 +385,10 @@ function App() {
         </div>
         <div className="topbar-actions">
           <span className="signed-user">{appUser.displayName || appUser.email || 'Usuário'}</span>
-          {appUser.email !== ADMIN_EMAIL && <span className="wallet-balance">Saldo: <b>{formatBRL(wallet?.balanceCents || 0)}</b></span>}
+          {appUser.email !== ADMIN_EMAIL && <>
+            <span className="wallet-balance">Saldo: <b>{formatBRL(wallet?.balanceCents || 0)}</b></span>
+            <button className="buy-credits-button" type="button" onClick={()=>setWalletTopupOpen(true)}><CreditCard size={17}/> Comprar créditos</button>
+          </>}
           <button className="icon-button" onClick={() => setDark(!dark)} aria-label="Alternar tema">
             {dark ? <Sun size={19} /> : <Moon size={19} />}
           </button>
@@ -491,6 +477,8 @@ function App() {
         </div>
       </div>}
 
+      {appUser.email !== ADMIN_EMAIL && walletTopupOpen &&
+        <BuyCreditsModal config={walletConfig} balanceCents={wallet?.balanceCents || 0} onClose={()=>setWalletTopupOpen(false)} />}
       {adminOpen && <AdminModal user={adminUser} onUser={setAdminUser} onClose={() => setAdminOpen(false)} />}
     </div>
   )
@@ -1185,18 +1173,59 @@ function LoginPage() {
       <button type="button" className="auth-switch" onClick={()=>{setMode(mode === 'login' ? 'signup' : 'login');setError('')}}>
         {mode === 'login' ? 'Ainda não tenho conta — criar cadastro' : 'Já tenho conta — entrar'}
       </button>
+
+      <div className="auth-highlights" aria-label="Recursos do Processo 360 IA">
+        <article><FileText size={20}/><div><b>Análise integral do processo</b><span>Envie o PDF e receba uma análise jurídica consolidada.</span></div></article>
+        <article><BrainCircuit size={20}/><div><b>Processos extensos</b><span>Divisão automática em lotes seguros e leitura estruturada.</span></div></article>
+        <article><ShieldCheck size={20}/><div><b>Rastreabilidade documental</b><span>Fatos, provas, decisões e referências organizados no relatório.</span></div></article>
+        <article><FilePenLine size={20}/><div><b>Geração de peça jurídica</b><span>Rascunho a partir da análise consolidada, com validação factual.</span></div></article>
+      </div>
     </div>
   </div>
 }
 
 
 
-function WalletFundingPanel({config,missingCents}:{config:WalletConfig;missingCents:number}) {
-  const packages = [
-    {value:config.package1Cents,url:config.package1Url},
-    {value:config.package2Cents,url:config.package2Url},
-    {value:config.package3Cents,url:config.package3Url}
+function walletPackages(config:WalletConfig) {
+  const fallback = [
+    {value:4000,url:'https://payment-link-v3.ton.com.br/pl_L4oBjJNOkKyEJLGCrvCjO31nA9pG78db'},
+    {value:8000,url:'https://payment-link-v3.ton.com.br/pl_4n9ELgN872OXmzD9cyT1RMvDdBbxzGaj'},
+    {value:12000,url:'https://payment-link-v3.ton.com.br/pl_1wy7Jor82XxB8OEULRIqGdGALMQKzY4N'}
+  ]
+
+  const configured = [
+    {value:Number(config.package1Cents||0),url:String(config.package1Url||'')},
+    {value:Number(config.package2Cents||0),url:String(config.package2Url||'')},
+    {value:Number(config.package3Cents||0),url:String(config.package3Url||'')}
   ].filter(item=>item.value>0 && item.url)
+
+  return configured.length ? configured : fallback
+}
+
+function BuyCreditsModal({config,balanceCents,onClose}:{config:WalletConfig;balanceCents:number;onClose:()=>void}) {
+  const packages = walletPackages(config)
+  return <div className="wallet-modal-backdrop" role="dialog" aria-modal="true" aria-label="Comprar créditos">
+    <section className="wallet-modal">
+      <button className="wallet-modal-close" type="button" onClick={onClose} aria-label="Fechar"><X size={20}/></button>
+      <span className="eyebrow"><CreditCard size={16}/> Carteira pré-paga</span>
+      <h2>Comprar créditos</h2>
+      <p className="muted">Saldo atual: <b>{formatBRL(balanceCents)}</b></p>
+      <p>Escolha o valor que deseja adicionar à sua carteira.</p>
+      <div className="wallet-credit-options">
+        {packages.map((item,index)=><button key={index} type="button" onClick={()=>window.open(item.url,'_blank','noopener,noreferrer')}>
+          <CreditCard size={19}/>
+          <span>Adicionar</span>
+          <strong>{formatBRL(item.value)}</strong>
+        </button>)}
+      </div>
+      <small className="wallet-payment-note">O pagamento é realizado em ambiente seguro do provedor de pagamentos. Após a confirmação, o saldo deverá ser liberado na carteira.</small>
+      {config.paymentInstructions && <small className="wallet-payment-note">{config.paymentInstructions}</small>}
+    </section>
+  </div>
+}
+
+function WalletFundingPanel({config,missingCents}:{config:WalletConfig;missingCents:number}) {
+  const packages = walletPackages(config)
 
   return <div className="wallet-funding-panel">
     <p>Saldo insuficiente. Adicione pelo menos <b>{formatBRL(Math.max(0,missingCents))}</b>.</p>
