@@ -203,7 +203,7 @@ function App() {
   const [quote, setQuote] = useState<{pageCount:number;priceCents:number}|null>(null)
   const [quoteBusy, setQuoteBusy] = useState(false)
   const [quoteError, setQuoteError] = useState('')
-  const [walletConfig, setWalletConfig] = useState<WalletConfig>({analysisMinimumCents:0,analysisPerPageCents:0,piecePriceCents:0,package1Cents:0,package1Url:'',package2Cents:0,package2Url:'',package3Cents:0,package3Url:'',paymentInstructions:''})
+  const [walletConfig, setWalletConfig] = useState<WalletConfig>({analysisMinimumCents:0,analysisPerPageCents:0,piecePriceCents:0,package1Cents:8000,package1Url:'https://payment-link-v3.ton.com.br/pl_4n9ELgN872OXmzD9cyT1RMvDdBbxzGaj',package2Cents:0,package2Url:'',package3Cents:0,package3Url:'',paymentInstructions:''})
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
@@ -1212,7 +1212,7 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
     analysisMinimumCents:0,
     analysisPerPageCents:0,
     piecePriceCents:0,
-    package1Cents:0,package1Url:'',
+    package1Cents:8000,package1Url:'https://payment-link-v3.ton.com.br/pl_4n9ELgN872OXmzD9cyT1RMvDdBbxzGaj',
     package2Cents:0,package2Url:'',
     package3Cents:0,package3Url:'',
     paymentInstructions:''
