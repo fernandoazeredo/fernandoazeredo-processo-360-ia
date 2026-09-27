@@ -1,0 +1,69 @@
+import { PDFDocument } from 'pdf-lib'
+import { httpsCallable } from 'firebase/functions'
+import { functions } from './firebase'
+
+export type WalletStatus = 'ativo' | 'inativo' | 'bloqueado'
+
+export type WalletRecord = {
+  id: string
+  uid: string
+  email: string
+  displayName?: string
+  status: WalletStatus
+  balanceCents: number
+  createdAt?: any
+  updatedAt?: any
+}
+
+export type WalletQuote = {
+  pageCount: number
+  priceCents: number
+}
+
+function requireFunctions() {
+  if (!functions) throw new Error('FIREBASE_FUNCTIONS_NOT_READY')
+  return functions
+}
+
+export async function quoteAnalysis(file: File): Promise<WalletQuote> {
+  const bytes = await file.arrayBuffer()
+  const pdf = await PDFDocument.load(bytes, { ignoreEncryption: true })
+  const pageCount = pdf.getPageCount()
+
+  const call = httpsCallable(requireFunctions(), 'walletQuoteAnalysis')
+  const result = await call({ pageCount })
+  const data = result.data as any
+
+  return {
+    pageCount,
+    priceCents: Math.max(0, Number(data?.priceCents || 0))
+  }
+}
+
+export async function chargeAnalysis(pageCount: number): Promise<{ chargeId: string; priceCents: number; balanceCents: number }> {
+  const call = httpsCallable(requireFunctions(), 'walletChargeAnalysis')
+  const result = await call({ pageCount })
+  const data = result.data as any
+
+  return {
+    chargeId: String(data?.chargeId || ''),
+    priceCents: Number(data?.priceCents || 0),
+    balanceCents: Number(data?.balanceCents || 0)
+  }
+}
+
+export async function chargePiece(): Promise<{ chargeId: string; priceCents: number; balanceCents: number }> {
+  const call = httpsCallable(requireFunctions(), 'walletChargePiece')
+  const result = await call({})
+  const data = result.data as any
+
+  return {
+    chargeId: String(data?.chargeId || ''),
+    priceCents: Number(data?.priceCents || 0),
+    balanceCents: Number(data?.balanceCents || 0)
+  }
+}
+
+export function formatBRL(cents: number) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((Number(cents) || 0) / 100)
+}
