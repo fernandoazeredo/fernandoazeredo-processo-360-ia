@@ -2726,3 +2726,68 @@ select:focus,input:focus,textarea:focus{
   .subscriber-toolbar{align-items:stretch;flex-direction:column;}
   .admin-section-tabs{margin-right:34px;}
 }
+
+
+/* P360 WALLET PREPAID */
+.wallet-balance{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  padding:7px 10px;
+  border:1px solid var(--border);
+  border-radius:999px;
+  background:var(--surface-2);
+  color:var(--muted);
+  font-size:.86rem;
+  white-space:nowrap;
+}
+.wallet-balance b{color:var(--text);}
+.analysis-price-card{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+  margin:16px 0;
+  padding:16px;
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:var(--surface-2);
+}
+.analysis-price-card>div:not(.wallet-funding-panel){
+  display:grid;
+  gap:4px;
+}
+.analysis-price-card small{color:var(--muted);}
+.analysis-price-card strong{font-size:1.28rem;}
+.analysis-price-card span{color:var(--muted);}
+.wallet-funding-panel{
+  grid-column:1/-1;
+  display:grid;
+  gap:9px;
+  padding:13px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:var(--surface);
+}
+.wallet-funding-panel p{margin:0;}
+.wallet-funding-panel small{display:block;color:var(--muted);}
+.wallet-package-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+}
+.wallet-package-actions button{
+  min-height:36px;
+  padding:7px 11px;
+  border:1px solid var(--border);
+  border-radius:9px;
+  background:var(--surface-2);
+  color:var(--text);
+  font:inherit;
+  font-weight:800;
+  cursor:pointer;
+}
+.wallet-package-actions button:hover{transform:translateY(-1px);}
+@media (max-width:720px){
+  .wallet-balance{order:3;width:100%;justify-content:center;}
+  .analysis-price-card{grid-template-columns:1fr;}
+}

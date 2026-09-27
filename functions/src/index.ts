@@ -635,3 +635,219 @@ export const adminDeleteSubscriber = onCall(
     return { success: true }
   }
 )
+
+
+type WalletPricing = {
+  analysisMinimumCents: number
+  analysisPerPageCents: number
+  piecePriceCents: number
+}
+
+async function readWalletPricing(): Promise<WalletPricing> {
+  const snap = await db.collection('walletConfig').doc('main').get()
+  const data = snap.exists ? snap.data() || {} : {}
+
+  return {
+    analysisMinimumCents: Math.max(0, Number(data.analysisMinimumCents || 0)),
+    analysisPerPageCents: Math.max(0, Number(data.analysisPerPageCents || 0)),
+    piecePriceCents: Math.max(0, Number(data.piecePriceCents || 0))
+  }
+}
+
+function analysisPriceFromPages(pageCount: number, pricing: WalletPricing) {
+  if (!Number.isFinite(pageCount) || pageCount < 1) {
+    throw new HttpsError('invalid-argument', 'Quantidade de páginas inválida.')
+  }
+  if (pricing.analysisMinimumCents <= 0 || pricing.analysisPerPageCents <= 0) {
+    throw new HttpsError('failed-precondition', 'A tabela de preços ainda não foi configurada.')
+  }
+  return Math.max(
+    pricing.analysisMinimumCents,
+    Math.ceil(pageCount * pricing.analysisPerPageCents)
+  )
+}
+
+async function chargeWallet(
+  uid: string,
+  amountCents: number,
+  operation: string,
+  metadata: Record<string, unknown> = {}
+) {
+  const walletRef = db.collection('wallets').doc(uid)
+  const ledgerRef = db.collection('walletLedger').doc()
+
+  return db.runTransaction(async tx => {
+    const walletSnap = await tx.get(walletRef)
+    if (!walletSnap.exists) {
+      throw new HttpsError('failed-precondition', 'Carteira ainda não foi criada.')
+    }
+
+    const wallet = walletSnap.data() || {}
+    if (wallet.status !== 'ativo') {
+      throw new HttpsError('permission-denied', 'A carteira está inativa ou bloqueada.')
+    }
+
+    const balanceCents = Math.max(0, Number(wallet.balanceCents || 0))
+    if (balanceCents < amountCents) {
+      throw new HttpsError('resource-exhausted', 'Saldo insuficiente para esta operação.')
+    }
+
+    const newBalanceCents = balanceCents - amountCents
+
+    tx.update(walletRef, {
+      balanceCents: newBalanceCents,
+      updatedAt: FieldValue.serverTimestamp()
+    })
+
+    tx.set(ledgerRef, {
+      uid,
+      operation,
+      direction: 'debit',
+      amountCents,
+      balanceBeforeCents: balanceCents,
+      balanceAfterCents: newBalanceCents,
+      metadata,
+      createdAt: FieldValue.serverTimestamp()
+    })
+
+    return {
+      chargeId: ledgerRef.id,
+      balanceCents: newBalanceCents,
+      priceCents: amountCents
+    }
+  })
+}
+
+export const walletQuoteAnalysis = onCall(
+  { region: 'us-central1', cors: true },
+  async request => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'É necessário estar autenticado.')
+
+    const pageCount = Number(request.data?.pageCount || 0)
+    const pricing = await readWalletPricing()
+    const priceCents = analysisPriceFromPages(pageCount, pricing)
+
+    return { pageCount, priceCents }
+  }
+)
+
+export const walletChargeAnalysis = onCall(
+  { region: 'us-central1', cors: true },
+  async request => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'É necessário estar autenticado.')
+
+    const pageCount = Number(request.data?.pageCount || 0)
+    const pricing = await readWalletPricing()
+    const priceCents = analysisPriceFromPages(pageCount, pricing)
+
+    return chargeWallet(request.auth.uid, priceCents, 'analise_processo', { pageCount })
+  }
+)
+
+export const walletChargePiece = onCall(
+  { region: 'us-central1', cors: true },
+  async request => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'É necessário estar autenticado.')
+
+    const pricing = await readWalletPricing()
+    if (pricing.piecePriceCents <= 0) {
+      throw new HttpsError('failed-precondition', 'O preço para geração de peça ainda não foi configurado.')
+    }
+
+    return chargeWallet(request.auth.uid, pricing.piecePriceCents, 'geracao_peca')
+  }
+)
+
+export const adminAdjustWallet = onCall(
+  { region: 'us-central1', cors: true },
+  async request => {
+    const callerEmail = String(request.auth?.token?.email || '').toLowerCase()
+    if (!request.auth || callerEmail !== 'fernandoazeredo64@gmail.com') {
+      throw new HttpsError('permission-denied', 'Apenas o administrador pode ajustar saldos.')
+    }
+
+    const uid = String(request.data?.uid || '').trim()
+    const deltaCents = Math.trunc(Number(request.data?.deltaCents || 0))
+    const reason = String(request.data?.reason || '').trim()
+
+    if (!uid || !Number.isFinite(deltaCents) || deltaCents === 0) {
+      throw new HttpsError('invalid-argument', 'Informe usuário e valor do ajuste.')
+    }
+
+    const walletRef = db.collection('wallets').doc(uid)
+    const ledgerRef = db.collection('walletLedger').doc()
+
+    return db.runTransaction(async tx => {
+      const snap = await tx.get(walletRef)
+      if (!snap.exists) throw new HttpsError('not-found', 'Carteira não encontrada.')
+
+      const wallet = snap.data() || {}
+      const before = Math.max(0, Number(wallet.balanceCents || 0))
+      const after = before + deltaCents
+      if (after < 0) {
+        throw new HttpsError('failed-precondition', 'O ajuste deixaria o saldo negativo.')
+      }
+
+      tx.update(walletRef, {
+        balanceCents: after,
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: callerEmail
+      })
+
+      tx.set(ledgerRef, {
+        uid,
+        operation: 'ajuste_admin',
+        direction: deltaCents > 0 ? 'credit' : 'debit',
+        amountCents: Math.abs(deltaCents),
+        balanceBeforeCents: before,
+        balanceAfterCents: after,
+        reason: reason || null,
+        performedByUid: request.auth.uid,
+        performedByEmail: callerEmail,
+        createdAt: FieldValue.serverTimestamp()
+      })
+
+      return { success: true, balanceCents: after }
+    })
+  }
+)
+
+export const adminDeleteWalletUser = onCall(
+  { region: 'us-central1', cors: true },
+  async request => {
+    const callerEmail = String(request.auth?.token?.email || '').toLowerCase()
+    if (!request.auth || callerEmail !== 'fernandoazeredo64@gmail.com') {
+      throw new HttpsError('permission-denied', 'Apenas o administrador pode excluir usuários.')
+    }
+
+    const uid = String(request.data?.uid || '').trim()
+    if (!uid) throw new HttpsError('invalid-argument', 'UID não informado.')
+    if (uid === request.auth.uid) {
+      throw new HttpsError('failed-precondition', 'O administrador principal não pode excluir a própria conta.')
+    }
+
+    const walletRef = db.collection('wallets').doc(uid)
+    const walletSnap = await walletRef.get()
+    const wallet = walletSnap.exists ? walletSnap.data() : null
+
+    try {
+      await getAuth().deleteUser(uid)
+    } catch (error: any) {
+      if (error?.code !== 'auth/user-not-found') throw error
+    }
+
+    await walletRef.delete().catch(() => undefined)
+    await db.collection('walletLedger').add({
+      uid,
+      operation: 'exclusao_usuario',
+      direction: 'neutral',
+      amountCents: 0,
+      deletedEmail: wallet?.email || null,
+      performedByUid: request.auth.uid,
+      performedByEmail: callerEmail,
+      createdAt: FieldValue.serverTimestamp()
+    })
+
+    return { success: true }
+  }
+)
