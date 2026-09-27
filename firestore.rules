@@ -12,6 +12,24 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    match /subscribers/{uid} {
+      allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pendente'
+        && request.resource.data.paymentStatus == 'pendente';
+
+      allow update, delete: if isAdmin();
+    }
+
+    match /subscriptionConfig/{configId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
     match /processos/{processoId} {
       allow create: if signedIn()
         && request.resource.data.ownerUid == request.auth.uid;
