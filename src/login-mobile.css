@@ -28,6 +28,15 @@
     transform-origin: center center;
   }
 
+  /* Força uma nova URL da logo no mobile para evitar o cache antigo do Safari/iPhone. */
+  .auth-brand img.logo-light {
+    content: url('/assets/logo-processo-360-ia.svg?v=20260927-contraste2') !important;
+  }
+
+  .auth-brand img.logo-dark {
+    content: url('/assets/logo-processo-360-ia-dark.svg?v=20260927-contraste2') !important;
+  }
+
   /* No mobile, os diferenciais ficam limpos: sem os checks verdes. */
   .auth-highlights article::after,
   .auth-highlights article:after {
