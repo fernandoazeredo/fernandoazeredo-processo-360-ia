@@ -1,12 +1,15 @@
 import { FormEvent, useEffect, useState } from 'react'
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut, User } from 'firebase/auth'
-import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore'
-import { AlertTriangle, BrainCircuit, CheckCircle2, ChevronRight, Download, FilePenLine, FileText, LockKeyhole, Moon, Pencil, Plus, Save, Search, ShieldCheck, Sun, Trash2, UploadCloud, X } from 'lucide-react'
-import { auth, db, firebaseConfigured } from './firebase'
+import { createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, signOut, User } from 'firebase/auth'
+import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore'
+import { AlertTriangle, BrainCircuit, CheckCircle2, ChevronRight, CreditCard, Download, FilePenLine, FileText, LockKeyhole, Moon, Pencil, Plus, Save, Search, ShieldCheck, Sun, Trash2, UploadCloud, Users, X } from 'lucide-react'
+import { auth, db, firebaseConfigured, functions } from './firebase'
+import { httpsCallable } from 'firebase/functions'
 import { analyzeUploadedProcess } from './ai'
 import type { AnalysisReport } from './ai'
 import { confirmClaimInOriginal, generateLegalPiece, pieceTypeOptions, suggestPieceType } from './pieces'
 import type { LegalPieceDraft, PieceClaim } from './pieces'
+import { chargeAnalysis, chargePiece, formatBRL, quoteAnalysis } from './wallet'
+import type { WalletRecord, WalletStatus } from './wallet'
 
 const ADMIN_EMAIL = 'fernandoazeredo64@gmail.com'
 const APP_BUILD = String(import.meta.env.VITE_APP_BUILD || 'dev')
@@ -14,6 +17,19 @@ const APP_BUILD = String(import.meta.env.VITE_APP_BUILD || 'dev')
 type Area = 'Trabalhista' | 'Cível' | 'Criminal' | 'Ambiental' | 'Tributário' | 'Administrativo' | 'Previdenciário' | 'Consumidor' | 'Família' | 'Empresarial'
 type PromptArea = Area | 'Global'
 type PromptStatus = 'rascunho' | 'publicado' | 'inativo'
+type WalletConfig = {
+  analysisMinimumCents: number
+  analysisPerPageCents: number
+  piecePriceCents: number
+  package1Cents: number
+  package1Url: string
+  package2Cents: number
+  package2Url: string
+  package3Cents: number
+  package3Url: string
+  paymentInstructions?: string
+}
+
 
 type PromptItem = {
   id: string
@@ -180,6 +196,14 @@ function App() {
   const [analysisError, setAnalysisError] = useState('')
   const [adminOpen, setAdminOpen] = useState(false)
   const [adminUser, setAdminUser] = useState<User | null>(null)
+  const [appUser, setAppUser] = useState<User | null>(null)
+  const [authReady, setAuthReady] = useState(false)
+  const [wallet, setWallet] = useState<WalletRecord | null>(null)
+  const [walletReady, setWalletReady] = useState(false)
+  const [quote, setQuote] = useState<{pageCount:number;priceCents:number}|null>(null)
+  const [quoteBusy, setQuoteBusy] = useState(false)
+  const [quoteError, setQuoteError] = useState('')
+  const [walletConfig, setWalletConfig] = useState<WalletConfig>({analysisMinimumCents:0,analysisPerPageCents:0,piecePriceCents:0,package1Cents:4000,package1Url:'https://payment-link-v3.ton.com.br/pl_L4oBjJNOkKyEJLGCrvCjO31nA9pG78db',package2Cents:8000,package2Url:'https://payment-link-v3.ton.com.br/pl_4n9ELgN872OXmzD9cyT1RMvDdBbxzGaj',package3Cents:12000,package3Url:'https://payment-link-v3.ton.com.br/pl_1wy7Jor82XxB8OEULRIqGdGALMQKzY4N',paymentInstructions:''})
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
@@ -187,9 +211,88 @@ function App() {
   }, [dark])
 
   useEffect(() => {
-    if (!auth) return
-    return onAuthStateChanged(auth, user => setAdminUser(user?.email === ADMIN_EMAIL ? user : null))
+    if (!auth) {
+      setAuthReady(true)
+      return
+    }
+    return onAuthStateChanged(auth, user => {
+      setAppUser(user)
+      setAdminUser(user?.email === ADMIN_EMAIL ? user : null)
+      setAuthReady(true)
+    })
   }, [])
+
+  useEffect(() => {
+    if (!appUser || !db) {
+      setWallet(null)
+      setWalletReady(!appUser)
+      return
+    }
+
+    setWalletReady(false)
+    const walletRef = doc(db, 'wallets', appUser.uid)
+    let creating = false
+
+    return onSnapshot(walletRef, async snap => {
+      if (snap.exists()) {
+        setWallet({ id: snap.id, ...snap.data() } as WalletRecord)
+        setWalletReady(true)
+        return
+      }
+
+      if (creating) return
+      creating = true
+      try {
+        await setDoc(walletRef, {
+          uid: appUser.uid,
+          email: String(appUser.email || '').toLowerCase(),
+          displayName: appUser.displayName || '',
+          status: 'ativo',
+          balanceCents: 0,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        })
+      } catch (error) {
+        console.error('[Processo 360 IA] Falha ao criar carteira.', error)
+        setWalletReady(true)
+      }
+    }, error => {
+      console.error('[Processo 360 IA] Falha ao consultar carteira.', error)
+      setWalletReady(true)
+    })
+  }, [appUser?.uid])
+
+  useEffect(()=>{
+    if(!db || !appUser) return
+    return onSnapshot(doc(db,'walletConfig','main'), snap=>{
+      if(snap.exists()) setWalletConfig(prev=>({...prev,...snap.data()} as WalletConfig))
+    })
+  },[appUser?.uid])
+
+  useEffect(()=>{
+    let cancelled=false
+    setQuote(null)
+    setQuoteError('')
+    if(!file || !appUser || appUser.email===ADMIN_EMAIL) return
+
+    setQuoteBusy(true)
+    quoteAnalysis(file)
+      .then(result=>{if(!cancelled) setQuote(result)})
+      .catch((error:any)=>{
+        if(cancelled) return
+        const message=String(error?.message||'')
+        if(message.includes('tabela de preços') || message.includes('failed-precondition')) {
+          setQuoteError('O preço desta análise ainda não foi configurado.')
+        } else {
+          setQuoteError('Não foi possível calcular o valor desta análise.')
+        }
+      })
+      .finally(()=>{if(!cancelled) setQuoteBusy(false)})
+
+    return ()=>{cancelled=true}
+  },[file,appUser?.uid])
+
+
 
   function changeArea(next: Area) {
     setArea(next)
@@ -206,6 +309,17 @@ function App() {
     setProcessing(true)
 
     try {
+      if (appUser?.email !== ADMIN_EMAIL) {
+        if (!wallet || wallet.status !== 'ativo') {
+          throw new Error('WALLET_BLOCKED')
+        }
+        const currentQuote = quote || await quoteAnalysis(file)
+        if (wallet.balanceCents < currentQuote.priceCents) {
+          throw new Error('WALLET_INSUFFICIENT')
+        }
+        await chargeAnalysis(currentQuote.pageCount)
+      }
+
       const report = await analyzeUploadedProcess(file, area, perspective, (value, stage) => {
         setProgress(value)
         setProcessingStage(stage)
@@ -217,7 +331,11 @@ function App() {
     } catch (error: any) {
       const message = String(error?.message || '')
       console.error('[Processo 360 IA] Falha na análise', error)
-      if (message.includes('ANALYSIS_CANCELLED')) {
+      if (message.includes('WALLET_INSUFFICIENT') || message.includes('Saldo insuficiente')) {
+        setAnalysisError('Saldo insuficiente para realizar esta análise. Adicione saldo à sua carteira e tente novamente.')
+      } else if (message.includes('WALLET_BLOCKED') || message.includes('carteira está inativa')) {
+        setAnalysisError('Sua carteira está inativa ou bloqueada. Entre em contato com o administrador.')
+      } else if (message.includes('ANALYSIS_CANCELLED')) {
         setAnalysisError('')
       } else if (message.includes('GEMINI_BILLING_STATE_MISMATCH')) {
         setAnalysisError('O Google retornou um estado de faturamento inconsistente para o projeto. Verifique o faturamento do Firebase/Google Cloud e tente novamente.')
@@ -241,6 +359,22 @@ function App() {
     }
   }
 
+  if (!authReady) {
+    return <div className="auth-shell"><div className="auth-card"><BrainLoader/><p className="muted">Verificando acesso...</p></div></div>
+  }
+
+  if (!appUser) {
+    return <LoginPage />
+  }
+
+  if (appUser.email !== ADMIN_EMAIL && !walletReady) {
+    return <div className="auth-shell"><div className="auth-card"><BrainLoader/><p className="muted">Verificando carteira...</p></div></div>
+  }
+
+  if (appUser.email !== ADMIN_EMAIL && wallet?.status !== 'ativo') {
+    return <WalletBlockedPage user={appUser} wallet={wallet} />
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -248,9 +382,14 @@ function App() {
           <img className="logo-light" src="/assets/logo-processo-360-ia.svg" alt="Processo 360 IA" />
           <img className="logo-dark" src="/assets/logo-processo-360-ia-dark.svg" alt="Processo 360 IA" />
         </div>
-        <button className="icon-button" onClick={() => setDark(!dark)} aria-label="Alternar tema">
-          {dark ? <Sun size={19} /> : <Moon size={19} />}
-        </button>
+        <div className="topbar-actions">
+          <span className="signed-user">{appUser.displayName || appUser.email || 'Usuário'}</span>
+          {appUser.email !== ADMIN_EMAIL && <span className="wallet-balance">Saldo: <b>{formatBRL(wallet?.balanceCents || 0)}</b></span>}
+          <button className="icon-button" onClick={() => setDark(!dark)} aria-label="Alternar tema">
+            {dark ? <Sun size={19} /> : <Moon size={19} />}
+          </button>
+          <button className="secondary-button compact" onClick={() => auth && signOut(auth)}>Sair</button>
+        </div>
       </header>
 
       <main>
@@ -283,7 +422,22 @@ function App() {
             </label>
           </div>
 
-          <button className="primary-button" disabled={!file || processing} onClick={startAnalysis}>
+          {file && appUser.email !== ADMIN_EMAIL && <div className="analysis-price-card">
+            {quoteBusy
+              ? <span>Calculando o valor da análise...</span>
+              : quote
+                ? <>
+                    <div><small>Valor para analisar este processo</small><strong>{formatBRL(quote.priceCents)}</strong><span>{quote.pageCount} página(s)</span></div>
+                    <div><small>Saldo disponível</small><strong>{formatBRL(wallet?.balanceCents || 0)}</strong></div>
+                    {(wallet?.balanceCents || 0) < quote.priceCents &&
+                      <WalletFundingPanel config={walletConfig} missingCents={quote.priceCents-(wallet?.balanceCents||0)} />}
+                  </>
+                : quoteError
+                  ? <span className="error">{quoteError}</span>
+                  : null}
+          </div>}
+
+          <button className="primary-button" disabled={!file || processing || (appUser.email !== ADMIN_EMAIL && (!quote || (wallet?.balanceCents||0) < quote.priceCents))} onClick={startAnalysis}>
             {processing ? 'Analisando processo...' : 'Iniciar análise completa'} <ChevronRight size={18}/>
           </button>
           {analysisError && (
@@ -296,7 +450,7 @@ function App() {
           )}
         </section>
 
-        {analysis && <AnalysisResult report={analysis} originalFile={file} />}
+        {analysis && <AnalysisResult report={analysis} originalFile={file} isAdmin={appUser.email===ADMIN_EMAIL} piecePriceCents={walletConfig.piecePriceCents} />}
 
         <section className="trust-row">
           <span><ShieldCheck/> Rastreabilidade documental</span>
@@ -305,7 +459,7 @@ function App() {
         </section>
       </main>
 
-      <footer><span>© 2026 Processo 360 IA</span><button onClick={() => setAdminOpen(true)}>Área ADM</button></footer>
+      <footer><span>© 2026 Processo 360 IA</span>{adminUser && <button onClick={() => setAdminOpen(true)}>Área ADM</button>}</footer>
 
       {processing && <div className="processing-overlay" role="dialog" aria-modal="true" aria-label="Análise em andamento">
         <div className="processing-inner">
@@ -667,7 +821,7 @@ function exportPieceAsWord(report: AnalysisReport, piece: LegalPieceDraft) {
   URL.revokeObjectURL(url)
 }
 
-function AnalysisResult({report, originalFile}:{report:AnalysisReport;originalFile:File|null}) {
+function AnalysisResult({report, originalFile, isAdmin, piecePriceCents}:{report:AnalysisReport;originalFile:File|null;isAdmin:boolean;piecePriceCents:number}) {
   const [pieceOpen, setPieceOpen] = useState(false)
   const [pieceType, setPieceType] = useState(() => suggestPieceType(report.area, report.perspective))
   const [piece, setPiece] = useState<LegalPieceDraft | null>(null)
@@ -685,6 +839,7 @@ function AnalysisResult({report, originalFile}:{report:AnalysisReport;originalFi
     setPieceBusy(true)
     setPieceStage('Estruturando e redigindo o rascunho')
     try {
+      if (!isAdmin) await chargePiece()
       window.setTimeout(() => setPieceStage('Validando fatos contra o relatório consolidado'), 900)
       const generated = await generateLegalPiece(report, pieceType)
       setPiece(generated)
@@ -692,7 +847,10 @@ function AnalysisResult({report, originalFile}:{report:AnalysisReport;originalFi
       window.setTimeout(() => document.getElementById('piece-review')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
     } catch (error: any) {
       console.error('[Processo 360 IA][Motor B] Falha', error)
-      setPieceError('Não foi possível gerar e validar o rascunho. ' + String(error?.message || 'Tente novamente.'))
+      const message=String(error?.message||'')
+      setPieceError(message.includes('Saldo insuficiente')
+        ? 'Saldo insuficiente para gerar a peça jurídica. Adicione saldo à carteira.'
+        : 'Não foi possível gerar e validar o rascunho. ' + (message || 'Tente novamente.'))
     } finally {
       setPieceBusy(false)
     }
@@ -819,7 +977,7 @@ function AnalysisResult({report, originalFile}:{report:AnalysisReport;originalFi
           </select>
         </label>
         <button className="primary-button" disabled={pieceBusy} onClick={handleGeneratePiece}>
-          {pieceBusy ? pieceStage || 'Gerando rascunho...' : 'Gerar Rascunho'} <ChevronRight size={18}/>
+          {pieceBusy ? pieceStage || 'Gerando rascunho...' : `Gerar Rascunho${!isAdmin && piecePriceCents>0 ? ` — ${formatBRL(piecePriceCents)}` : ''}`} <ChevronRight size={18}/>
         </button>
         {pieceError && <p className="analysis-error">{pieceError}</p>}
       </div>
@@ -922,7 +1080,318 @@ function BrainLoader() {
   </div>
 }
 
+function LoginPage() {
+  const [mode, setMode] = useState<'login' | 'signup'>('login')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    if (!auth) return
+    setError('')
+    setLoading(true)
+    try {
+      if (mode === 'signup') {
+        await createUserWithEmailAndPassword(auth, email.trim(), password)
+      } else {
+        await signInWithEmailAndPassword(auth, email.trim(), password)
+      }
+    } catch (err: any) {
+      const code = String(err?.code || '')
+      if (code.includes('email-already-in-use')) setError('Este e-mail já possui cadastro. Entre com sua senha.')
+      else if (code.includes('weak-password')) setError('Use uma senha com pelo menos 6 caracteres.')
+      else if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found')) setError('E-mail ou senha inválidos.')
+      else setError('Não foi possível concluir o acesso. Tente novamente.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function loginWithGoogle() {
+    if (!auth) return
+    setError('')
+    setLoading(true)
+    try {
+      const provider = new GoogleAuthProvider()
+      provider.setCustomParameters({ prompt: 'select_account' })
+      await signInWithPopup(auth, provider)
+    } catch (err: any) {
+      const code = String(err?.code || '')
+      if (!code.includes('popup-closed-by-user')) {
+        setError(code.includes('operation-not-allowed')
+          ? 'O login com Google precisa ser habilitado no Firebase Authentication.'
+          : 'Não foi possível entrar com Google. Tente novamente.')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return <div className="auth-shell">
+    <div className="auth-card">
+      <div className="auth-brand">
+        <img className="logo-light" src="/assets/logo-processo-360-ia.svg" alt="Processo 360 IA" />
+        <img className="logo-dark" src="/assets/logo-processo-360-ia-dark.svg" alt="Processo 360 IA" />
+      </div>
+      <span className="eyebrow"><ShieldCheck size={16}/> Acesso ao Processo 360 IA</span>
+      <h1>{mode === 'login' ? 'Entrar' : 'Criar conta'}</h1>
+      <p className="muted">Use e-mail e senha ou sua conta Google.</p>
+
+      <button type="button" className="google-login-button" onClick={loginWithGoogle} disabled={loading}>
+        Entrar com Google
+      </button>
+
+      <div className="auth-divider"><span>ou</span></div>
+
+      <form onSubmit={submit}>
+        <label>E-mail
+          <input type="email" value={email} onChange={e=>setEmail(e.target.value)} required autoComplete="email"/>
+        </label>
+        <label>Senha
+          <input type="password" value={password} onChange={e=>setPassword(e.target.value)} minLength={6} required autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}/>
+        </label>
+        {error && <p className="error">{error}</p>}
+        <button className="primary-button" disabled={loading}>
+          {loading ? 'Aguarde...' : mode === 'login' ? 'Entrar' : 'Criar conta e entrar'}
+        </button>
+      </form>
+
+      <button type="button" className="auth-switch" onClick={()=>{setMode(mode === 'login' ? 'signup' : 'login');setError('')}}>
+        {mode === 'login' ? 'Ainda não tenho conta — criar cadastro' : 'Já tenho conta — entrar'}
+      </button>
+    </div>
+  </div>
+}
+
+
+
+function WalletFundingPanel({config,missingCents}:{config:WalletConfig;missingCents:number}) {
+  const packages = [
+    {value:config.package1Cents,url:config.package1Url},
+    {value:config.package2Cents,url:config.package2Url},
+    {value:config.package3Cents,url:config.package3Url}
+  ].filter(item=>item.value>0 && item.url)
+
+  return <div className="wallet-funding-panel">
+    <p>Saldo insuficiente. Adicione pelo menos <b>{formatBRL(Math.max(0,missingCents))}</b>.</p>
+    {packages.length
+      ? <div className="wallet-package-actions">{packages.map((item,index)=>
+          <button key={index} type="button" onClick={()=>window.open(item.url,'_blank','noopener,noreferrer')}>
+            Adicionar {formatBRL(item.value)}
+          </button>)}</div>
+      : <small>Os links de recarga ainda não foram configurados.</small>}
+    {config.paymentInstructions && <small>{config.paymentInstructions}</small>}
+  </div>
+}
+
+function WalletBlockedPage({user,wallet}:{user:User;wallet:WalletRecord|null}) {
+  const status = wallet?.status || 'inativo'
+  return <div className="subscription-shell">
+    <div className="subscription-card">
+      <div className="auth-brand">
+        <img className="logo-light" src="/assets/logo-processo-360-ia.svg" alt="Processo 360 IA" />
+        <img className="logo-dark" src="/assets/logo-processo-360-ia-dark.svg" alt="Processo 360 IA" />
+      </div>
+      <span className={`subscriber-status-badge ${status}`}>{status === 'bloqueado' ? 'Acesso bloqueado' : 'Acesso inativo'}</span>
+      <h1>Acesso indisponível</h1>
+      <p className="muted">A conta <b>{user.email}</b> está com acesso {status}. Entre em contato com o administrador para regularização.</p>
+      <button className="secondary-button" onClick={()=>auth&&signOut(auth)}>Sair da conta</button>
+    </div>
+  </div>
+}
+
+function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
+  const [items,setItems]=useState<WalletRecord[]>([])
+  const [filter,setFilter]=useState('')
+  const [error,setError]=useState('')
+  const [savingConfig,setSavingConfig]=useState(false)
+  const [adjustingUid,setAdjustingUid]=useState<string|null>(null)
+  const [config,setConfig]=useState<WalletConfig>({
+    analysisMinimumCents:0,
+    analysisPerPageCents:0,
+    piecePriceCents:0,
+    package1Cents:4000,package1Url:'https://payment-link-v3.ton.com.br/pl_L4oBjJNOkKyEJLGCrvCjO31nA9pG78db',
+    package2Cents:8000,package2Url:'https://payment-link-v3.ton.com.br/pl_4n9ELgN872OXmzD9cyT1RMvDdBbxzGaj',
+    package3Cents:12000,package3Url:'https://payment-link-v3.ton.com.br/pl_1wy7Jor82XxB8OEULRIqGdGALMQKzY4N',
+    paymentInstructions:''
+  })
+
+  useEffect(()=>{
+    if(!db) return
+    const unsubscribeWallets = onSnapshot(collection(db,'wallets'), snap=>{
+      const rows=snap.docs.map(d=>({id:d.id,...d.data()} as WalletRecord))
+      rows.sort((a,b)=>String(a.email||'').localeCompare(String(b.email||'')))
+      setItems(rows)
+    },()=>setError('Não foi possível carregar os usuários.'))
+
+    const unsubscribeConfig = onSnapshot(doc(db,'walletConfig','main'), snap=>{
+      if(snap.exists()) setConfig(prev=>({...prev,...snap.data()} as WalletConfig))
+    })
+
+    return ()=>{unsubscribeWallets();unsubscribeConfig()}
+  },[])
+
+  async function changeStatus(item:WalletRecord,status:WalletStatus){
+    if(!db) return
+    setError('')
+    try{
+      await updateDoc(doc(db,'wallets',item.id),{
+        status,
+        updatedAt:serverTimestamp(),
+        updatedBy:user.email
+      })
+    }catch{
+      setError('Não foi possível alterar o status do usuário.')
+    }
+  }
+
+  async function adjustBalance(item:WalletRecord){
+    if(!functions) return
+    const raw=window.prompt(`Ajuste de saldo de ${item.email}.\nDigite o valor em reais. Use número negativo para retirar saldo.\nSaldo atual: ${formatBRL(item.balanceCents||0)}`)
+    if(raw===null) return
+    const normalized=raw.replace(/\./g,'').replace(',','.')
+    const value=Number(normalized)
+    if(!Number.isFinite(value) || value===0){
+      window.alert('Informe um valor válido diferente de zero.')
+      return
+    }
+    const reason=window.prompt('Motivo do ajuste (opcional):') || ''
+    setAdjustingUid(item.uid)
+    try{
+      const call=httpsCallable(functions,'adminAdjustWallet')
+      await call({uid:item.uid,deltaCents:Math.round(value*100),reason})
+    }catch(err:any){
+      console.error(err)
+      setError('Não foi possível ajustar o saldo.')
+    }finally{
+      setAdjustingUid(null)
+    }
+  }
+
+  async function removeWalletUser(item:WalletRecord){
+    if(!functions) return
+    if(!window.confirm(`Excluir definitivamente o usuário ${item.email}? A conta de autenticação também será removida.`)) return
+    try{
+      const call=httpsCallable(functions,'adminDeleteWalletUser')
+      await call({uid:item.uid})
+    }catch(err:any){
+      console.error(err)
+      setError('Não foi possível excluir o usuário.')
+    }
+  }
+
+  async function saveConfig(e:FormEvent){
+    e.preventDefault()
+    if(!db) return
+    setSavingConfig(true)
+    setError('')
+    try{
+      await setDoc(doc(db,'walletConfig','main'),{
+        ...config,
+        updatedAt:serverTimestamp(),
+        updatedBy:user.email
+      },{merge:true})
+    }catch{
+      setError('Não foi possível salvar a configuração da carteira.')
+    }finally{
+      setSavingConfig(false)
+    }
+  }
+
+  const visible=items.filter(item=>{
+    const q=filter.trim().toLowerCase()
+    if(!q) return true
+    return String(item.email||'').toLowerCase().includes(q) || String(item.displayName||'').toLowerCase().includes(q)
+  })
+
+  const totalBalance=items.reduce((sum,item)=>sum+Math.max(0,Number(item.balanceCents||0)),0)
+
+  return <>
+    <div className="admin-header">
+      <div>
+        <span className="admin-badge"><Users/> Usuários e saldo</span>
+        <h2>Carteira pré-paga</h2>
+        <p className="muted">Todo usuário começa com saldo zero. O valor de cada análise é calculado antes do uso e debitado da carteira.</p>
+      </div>
+      <button className="secondary-button compact" onClick={onLogout}>Sair</button>
+    </div>
+
+    <div className="subscriber-summary">
+      <span><b>{items.length}</b><small>Usuários</small></span>
+      <span><b>{items.filter(i=>i.status==='ativo').length}</b><small>Ativos</small></span>
+      <span><b>{items.filter(i=>i.status==='bloqueado').length}</b><small>Bloqueados</small></span>
+      <span><b>{formatBRL(totalBalance)}</b><small>Saldo total</small></span>
+    </div>
+
+    <form className="subscription-config-form" onSubmit={saveConfig}>
+      <div className="form-title"><CreditCard size={18}/><b>Preços e recargas</b></div>
+      <p className="muted">Estes valores são administrativos. O usuário verá somente o preço final da operação.</p>
+      <div className="admin-form-grid">
+        <label>Preço mínimo por análise (centavos)
+          <input type="number" min="0" value={config.analysisMinimumCents} onChange={e=>setConfig({...config,analysisMinimumCents:Number(e.target.value)||0})}/>
+        </label>
+        <label>Preço por página (centavos)
+          <input type="number" min="0" step="0.01" value={config.analysisPerPageCents} onChange={e=>setConfig({...config,analysisPerPageCents:Number(e.target.value)||0})}/>
+        </label>
+      </div>
+      <label>Preço para gerar peça jurídica (centavos)
+        <input type="number" min="0" value={config.piecePriceCents} onChange={e=>setConfig({...config,piecePriceCents:Number(e.target.value)||0})}/>
+      </label>
+
+      {[1,2,3].map(index=>{
+        const valueKey=`package${index}Cents` as 'package1Cents'
+        const urlKey=`package${index}Url` as 'package1Url'
+        return <div className="admin-form-grid" key={index}>
+          <label>Recarga {index} — valor (centavos)
+            <input type="number" min="0" value={Number(config[valueKey]||0)} onChange={e=>setConfig({...config,[valueKey]:Number(e.target.value)||0})}/>
+          </label>
+          <label>Recarga {index} — link de pagamento
+            <input type="url" value={String(config[urlKey]||'')} onChange={e=>setConfig({...config,[urlKey]:e.target.value})} placeholder="Deixe em branco até criar o link"/>
+          </label>
+        </div>
+      })}
+      <label>Orientação ao usuário
+        <input value={config.paymentInstructions||''} onChange={e=>setConfig({...config,paymentInstructions:e.target.value})} placeholder="Ex.: Após o pagamento, o saldo será liberado."/>
+      </label>
+      <button className="primary-button compact" disabled={savingConfig}><Save size={17}/>{savingConfig?'Salvando...':'Salvar configuração'}</button>
+    </form>
+
+    <div className="subscriber-toolbar">
+      <label><Search size={17}/><input value={filter} onChange={e=>setFilter(e.target.value)} placeholder="Buscar por nome ou e-mail"/></label>
+      <span>{visible.length} usuário(s)</span>
+    </div>
+
+    {error&&<p className="error">{error}</p>}
+
+    <div className="subscriber-table-wrap">
+      <table className="subscriber-table">
+        <thead><tr><th>Usuário</th><th>Saldo</th><th>Status</th><th>Ações</th></tr></thead>
+        <tbody>
+          {visible.map(item=><tr key={item.id}>
+            <td><strong>{item.displayName||'—'}</strong><small>{item.email}</small></td>
+            <td><strong>{formatBRL(item.balanceCents||0)}</strong></td>
+            <td><span className={`subscriber-status-badge ${item.status}`}>{item.status}</span></td>
+            <td>
+              <div className="subscriber-actions">
+                <button className="sub-action activate" onClick={()=>changeStatus(item,'ativo')}>Ativar</button>
+                <button className="sub-action deactivate" onClick={()=>changeStatus(item,'inativo')}>Desativar</button>
+                <button className="sub-action block" onClick={()=>changeStatus(item,'bloqueado')}>Bloquear</button>
+                <button className="sub-action" disabled={adjustingUid===item.uid} onClick={()=>adjustBalance(item)}>{adjustingUid===item.uid?'Ajustando...':'Ajustar saldo'}</button>
+                <button className="sub-action delete" onClick={()=>removeWalletUser(item)}><Trash2 size={14}/> Apagar</button>
+              </div>
+            </td>
+          </tr>)}
+          {visible.length===0&&<tr><td colSpan={4}><div className="empty-admin"><Users/><b>Nenhum usuário encontrado</b></div></td></tr>}
+        </tbody>
+      </table>
+    </div>
+  </>
+}
+
 function AdminModal({user,onUser,onClose}:{user:User|null;onUser:(u:User|null)=>void;onClose:()=>void}) {
+  const [section,setSection]=useState<'carteira'|'prompts'>('carteira')
   const [password,setPassword]=useState('')
   const [error,setError]=useState('')
   const [loading,setLoading]=useState(false)
@@ -958,7 +1427,15 @@ function AdminModal({user,onUser,onClose}:{user:User|null;onUser:(u:User|null)=>
     <div className={`admin-modal ${user ? 'admin-modal-large' : ''}`}>
       <button className="modal-close" onClick={onClose} aria-label="Fechar"><X/></button>
       {user
-        ? <PromptManager user={user} onLogout={logout}/>
+        ? <>
+            <div className="admin-section-tabs">
+              <button className={section==='carteira'?'active':''} onClick={()=>setSection('carteira')}><Users size={17}/> Carteira</button>
+              <button className={section==='prompts'?'active':''} onClick={()=>setSection('prompts')}><BrainCircuit size={17}/> Prompts</button>
+            </div>
+            {section === 'carteira'
+              ? <WalletManager user={user} onLogout={logout}/>
+              : <PromptManager user={user} onLogout={logout}/>}
+          </>
         : <form onSubmit={login}>
             <span className="admin-badge"><LockKeyhole/> Acesso restrito</span>
             <h2>Área ADM</h2>
