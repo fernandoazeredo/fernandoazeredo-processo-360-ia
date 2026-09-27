@@ -1,6 +1,10 @@
 /* Ajustes exclusivos da tela de login em dispositivos móveis. */
 @media (max-width: 700px) {
-  /* Logomarca: um pouco maior e rigorosamente centralizada no card. */
+  /*
+   * O SVG original possui uma grande área vazia à direita no viewBox.
+   * Por isso, centralizar apenas a caixa <img> não centraliza visualmente a marca.
+   * No mobile compensamos essa área vazia sem alterar desktop/notebook.
+   */
   .auth-brand {
     width: 100%;
     display: flex;
@@ -13,16 +17,20 @@
   }
 
   .auth-brand img {
-    width: min(88vw, 340px) !important;
-    max-width: 340px !important;
+    width: 410px !important;
+    max-width: none !important;
     height: auto !important;
+    flex: 0 0 auto;
     margin: 0 auto !important;
     object-fit: contain;
     object-position: center center;
+    transform: translateX(23%);
+    transform-origin: center center;
   }
 
   /* No mobile, os diferenciais ficam limpos: sem os checks verdes. */
-  .auth-highlights article::after {
+  .auth-highlights article::after,
+  .auth-highlights article:after {
     content: none !important;
     display: none !important;
   }
