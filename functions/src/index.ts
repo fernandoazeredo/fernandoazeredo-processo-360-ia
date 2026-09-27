@@ -1,4 +1,5 @@
 import { initializeApp } from 'firebase-admin/app'
+import { getAuth } from 'firebase-admin/auth'
 import { getFirestore, FieldValue, DocumentReference } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
@@ -588,5 +589,49 @@ ${JSON.stringify(lotResults)}`
 
       throw new HttpsError('internal', message)
     }
+  }
+)
+
+
+export const adminDeleteSubscriber = onCall(
+  {
+    region: 'us-central1',
+    cors: true
+  },
+  async request => {
+    const callerEmail = String(request.auth?.token?.email || '').toLowerCase()
+    if (!request.auth || callerEmail !== 'fernandoazeredo64@gmail.com') {
+      throw new HttpsError('permission-denied', 'Apenas o administrador pode excluir assinantes.')
+    }
+
+    const uid = String(request.data?.uid || '').trim()
+    if (!uid) {
+      throw new HttpsError('invalid-argument', 'UID do assinante não informado.')
+    }
+    if (uid === request.auth.uid) {
+      throw new HttpsError('failed-precondition', 'O administrador principal não pode excluir a própria conta por este painel.')
+    }
+
+    const subscriberRef = db.collection('subscribers').doc(uid)
+    const subscriberSnap = await subscriberRef.get()
+    const subscriber = subscriberSnap.exists ? subscriberSnap.data() : null
+
+    try {
+      await getAuth().deleteUser(uid)
+    } catch (error: any) {
+      if (error?.code !== 'auth/user-not-found') throw error
+    }
+
+    await subscriberRef.delete().catch(() => undefined)
+    await db.collection('subscriberAudit').add({
+      action: 'excluir',
+      subscriberUid: uid,
+      subscriberEmail: subscriber?.email || null,
+      performedByUid: request.auth.uid,
+      performedByEmail: callerEmail,
+      createdAt: FieldValue.serverTimestamp()
+    })
+
+    return { success: true }
   }
 )
