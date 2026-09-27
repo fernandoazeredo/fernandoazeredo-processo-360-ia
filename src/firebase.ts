@@ -3,6 +3,7 @@ import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-ch
 import { getAI, GoogleAIBackend } from 'firebase/ai'
 import { getAuth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
+import { getFunctions } from 'firebase/functions'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -45,4 +46,5 @@ if (app && typeof window !== 'undefined') {
 
 export const auth = app ? getAuth(app) : null
 export const db = app ? getFirestore(app) : null
+export const functions = app ? getFunctions(app, 'us-central1') : null
 export const aiClient = app ? getAI(app, { backend: new GoogleAIBackend() }) : null

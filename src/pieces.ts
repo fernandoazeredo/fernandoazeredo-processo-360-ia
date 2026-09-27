@@ -1,6 +1,8 @@
 import { getGenerativeModel, Schema } from 'firebase/ai'
+import { collection, getDocs, query, where } from 'firebase/firestore'
 import { PDFDocument } from 'pdf-lib'
-import { aiClient } from './firebase'
+import { aiClient, db } from './firebase'
+import { MOTOR_B_BASE_GLOBAL, MOTOR_B_PURPOSES, MOTOR_B_REVIEWER, MOTOR_B_TRABALHISTA_RECLAMADA, MOTOR_B_TRABALHISTA_RECLAMANTE, MOTOR_B_VALIDATOR } from './piecePrompts'
 import type { AnalysisReport } from './ai'
 
 const PIECE_MODEL = 'gemini-3.8-flash'
@@ -39,8 +41,19 @@ export type LegalPieceDraft = {
   promptVersion: string
 }
 
-const DRAFT_PROMPT_VERSION = '2026-09-25-piece-v1'
-const VALIDATION_PROMPT_VERSION = '2026-09-25-fact-validation-v1'
+
+type MotorBPromptDoc = {
+  area?: string
+  perspective?: string
+  purpose?: string
+  content?: string
+  version?: number
+  status?: string
+}
+
+const DRAFT_PROMPT_VERSION = '2026-09-27-motor-b-piece-v2'
+const VALIDATION_PROMPT_VERSION = '2026-09-27-motor-b-fact-validation-v2'
+const REVIEW_PROMPT_VERSION = '2026-09-27-motor-b-legal-review-v1'
 
 const pieceMapping: Record<string, Record<string, string>> = {
   Trabalhista: {
@@ -134,6 +147,20 @@ const validationSchema = Schema.object({
   }
 })
 
+const reviewSchema = Schema.object({
+  properties: {
+    title: Schema.string(),
+    sections: Schema.array({
+      items: Schema.object({
+        properties: {
+          title: Schema.string(),
+          content: Schema.string()
+        }
+      })
+    })
+  }
+})
+
 const confirmationSchema = Schema.object({
   properties: {
     status: Schema.enumString({ enum: ['CONFIRMADO', 'NÃO LOCALIZADO', 'DIVERGENTE'] }),
@@ -142,6 +169,67 @@ const confirmationSchema = Schema.object({
     note: Schema.string()
   }
 })
+
+async function loadMotorBPrompt(
+  area: string,
+  perspective: string,
+  purpose: string,
+  fallback: string
+) {
+  if (!db) return { content: fallback, version: 0 }
+
+  try {
+    const snap = await getDocs(query(collection(db, 'prompts'), where('status', '==', 'publicado')))
+    const candidates = snap.docs
+      .map(doc => doc.data() as MotorBPromptDoc)
+      .filter(item =>
+        item.purpose === purpose &&
+        item.content?.trim() &&
+        (
+          (item.area === area && item.perspective === perspective) ||
+          (item.area === 'Global' && item.perspective === 'Global')
+        )
+      )
+      .sort((a, b) => (Number(b.version) || 0) - (Number(a.version) || 0))
+
+    const selected = candidates[0]
+    return selected
+      ? { content: String(selected.content || '').trim(), version: Number(selected.version) || 1 }
+      : { content: fallback, version: 0 }
+  } catch (error) {
+    console.warn('[Processo 360 IA][Motor B] Falha ao carregar prompt publicado; usando fallback local.', purpose, error)
+    return { content: fallback, version: 0 }
+  }
+}
+
+function specificPiecePrompt(area: string, perspective: string, pieceType: string) {
+  if (area === 'Trabalhista' && perspective === 'Reclamada' && /contestação|defesa/i.test(pieceType)) {
+    return {
+      purpose: MOTOR_B_PURPOSES.trabalhistaReclamada,
+      fallback: MOTOR_B_TRABALHISTA_RECLAMADA
+    }
+  }
+
+  if (area === 'Trabalhista' && perspective === 'Reclamante' && /petição inicial/i.test(pieceType)) {
+    return {
+      purpose: MOTOR_B_PURPOSES.trabalhistaReclamante,
+      fallback: MOTOR_B_TRABALHISTA_RECLAMANTE
+    }
+  }
+
+  return {
+    purpose: 'Motor B — Peça Jurídica Genérica',
+    fallback: 'Elabore a peça solicitada com técnica jurídica, fidelidade factual, rastreabilidade e observância integral do Prompt Base Global.'
+  }
+}
+
+function reportToDiagnostic(report: AnalysisReport) {
+  return JSON.stringify({
+    globalAnalysis: report.globalAnalysis,
+    risks: report.risks,
+    conclusionStrategy: report.conclusionStrategy
+  }, null, 2)
+}
 
 function reportToSource(report: AnalysisReport) {
   return JSON.stringify({
@@ -245,31 +333,42 @@ export async function generateLegalPiece(
   pieceType: string
 ): Promise<LegalPieceDraft> {
   const source = reportToSource(report)
+  const diagnostic = reportToDiagnostic(report)
+  const specific = specificPiecePrompt(report.area, report.perspective, pieceType)
+
+  const [basePromptDoc, specificPromptDoc, validatorPromptDoc, reviewerPromptDoc] = await Promise.all([
+    loadMotorBPrompt(report.area, report.perspective, MOTOR_B_PURPOSES.base, MOTOR_B_BASE_GLOBAL),
+    loadMotorBPrompt(report.area, report.perspective, specific.purpose, specific.fallback),
+    loadMotorBPrompt(report.area, report.perspective, MOTOR_B_PURPOSES.validator, MOTOR_B_VALIDATOR),
+    loadMotorBPrompt(report.area, report.perspective, MOTOR_B_PURPOSES.reviewer, MOTOR_B_REVIEWER)
+  ])
 
   const draftPrompt = `
+${basePromptDoc.content}
+
+${specificPromptDoc.content}
+
 ÁREA: ${report.area}
 PERSPECTIVA: ${report.perspective}
 TIPO DE PEÇA: ${pieceType}
 
-TAREFA:
-Produza um RASCUNHO ESTRUTURADO da peça indicada.
-Use exclusivamente fatos constantes no RELATÓRIO CONSOLIDADO abaixo.
-Não consulte nem pressuponha o PDF original.
-Não complete lacunas factuais.
-Quando um dado indispensável estiver ausente, use exatamente:
-${PLACEHOLDER}
-
-Você pode desenvolver livremente raciocínio, tese, organização e argumentação jurídica, desde que não crie premissas factuais novas.
-Não diga que a peça está pronta para protocolo ou assinatura.
-
-RELATÓRIO CONSOLIDADO:
+[DADOS_CONSOLIDADOS_DO_PROCESSO]
 ${source}
+
+[DIAGNOSTICO_JURIDICO]
+${diagnostic}
+
+[CHECKLIST_PRE_PETICIONAMENTO]
+NÃO FORNECIDO NESTA VERSÃO DO SISTEMA.
+
+INSTRUÇÃO DE SAÍDA:
+Responda exclusivamente no JSON exigido pelo schema. Em title, informe o título da peça. Em sections, devolva a peça integral organizada em seções.
 `.trim()
 
   const draftResult = await generateJson(
     draftPrompt,
     draftSchema,
-    'geração do rascunho'
+    'geração do rascunho especializado'
   )
 
   const rawSections = Array.isArray(draftResult.parsed.sections)
@@ -280,36 +379,27 @@ ${source}
     : []
 
   const validationPrompt = `
-Você é o VALIDADOR FACTUAL do Processo 360 IA.
+${validatorPromptDoc.content}
 
-Compare TODAS as afirmações factuais verificáveis da minuta com o RELATÓRIO CONSOLIDADO.
-Extraia claims de nomes, datas, valores, documentos, eventos, decisões, números de processo, obrigações e alegações atribuídas às partes.
-
-Classifique cada claim EXATAMENTE como:
-- CONFIRMADA
-- PARCIALMENTE CONFIRMADA
-- NÃO CONFIRMADA
-- CONFLITANTE
-
-REGRAS DURAS:
-1. NÃO CONFIRMADA ou CONFLITANTE não pode permanecer silenciosamente em correctedSections.
-2. Remova, reformule com apenas a parcela sustentada ou substitua por ${PLACEHOLDER}.
-3. PARCIALMENTE CONFIRMADA deve perder detalhes não sustentados.
-4. Não trate argumentação/tese jurídica como fato apenas porque não aparece literalmente no relatório.
-5. sourceReference deve apontar a seção/referência do relatório que sustenta o claim; se inexistente, use "Sem lastro no relatório consolidado".
-6. correctedSections deve conter a versão segura que será exibida ao advogado.
-
-RELATÓRIO CONSOLIDADO:
+[DADOS_CONSOLIDADOS_DO_PROCESSO]
 ${source}
 
-MINUTA BRUTA:
+[DIAGNOSTICO_JURIDICO]
+${diagnostic}
+
+[MINUTA_GERADA]
 ${JSON.stringify(rawSections, null, 2)}
+
+INSTRUÇÃO DE SAÍDA:
+Responda exclusivamente no JSON exigido pelo schema.
+- claims representa a tabela de auditoria factual em formato estruturado.
+- correctedSections deve conter a minuta corrigida integralmente.
 `.trim()
 
   const validationResult = await generateJson(
     validationPrompt,
     validationSchema,
-    'validação factual'
+    'validação factual especializada'
   )
 
   const claims: PieceClaim[] = Array.isArray(validationResult.parsed.claims)
@@ -330,16 +420,64 @@ ${JSON.stringify(rawSections, null, 2)}
       }))
     : rawSections
 
-  const safeSections = hardenCorrectedSections(correctedSections, claims)
+  const factSafeSections = hardenCorrectedSections(correctedSections, claims)
+
+  const reviewPrompt = `
+${reviewerPromptDoc.content}
+
+ÁREA: ${report.area}
+PERSPECTIVA: ${report.perspective}
+TIPO DE PEÇA: ${pieceType}
+
+[DADOS_CONSOLIDADOS_DO_PROCESSO]
+${source}
+
+[DIAGNOSTICO_JURIDICO]
+${diagnostic}
+
+[CHECKLIST_PRE_PETICIONAMENTO]
+NÃO FORNECIDO NESTA VERSÃO DO SISTEMA.
+
+[RELATORIO_DE_VALIDACAO_FACTUAL]
+${JSON.stringify({ claims, validation: countValidation(claims) }, null, 2)}
+
+[MINUTA_CORRIGIDA]
+${JSON.stringify(factSafeSections, null, 2)}
+
+INSTRUÇÃO DE SAÍDA:
+Responda exclusivamente no JSON exigido pelo schema. Não acrescente nenhum fato novo. Em sections, devolva a versão integral final revisada.
+`.trim()
+
+  const reviewResult = await generateJson(
+    reviewPrompt,
+    reviewSchema,
+    'revisão jurídica final'
+  )
+
+  const reviewedSections: PieceSection[] = Array.isArray(reviewResult.parsed.sections)
+    ? reviewResult.parsed.sections.map((item: any) => ({
+        title: String(item.title || ''),
+        content: String(item.content || '')
+      }))
+    : factSafeSections
+
+  const safeSections = hardenCorrectedSections(reviewedSections, claims)
+
+  const promptVersion = [
+    `${DRAFT_PROMPT_VERSION}:base-v${basePromptDoc.version || 'fallback'}`,
+    `piece-v${specificPromptDoc.version || 'fallback'}`,
+    `${VALIDATION_PROMPT_VERSION}:v${validatorPromptDoc.version || 'fallback'}`,
+    `${REVIEW_PROMPT_VERSION}:v${reviewerPromptDoc.version || 'fallback'}`
+  ].join('+')
 
   return {
     pieceType,
-    title: String(draftResult.parsed.title || pieceType),
+    title: String(reviewResult.parsed.title || draftResult.parsed.title || pieceType),
     sections: safeSections,
     claims,
     validation: countValidation(claims),
-    model: validationResult.model || draftResult.model,
-    promptVersion: `${DRAFT_PROMPT_VERSION}+${VALIDATION_PROMPT_VERSION}`
+    model: reviewResult.model || validationResult.model || draftResult.model,
+    promptVersion
   }
 }
 
