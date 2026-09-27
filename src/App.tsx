@@ -8,6 +8,8 @@ import { analyzeUploadedProcess } from './ai'
 import type { AnalysisReport } from './ai'
 import { confirmClaimInOriginal, generateLegalPiece, pieceTypeOptions, suggestPieceType } from './pieces'
 import type { LegalPieceDraft, PieceClaim } from './pieces'
+import { chargeAnalysis, chargePiece, formatBRL, quoteAnalysis } from './wallet'
+import type { WalletRecord, WalletStatus } from './wallet'
 
 const ADMIN_EMAIL = 'fernandoazeredo64@gmail.com'
 const APP_BUILD = String(import.meta.env.VITE_APP_BUILD || 'dev')
@@ -15,29 +17,16 @@ const APP_BUILD = String(import.meta.env.VITE_APP_BUILD || 'dev')
 type Area = 'Trabalhista' | 'Cível' | 'Criminal' | 'Ambiental' | 'Tributário' | 'Administrativo' | 'Previdenciário' | 'Consumidor' | 'Família' | 'Empresarial'
 type PromptArea = Area | 'Global'
 type PromptStatus = 'rascunho' | 'publicado' | 'inativo'
-type SubscriberStatus = 'pendente' | 'ativo' | 'inativo' | 'bloqueado' | 'cancelado'
-type SubscriptionType = 'mensal' | 'anual'
-type PaymentStatus = 'pendente' | 'confirmado'
-
-type SubscriberItem = {
-  id: string
-  uid: string
-  email: string
-  displayName?: string
-  status: SubscriberStatus
-  subscriptionType: SubscriptionType
-  paymentStatus: PaymentStatus
-  createdAt?: any
-  updatedAt?: any
-  activatedAt?: any
-  notes?: string
-}
-
-type SubscriptionConfig = {
-  monthlyPriceLabel: string
-  annualPriceLabel: string
-  monthlyPaymentUrl: string
-  annualPaymentUrl: string
+type WalletConfig = {
+  analysisMinimumCents: number
+  analysisPerPageCents: number
+  piecePriceCents: number
+  package1Cents: number
+  package1Url: string
+  package2Cents: number
+  package2Url: string
+  package3Cents: number
+  package3Url: string
   paymentInstructions?: string
 }
 
@@ -209,8 +198,12 @@ function App() {
   const [adminUser, setAdminUser] = useState<User | null>(null)
   const [appUser, setAppUser] = useState<User | null>(null)
   const [authReady, setAuthReady] = useState(false)
-  const [subscriber, setSubscriber] = useState<SubscriberItem | null>(null)
-  const [subscriberReady, setSubscriberReady] = useState(false)
+  const [wallet, setWallet] = useState<WalletRecord | null>(null)
+  const [walletReady, setWalletReady] = useState(false)
+  const [quote, setQuote] = useState<{pageCount:number;priceCents:number}|null>(null)
+  const [quoteBusy, setQuoteBusy] = useState(false)
+  const [quoteError, setQuoteError] = useState('')
+  const [walletConfig, setWalletConfig] = useState<WalletConfig>({analysisMinimumCents:0,analysisPerPageCents:0,piecePriceCents:0,package1Cents:0,package1Url:'',package2Cents:0,package2Url:'',package3Cents:0,package3Url:'',paymentInstructions:''})
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
@@ -231,44 +224,74 @@ function App() {
 
   useEffect(() => {
     if (!appUser || !db) {
-      setSubscriber(null)
-      setSubscriberReady(!appUser)
+      setWallet(null)
+      setWalletReady(!appUser)
       return
     }
 
-    setSubscriberReady(false)
-    const subscriberRef = doc(db, 'subscribers', appUser.uid)
+    setWalletReady(false)
+    const walletRef = doc(db, 'wallets', appUser.uid)
     let creating = false
 
-    return onSnapshot(subscriberRef, async snap => {
+    return onSnapshot(walletRef, async snap => {
       if (snap.exists()) {
-        setSubscriber({ id: snap.id, ...snap.data() } as SubscriberItem)
-        setSubscriberReady(true)
+        setWallet({ id: snap.id, ...snap.data() } as WalletRecord)
+        setWalletReady(true)
         return
       }
 
       if (creating) return
       creating = true
       try {
-        await setDoc(subscriberRef, {
+        await setDoc(walletRef, {
           uid: appUser.uid,
           email: String(appUser.email || '').toLowerCase(),
           displayName: appUser.displayName || '',
-          status: 'pendente',
-          subscriptionType: 'mensal',
-          paymentStatus: 'pendente',
+          status: 'ativo',
+          balanceCents: 0,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         })
       } catch (error) {
-        console.error('[Processo 360 IA] Falha ao criar cadastro de assinante.', error)
-        setSubscriberReady(true)
+        console.error('[Processo 360 IA] Falha ao criar carteira.', error)
+        setWalletReady(true)
       }
     }, error => {
-      console.error('[Processo 360 IA] Falha ao consultar assinatura.', error)
-      setSubscriberReady(true)
+      console.error('[Processo 360 IA] Falha ao consultar carteira.', error)
+      setWalletReady(true)
     })
   }, [appUser?.uid])
+
+  useEffect(()=>{
+    if(!db || !appUser) return
+    return onSnapshot(doc(db,'walletConfig','main'), snap=>{
+      if(snap.exists()) setWalletConfig(prev=>({...prev,...snap.data()} as WalletConfig))
+    })
+  },[appUser?.uid])
+
+  useEffect(()=>{
+    let cancelled=false
+    setQuote(null)
+    setQuoteError('')
+    if(!file || !appUser || appUser.email===ADMIN_EMAIL) return
+
+    setQuoteBusy(true)
+    quoteAnalysis(file)
+      .then(result=>{if(!cancelled) setQuote(result)})
+      .catch((error:any)=>{
+        if(cancelled) return
+        const message=String(error?.message||'')
+        if(message.includes('tabela de preços') || message.includes('failed-precondition')) {
+          setQuoteError('O preço desta análise ainda não foi configurado.')
+        } else {
+          setQuoteError('Não foi possível calcular o valor desta análise.')
+        }
+      })
+      .finally(()=>{if(!cancelled) setQuoteBusy(false)})
+
+    return ()=>{cancelled=true}
+  },[file,appUser?.uid])
+
 
 
   function changeArea(next: Area) {
@@ -286,6 +309,17 @@ function App() {
     setProcessing(true)
 
     try {
+      if (appUser?.email !== ADMIN_EMAIL) {
+        if (!wallet || wallet.status !== 'ativo') {
+          throw new Error('WALLET_BLOCKED')
+        }
+        const currentQuote = quote || await quoteAnalysis(file)
+        if (wallet.balanceCents < currentQuote.priceCents) {
+          throw new Error('WALLET_INSUFFICIENT')
+        }
+        await chargeAnalysis(currentQuote.pageCount)
+      }
+
       const report = await analyzeUploadedProcess(file, area, perspective, (value, stage) => {
         setProgress(value)
         setProcessingStage(stage)
@@ -297,7 +331,11 @@ function App() {
     } catch (error: any) {
       const message = String(error?.message || '')
       console.error('[Processo 360 IA] Falha na análise', error)
-      if (message.includes('ANALYSIS_CANCELLED')) {
+      if (message.includes('WALLET_INSUFFICIENT') || message.includes('Saldo insuficiente')) {
+        setAnalysisError('Saldo insuficiente para realizar esta análise. Adicione saldo à sua carteira e tente novamente.')
+      } else if (message.includes('WALLET_BLOCKED') || message.includes('carteira está inativa')) {
+        setAnalysisError('Sua carteira está inativa ou bloqueada. Entre em contato com o administrador.')
+      } else if (message.includes('ANALYSIS_CANCELLED')) {
         setAnalysisError('')
       } else if (message.includes('GEMINI_BILLING_STATE_MISMATCH')) {
         setAnalysisError('O Google retornou um estado de faturamento inconsistente para o projeto. Verifique o faturamento do Firebase/Google Cloud e tente novamente.')
@@ -329,12 +367,12 @@ function App() {
     return <LoginPage />
   }
 
-  if (appUser.email !== ADMIN_EMAIL && !subscriberReady) {
-    return <div className="auth-shell"><div className="auth-card"><BrainLoader/><p className="muted">Verificando assinatura...</p></div></div>
+  if (appUser.email !== ADMIN_EMAIL && !walletReady) {
+    return <div className="auth-shell"><div className="auth-card"><BrainLoader/><p className="muted">Verificando carteira...</p></div></div>
   }
 
-  if (appUser.email !== ADMIN_EMAIL && subscriber?.status !== 'ativo') {
-    return <SubscriptionPage user={appUser} subscriber={subscriber} />
+  if (appUser.email !== ADMIN_EMAIL && wallet?.status !== 'ativo') {
+    return <WalletBlockedPage user={appUser} wallet={wallet} />
   }
 
   return (
@@ -346,6 +384,7 @@ function App() {
         </div>
         <div className="topbar-actions">
           <span className="signed-user">{appUser.displayName || appUser.email || 'Usuário'}</span>
+          {appUser.email !== ADMIN_EMAIL && <span className="wallet-balance">Saldo: <b>{formatBRL(wallet?.balanceCents || 0)}</b></span>}
           <button className="icon-button" onClick={() => setDark(!dark)} aria-label="Alternar tema">
             {dark ? <Sun size={19} /> : <Moon size={19} />}
           </button>
@@ -383,7 +422,22 @@ function App() {
             </label>
           </div>
 
-          <button className="primary-button" disabled={!file || processing} onClick={startAnalysis}>
+          {file && appUser.email !== ADMIN_EMAIL && <div className="analysis-price-card">
+            {quoteBusy
+              ? <span>Calculando o valor da análise...</span>
+              : quote
+                ? <>
+                    <div><small>Valor para analisar este processo</small><strong>{formatBRL(quote.priceCents)}</strong><span>{quote.pageCount} página(s)</span></div>
+                    <div><small>Saldo disponível</small><strong>{formatBRL(wallet?.balanceCents || 0)}</strong></div>
+                    {(wallet?.balanceCents || 0) < quote.priceCents &&
+                      <WalletFundingPanel config={walletConfig} missingCents={quote.priceCents-(wallet?.balanceCents||0)} />}
+                  </>
+                : quoteError
+                  ? <span className="error">{quoteError}</span>
+                  : null}
+          </div>}
+
+          <button className="primary-button" disabled={!file || processing || (appUser.email !== ADMIN_EMAIL && (!quote || (wallet?.balanceCents||0) < quote.priceCents))} onClick={startAnalysis}>
             {processing ? 'Analisando processo...' : 'Iniciar análise completa'} <ChevronRight size={18}/>
           </button>
           {analysisError && (
@@ -396,7 +450,7 @@ function App() {
           )}
         </section>
 
-        {analysis && <AnalysisResult report={analysis} originalFile={file} />}
+        {analysis && <AnalysisResult report={analysis} originalFile={file} isAdmin={appUser.email===ADMIN_EMAIL} piecePriceCents={walletConfig.piecePriceCents} />}
 
         <section className="trust-row">
           <span><ShieldCheck/> Rastreabilidade documental</span>
@@ -767,7 +821,7 @@ function exportPieceAsWord(report: AnalysisReport, piece: LegalPieceDraft) {
   URL.revokeObjectURL(url)
 }
 
-function AnalysisResult({report, originalFile}:{report:AnalysisReport;originalFile:File|null}) {
+function AnalysisResult({report, originalFile, isAdmin, piecePriceCents}:{report:AnalysisReport;originalFile:File|null;isAdmin:boolean;piecePriceCents:number}) {
   const [pieceOpen, setPieceOpen] = useState(false)
   const [pieceType, setPieceType] = useState(() => suggestPieceType(report.area, report.perspective))
   const [piece, setPiece] = useState<LegalPieceDraft | null>(null)
@@ -785,6 +839,7 @@ function AnalysisResult({report, originalFile}:{report:AnalysisReport;originalFi
     setPieceBusy(true)
     setPieceStage('Estruturando e redigindo o rascunho')
     try {
+      if (!isAdmin) await chargePiece()
       window.setTimeout(() => setPieceStage('Validando fatos contra o relatório consolidado'), 900)
       const generated = await generateLegalPiece(report, pieceType)
       setPiece(generated)
@@ -792,7 +847,10 @@ function AnalysisResult({report, originalFile}:{report:AnalysisReport;originalFi
       window.setTimeout(() => document.getElementById('piece-review')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
     } catch (error: any) {
       console.error('[Processo 360 IA][Motor B] Falha', error)
-      setPieceError('Não foi possível gerar e validar o rascunho. ' + String(error?.message || 'Tente novamente.'))
+      const message=String(error?.message||'')
+      setPieceError(message.includes('Saldo insuficiente')
+        ? 'Saldo insuficiente para gerar a peça jurídica. Adicione saldo à carteira.'
+        : 'Não foi possível gerar e validar o rascunho. ' + (message || 'Tente novamente.'))
     } finally {
       setPieceBusy(false)
     }
@@ -919,7 +977,7 @@ function AnalysisResult({report, originalFile}:{report:AnalysisReport;originalFi
           </select>
         </label>
         <button className="primary-button" disabled={pieceBusy} onClick={handleGeneratePiece}>
-          {pieceBusy ? pieceStage || 'Gerando rascunho...' : 'Gerar Rascunho'} <ChevronRight size={18}/>
+          {pieceBusy ? pieceStage || 'Gerando rascunho...' : `Gerar Rascunho${!isAdmin && piecePriceCents>0 ? ` — ${formatBRL(piecePriceCents)}` : ''}`} <ChevronRight size={18}/>
         </button>
         {pieceError && <p className="analysis-error">{pieceError}</p>}
       </div>
@@ -1108,145 +1166,119 @@ function LoginPage() {
 }
 
 
-function SubscriptionPage({user,subscriber}:{user:User;subscriber:SubscriberItem|null}) {
-  const [config,setConfig]=useState<SubscriptionConfig>({
-    monthlyPriceLabel:'',
-    annualPriceLabel:'',
-    monthlyPaymentUrl:'',
-    annualPaymentUrl:'',
-    paymentInstructions:''
-  })
 
-  useEffect(()=>{
-    if(!db) return
-    return onSnapshot(doc(db,'subscriptionConfig','main'), snap=>{
-      if(snap.exists()) setConfig(prev=>({...prev,...snap.data()} as SubscriptionConfig))
-    })
-  },[])
+function WalletFundingPanel({config,missingCents}:{config:WalletConfig;missingCents:number}) {
+  const packages = [
+    {value:config.package1Cents,url:config.package1Url},
+    {value:config.package2Cents,url:config.package2Url},
+    {value:config.package3Cents,url:config.package3Url}
+  ].filter(item=>item.value>0 && item.url)
 
-  const status = subscriber?.status || 'pendente'
-  const statusText:Record<string,string> = {
-    pendente:'Assinatura pendente',
-    inativo:'Assinatura inativa',
-    bloqueado:'Acesso bloqueado',
-    cancelado:'Assinatura cancelada'
-  }
+  return <div className="wallet-funding-panel">
+    <p>Saldo insuficiente. Adicione pelo menos <b>{formatBRL(Math.max(0,missingCents))}</b>.</p>
+    {packages.length
+      ? <div className="wallet-package-actions">{packages.map((item,index)=>
+          <button key={index} type="button" onClick={()=>window.open(item.url,'_blank','noopener,noreferrer')}>
+            Adicionar {formatBRL(item.value)}
+          </button>)}</div>
+      : <small>Os links de recarga ainda não foram configurados.</small>}
+    {config.paymentInstructions && <small>{config.paymentInstructions}</small>}
+  </div>
+}
 
-  function openPayment(url:string){
-    if(!url) return
-    window.open(url,'_blank','noopener,noreferrer')
-  }
-
+function WalletBlockedPage({user,wallet}:{user:User;wallet:WalletRecord|null}) {
+  const status = wallet?.status || 'inativo'
   return <div className="subscription-shell">
     <div className="subscription-card">
       <div className="auth-brand">
         <img className="logo-light" src="/assets/logo-processo-360-ia.svg" alt="Processo 360 IA" />
         <img className="logo-dark" src="/assets/logo-processo-360-ia-dark.svg" alt="Processo 360 IA" />
       </div>
-
-      <span className={`subscriber-status-badge ${status}`}>{statusText[status] || 'Assinatura necessária'}</span>
-      <h1>Ative sua assinatura</h1>
-      <p className="muted">Sua conta está cadastrada como <b>{user.email}</b>. Para utilizar as análises e peças jurídicas, é necessária uma assinatura ativa.</p>
-
-      <div className="subscription-plans">
-        <article>
-          <CreditCard size={24}/>
-          <h3>Assinatura mensal</h3>
-          <strong>{config.monthlyPriceLabel || 'Valor a definir'}</strong>
-          <button className="primary-button" disabled={!config.monthlyPaymentUrl} onClick={()=>openPayment(config.monthlyPaymentUrl)}>
-            Ir para pagamento mensal
-          </button>
-        </article>
-        <article>
-          <CreditCard size={24}/>
-          <h3>Assinatura anual</h3>
-          <strong>{config.annualPriceLabel || 'Valor a definir'}</strong>
-          <button className="primary-button" disabled={!config.annualPaymentUrl} onClick={()=>openPayment(config.annualPaymentUrl)}>
-            Ir para pagamento anual
-          </button>
-        </article>
-      </div>
-
-      {(config.paymentInstructions || (!config.monthlyPaymentUrl && !config.annualPaymentUrl)) &&
-        <div className="subscription-notice">
-          {config.paymentInstructions || 'O link de pagamento ainda não foi configurado pelo administrador.'}
-        </div>}
-
-      <p className="subscription-footnote">Após a confirmação do pagamento e ativação da assinatura, o acesso ao Processo 360 IA será liberado.</p>
+      <span className={`subscriber-status-badge ${status}`}>{status === 'bloqueado' ? 'Acesso bloqueado' : 'Acesso inativo'}</span>
+      <h1>Acesso indisponível</h1>
+      <p className="muted">A conta <b>{user.email}</b> está com acesso {status}. Entre em contato com o administrador para regularização.</p>
       <button className="secondary-button" onClick={()=>auth&&signOut(auth)}>Sair da conta</button>
     </div>
   </div>
 }
 
-function SubscriberManager({user,onLogout}:{user:User;onLogout:()=>void}) {
-  const [items,setItems]=useState<SubscriberItem[]>([])
+function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
+  const [items,setItems]=useState<WalletRecord[]>([])
   const [filter,setFilter]=useState('')
   const [error,setError]=useState('')
   const [savingConfig,setSavingConfig]=useState(false)
-  const [config,setConfig]=useState<SubscriptionConfig>({
-    monthlyPriceLabel:'',
-    annualPriceLabel:'',
-    monthlyPaymentUrl:'',
-    annualPaymentUrl:'',
+  const [adjustingUid,setAdjustingUid]=useState<string|null>(null)
+  const [config,setConfig]=useState<WalletConfig>({
+    analysisMinimumCents:0,
+    analysisPerPageCents:0,
+    piecePriceCents:0,
+    package1Cents:0,package1Url:'',
+    package2Cents:0,package2Url:'',
+    package3Cents:0,package3Url:'',
     paymentInstructions:''
   })
 
   useEffect(()=>{
     if(!db) return
-    const unsubscribeSubscribers = onSnapshot(collection(db,'subscribers'), snap=>{
-      const rows=snap.docs.map(d=>({id:d.id,...d.data()} as SubscriberItem))
+    const unsubscribeWallets = onSnapshot(collection(db,'wallets'), snap=>{
+      const rows=snap.docs.map(d=>({id:d.id,...d.data()} as WalletRecord))
       rows.sort((a,b)=>String(a.email||'').localeCompare(String(b.email||'')))
       setItems(rows)
-    },()=>setError('Não foi possível carregar os assinantes.'))
+    },()=>setError('Não foi possível carregar os usuários.'))
 
-    const unsubscribeConfig = onSnapshot(doc(db,'subscriptionConfig','main'), snap=>{
-      if(snap.exists()) setConfig(prev=>({...prev,...snap.data()} as SubscriptionConfig))
+    const unsubscribeConfig = onSnapshot(doc(db,'walletConfig','main'), snap=>{
+      if(snap.exists()) setConfig(prev=>({...prev,...snap.data()} as WalletConfig))
     })
 
-    return ()=>{unsubscribeSubscribers();unsubscribeConfig()}
+    return ()=>{unsubscribeWallets();unsubscribeConfig()}
   },[])
 
-  async function changeStatus(item:SubscriberItem,status:SubscriberStatus){
+  async function changeStatus(item:WalletRecord,status:WalletStatus){
     if(!db) return
     setError('')
     try{
-      const payload:any={
+      await updateDoc(doc(db,'wallets',item.id),{
         status,
-        updatedAt:serverTimestamp(),
-        updatedBy:user.email
-      }
-      if(status==='ativo'){
-        payload.paymentStatus='confirmado'
-        payload.activatedAt=serverTimestamp()
-      }
-      await updateDoc(doc(db,'subscribers',item.id),payload)
-    }catch{
-      setError('Não foi possível alterar o status do assinante.')
-    }
-  }
-
-  async function changePlan(item:SubscriberItem,subscriptionType:SubscriptionType){
-    if(!db) return
-    try{
-      await updateDoc(doc(db,'subscribers',item.id),{
-        subscriptionType,
         updatedAt:serverTimestamp(),
         updatedBy:user.email
       })
     }catch{
-      setError('Não foi possível alterar o tipo de assinatura.')
+      setError('Não foi possível alterar o status do usuário.')
     }
   }
 
-  async function removeSubscriber(item:SubscriberItem){
+  async function adjustBalance(item:WalletRecord){
     if(!functions) return
-    if(!window.confirm(`Excluir definitivamente o assinante ${item.email}? O acesso de autenticação também será removido.`)) return
+    const raw=window.prompt(`Ajuste de saldo de ${item.email}.\nDigite o valor em reais. Use número negativo para retirar saldo.\nSaldo atual: ${formatBRL(item.balanceCents||0)}`)
+    if(raw===null) return
+    const normalized=raw.replace(/\./g,'').replace(',','.')
+    const value=Number(normalized)
+    if(!Number.isFinite(value) || value===0){
+      window.alert('Informe um valor válido diferente de zero.')
+      return
+    }
+    const reason=window.prompt('Motivo do ajuste (opcional):') || ''
+    setAdjustingUid(item.uid)
     try{
-      const call=httpsCallable(functions,'adminDeleteSubscriber')
+      const call=httpsCallable(functions,'adminAdjustWallet')
+      await call({uid:item.uid,deltaCents:Math.round(value*100),reason})
+    }catch(err:any){
+      console.error(err)
+      setError('Não foi possível ajustar o saldo.')
+    }finally{
+      setAdjustingUid(null)
+    }
+  }
+
+  async function removeWalletUser(item:WalletRecord){
+    if(!functions) return
+    if(!window.confirm(`Excluir definitivamente o usuário ${item.email}? A conta de autenticação também será removida.`)) return
+    try{
+      const call=httpsCallable(functions,'adminDeleteWalletUser')
       await call({uid:item.uid})
     }catch(err:any){
       console.error(err)
-      setError('Não foi possível excluir o assinante.')
+      setError('Não foi possível excluir o usuário.')
     }
   }
 
@@ -1256,13 +1288,13 @@ function SubscriberManager({user,onLogout}:{user:User;onLogout:()=>void}) {
     setSavingConfig(true)
     setError('')
     try{
-      await setDoc(doc(db,'subscriptionConfig','main'),{
+      await setDoc(doc(db,'walletConfig','main'),{
         ...config,
         updatedAt:serverTimestamp(),
         updatedBy:user.email
       },{merge:true})
     }catch{
-      setError('Não foi possível salvar a configuração de pagamento.')
+      setError('Não foi possível salvar a configuração da carteira.')
     }finally{
       setSavingConfig(false)
     }
@@ -1274,83 +1306,84 @@ function SubscriberManager({user,onLogout}:{user:User;onLogout:()=>void}) {
     return String(item.email||'').toLowerCase().includes(q) || String(item.displayName||'').toLowerCase().includes(q)
   })
 
-  const totals={
-    total:items.length,
-    ativo:items.filter(i=>i.status==='ativo').length,
-    pendente:items.filter(i=>i.status==='pendente').length,
-    bloqueado:items.filter(i=>i.status==='bloqueado').length
-  }
+  const totalBalance=items.reduce((sum,item)=>sum+Math.max(0,Number(item.balanceCents||0)),0)
 
   return <>
     <div className="admin-header">
       <div>
-        <span className="admin-badge"><Users/> Assinaturas</span>
-        <h2>Controle de assinantes</h2>
-        <p className="muted">Ative, desative, bloqueie e exclua assinantes. O padrão segue o controle comercial já usado no CondoGestor.</p>
+        <span className="admin-badge"><Users/> Usuários e saldo</span>
+        <h2>Carteira pré-paga</h2>
+        <p className="muted">Todo usuário começa com saldo zero. O valor de cada análise é calculado antes do uso e debitado da carteira.</p>
       </div>
       <button className="secondary-button compact" onClick={onLogout}>Sair</button>
     </div>
 
     <div className="subscriber-summary">
-      <span><b>{totals.total}</b><small>Total</small></span>
-      <span><b>{totals.ativo}</b><small>Ativos</small></span>
-      <span><b>{totals.pendente}</b><small>Pendentes</small></span>
-      <span><b>{totals.bloqueado}</b><small>Bloqueados</small></span>
+      <span><b>{items.length}</b><small>Usuários</small></span>
+      <span><b>{items.filter(i=>i.status==='ativo').length}</b><small>Ativos</small></span>
+      <span><b>{items.filter(i=>i.status==='bloqueado').length}</b><small>Bloqueados</small></span>
+      <span><b>{formatBRL(totalBalance)}</b><small>Saldo total</small></span>
     </div>
 
     <form className="subscription-config-form" onSubmit={saveConfig}>
-      <div className="form-title"><CreditCard size={18}/><b>Assinatura e links de pagamento</b></div>
+      <div className="form-title"><CreditCard size={18}/><b>Preços e recargas</b></div>
+      <p className="muted">Estes valores são administrativos. O usuário verá somente o preço final da operação.</p>
       <div className="admin-form-grid">
-        <label>Valor mensal
-          <input value={config.monthlyPriceLabel} onChange={e=>setConfig({...config,monthlyPriceLabel:e.target.value})} placeholder="Ex.: R$ 99,00 / mês"/>
+        <label>Preço mínimo por análise (centavos)
+          <input type="number" min="0" value={config.analysisMinimumCents} onChange={e=>setConfig({...config,analysisMinimumCents:Number(e.target.value)||0})}/>
         </label>
-        <label>Valor anual
-          <input value={config.annualPriceLabel} onChange={e=>setConfig({...config,annualPriceLabel:e.target.value})} placeholder="Ex.: R$ 990,00 / ano"/>
+        <label>Preço por página (centavos)
+          <input type="number" min="0" step="0.01" value={config.analysisPerPageCents} onChange={e=>setConfig({...config,analysisPerPageCents:Number(e.target.value)||0})}/>
         </label>
       </div>
-      <label>Link de pagamento mensal
-        <input type="url" value={config.monthlyPaymentUrl} onChange={e=>setConfig({...config,monthlyPaymentUrl:e.target.value})} placeholder="https://..."/>
+      <label>Preço para gerar peça jurídica (centavos)
+        <input type="number" min="0" value={config.piecePriceCents} onChange={e=>setConfig({...config,piecePriceCents:Number(e.target.value)||0})}/>
       </label>
-      <label>Link de pagamento anual
-        <input type="url" value={config.annualPaymentUrl} onChange={e=>setConfig({...config,annualPaymentUrl:e.target.value})} placeholder="https://..."/>
-      </label>
-      <label>Orientação ao assinante
-        <input value={config.paymentInstructions||''} onChange={e=>setConfig({...config,paymentInstructions:e.target.value})} placeholder="Ex.: Após o pagamento, aguarde a confirmação da assinatura."/>
+
+      {[1,2,3].map(index=>{
+        const valueKey=`package${index}Cents` as 'package1Cents'
+        const urlKey=`package${index}Url` as 'package1Url'
+        return <div className="admin-form-grid" key={index}>
+          <label>Recarga {index} — valor (centavos)
+            <input type="number" min="0" value={Number(config[valueKey]||0)} onChange={e=>setConfig({...config,[valueKey]:Number(e.target.value)||0})}/>
+          </label>
+          <label>Recarga {index} — link de pagamento
+            <input type="url" value={String(config[urlKey]||'')} onChange={e=>setConfig({...config,[urlKey]:e.target.value})} placeholder="Deixe em branco até criar o link"/>
+          </label>
+        </div>
+      })}
+      <label>Orientação ao usuário
+        <input value={config.paymentInstructions||''} onChange={e=>setConfig({...config,paymentInstructions:e.target.value})} placeholder="Ex.: Após o pagamento, o saldo será liberado."/>
       </label>
       <button className="primary-button compact" disabled={savingConfig}><Save size={17}/>{savingConfig?'Salvando...':'Salvar configuração'}</button>
     </form>
 
     <div className="subscriber-toolbar">
       <label><Search size={17}/><input value={filter} onChange={e=>setFilter(e.target.value)} placeholder="Buscar por nome ou e-mail"/></label>
-      <span>{visible.length} assinante(s)</span>
+      <span>{visible.length} usuário(s)</span>
     </div>
 
     {error&&<p className="error">{error}</p>}
 
     <div className="subscriber-table-wrap">
       <table className="subscriber-table">
-        <thead><tr><th>Assinante</th><th>Plano</th><th>Pagamento</th><th>Status</th><th>Ações</th></tr></thead>
+        <thead><tr><th>Usuário</th><th>Saldo</th><th>Status</th><th>Ações</th></tr></thead>
         <tbody>
           {visible.map(item=><tr key={item.id}>
             <td><strong>{item.displayName||'—'}</strong><small>{item.email}</small></td>
-            <td>
-              <select value={item.subscriptionType||'mensal'} onChange={e=>changePlan(item,e.target.value as SubscriptionType)}>
-                <option value="mensal">Mensal</option>
-                <option value="anual">Anual</option>
-              </select>
-            </td>
-            <td><span className={`payment-chip ${item.paymentStatus||'pendente'}`}>{item.paymentStatus||'pendente'}</span></td>
+            <td><strong>{formatBRL(item.balanceCents||0)}</strong></td>
             <td><span className={`subscriber-status-badge ${item.status}`}>{item.status}</span></td>
             <td>
               <div className="subscriber-actions">
                 <button className="sub-action activate" onClick={()=>changeStatus(item,'ativo')}>Ativar</button>
                 <button className="sub-action deactivate" onClick={()=>changeStatus(item,'inativo')}>Desativar</button>
                 <button className="sub-action block" onClick={()=>changeStatus(item,'bloqueado')}>Bloquear</button>
-                <button className="sub-action delete" onClick={()=>removeSubscriber(item)}><Trash2 size={14}/> Apagar</button>
+                <button className="sub-action" disabled={adjustingUid===item.uid} onClick={()=>adjustBalance(item)}>{adjustingUid===item.uid?'Ajustando...':'Ajustar saldo'}</button>
+                <button className="sub-action delete" onClick={()=>removeWalletUser(item)}><Trash2 size={14}/> Apagar</button>
               </div>
             </td>
           </tr>)}
-          {visible.length===0&&<tr><td colSpan={5}><div className="empty-admin"><Users/><b>Nenhum assinante encontrado</b></div></td></tr>}
+          {visible.length===0&&<tr><td colSpan={4}><div className="empty-admin"><Users/><b>Nenhum usuário encontrado</b></div></td></tr>}
         </tbody>
       </table>
     </div>
@@ -1358,7 +1391,7 @@ function SubscriberManager({user,onLogout}:{user:User;onLogout:()=>void}) {
 }
 
 function AdminModal({user,onUser,onClose}:{user:User|null;onUser:(u:User|null)=>void;onClose:()=>void}) {
-  const [section,setSection]=useState<'assinantes'|'prompts'>('assinantes')
+  const [section,setSection]=useState<'carteira'|'prompts'>('carteira')
   const [password,setPassword]=useState('')
   const [error,setError]=useState('')
   const [loading,setLoading]=useState(false)
@@ -1396,11 +1429,11 @@ function AdminModal({user,onUser,onClose}:{user:User|null;onUser:(u:User|null)=>
       {user
         ? <>
             <div className="admin-section-tabs">
-              <button className={section==='assinantes'?'active':''} onClick={()=>setSection('assinantes')}><Users size={17}/> Assinantes</button>
+              <button className={section==='carteira'?'active':''} onClick={()=>setSection('carteira')}><Users size={17}/> Carteira</button>
               <button className={section==='prompts'?'active':''} onClick={()=>setSection('prompts')}><BrainCircuit size={17}/> Prompts</button>
             </div>
-            {section === 'assinantes'
-              ? <SubscriberManager user={user} onLogout={logout}/>
+            {section === 'carteira'
+              ? <WalletManager user={user} onLogout={logout}/>
               : <PromptManager user={user} onLogout={logout}/>}
           </>
         : <form onSubmit={login}>
