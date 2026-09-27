@@ -1140,7 +1140,13 @@ function LoginPage() {
       <p className="muted">Use e-mail e senha ou sua conta Google.</p>
 
       <button type="button" className="google-login-button" onClick={loginWithGoogle} disabled={loading}>
-        Entrar com Google
+        <svg className="google-g-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="#4285F4" d="M21.35 12.2c0-.7-.06-1.22-.2-1.77H12v3.34h5.37a4.58 4.58 0 0 1-1.99 3.01l-.02.11 2.9 2.25.2.02c1.84-1.7 2.89-4.2 2.89-6.96Z"/>
+          <path fill="#34A853" d="M12 21.72c2.62 0 4.82-.86 6.43-2.36l-3.07-2.38c-.82.55-1.9.94-3.36.94-2.52 0-4.66-1.7-5.43-4.05l-.11.01-3.02 2.34-.04.1A9.72 9.72 0 0 0 12 21.72Z"/>
+          <path fill="#FBBC05" d="M6.57 13.87A5.84 5.84 0 0 1 6.25 12c0-.65.11-1.27.3-1.87v-.12L3.5 7.64l-.1.05A9.72 9.72 0 0 0 2.28 12c0 1.56.37 3.03 1.12 4.31l3.17-2.44Z"/>
+          <path fill="#EA4335" d="M12 6.08c1.82 0 3.05.78 3.75 1.43l2.74-2.68C16.81 3.27 14.62 2.28 12 2.28a9.72 9.72 0 0 0-8.6 5.41l3.15 2.44C7.34 7.78 9.48 6.08 12 6.08Z"/>
+        </svg>
+        <span>Entrar com Google</span>
       </button>
 
       <div className="auth-divider"><span>ou</span></div>
