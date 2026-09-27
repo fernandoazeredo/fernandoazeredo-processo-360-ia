@@ -12,12 +12,13 @@ const ADMIN_EMAIL = 'fernandoazeredo64@gmail.com'
 const APP_BUILD = String(import.meta.env.VITE_APP_BUILD || 'dev')
 
 type Area = 'Trabalhista' | 'Cível' | 'Criminal' | 'Ambiental' | 'Tributário' | 'Administrativo' | 'Previdenciário' | 'Consumidor' | 'Família' | 'Empresarial'
+type PromptArea = Area | 'Global'
 type PromptStatus = 'rascunho' | 'publicado' | 'inativo'
 
 type PromptItem = {
   id: string
   title: string
-  area: Area
+  area: PromptArea
   perspective: string
   purpose: string
   content: string
@@ -46,8 +47,18 @@ const promptPurposes = [
   'Confronto de alegações e provas',
   'Análise jurídica global',
   'Cenário percentual de risco',
-  'Relatório final'
+  'Relatório final',
+  'Motor B — Base Global',
+  'Motor B — Trabalhista — Reclamada — Contestação / Defesa',
+  'Motor B — Trabalhista — Reclamante — Petição Inicial',
+  'Motor B — Validador Factual',
+  'Motor B — Revisor Jurídico'
 ]
+
+const promptPerspectives: Record<PromptArea, string[]> = {
+  Global: ['Global'],
+  ...perspectives
+}
 
 const stages = [
   'Preparando o processo',
@@ -968,7 +979,7 @@ function PromptManager({user,onLogout}:{user:User;onLogout:()=>void}) {
   const [error,setError]=useState('')
   const [editingId,setEditingId]=useState<string|null>(null)
   const [title,setTitle]=useState('')
-  const [area,setArea]=useState<Area>('Trabalhista')
+  const [area,setArea]=useState<PromptArea>('Trabalhista')
   const [perspective,setPerspective]=useState('Reclamada')
   const [purpose,setPurpose]=useState(promptPurposes[0])
   const [content,setContent]=useState('')
@@ -991,9 +1002,9 @@ function PromptManager({user,onLogout}:{user:User;onLogout:()=>void}) {
     })
   },[])
 
-  function changeArea(next:Area){
+  function changeArea(next:PromptArea){
     setArea(next)
-    setPerspective(perspectives[next][0])
+    setPerspective(promptPerspectives[next][0])
   }
 
   function reset(){
@@ -1010,7 +1021,7 @@ function PromptManager({user,onLogout}:{user:User;onLogout:()=>void}) {
   function edit(item:PromptItem){
     setEditingId(item.id)
     setTitle(item.title)
-    setArea(item.area)
+    setArea(item.area as PromptArea)
     setPerspective(item.perspective)
     setPurpose(item.purpose)
     setContent(item.content)
@@ -1059,7 +1070,7 @@ function PromptManager({user,onLogout}:{user:User;onLogout:()=>void}) {
       <div>
         <span className="admin-badge"><ShieldCheck/> Administração</span>
         <h2>Painel de prompts</h2>
-        <p className="muted">Cadastre o comando usado em cada etapa, área e perspectiva da análise.</p>
+        <p className="muted">Cadastre os prompts do Motor A e do Motor B. Use Área Global / Perspectiva Global para regras comuns às peças.</p>
       </div>
       <button className="secondary-button compact" onClick={onLogout}>Sair</button>
     </div>
@@ -1074,13 +1085,13 @@ function PromptManager({user,onLogout}:{user:User;onLogout:()=>void}) {
 
         <div className="admin-form-grid">
           <label>Área
-            <select value={area} onChange={e=>changeArea(e.target.value as Area)}>
-              {Object.keys(perspectives).map(a=><option key={a}>{a}</option>)}
+            <select value={area} onChange={e=>changeArea(e.target.value as PromptArea)}>
+              {Object.keys(promptPerspectives).map(a=><option key={a}>{a}</option>)}
             </select>
           </label>
           <label>Perspectiva
             <select value={perspective} onChange={e=>setPerspective(e.target.value)}>
-              {perspectives[area].map(p=><option key={p}>{p}</option>)}
+              {promptPerspectives[area].map(p=><option key={p}>{p}</option>)}
             </select>
           </label>
         </div>
