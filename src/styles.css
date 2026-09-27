@@ -2370,6 +2370,7 @@ select:focus,input:focus,textarea:focus{
   display:grid;
   place-items:center;
   padding:24px;
+  overflow-x:hidden;
   background:
     radial-gradient(circle at 20% 20%, rgba(20,140,255,.16), transparent 34%),
     radial-gradient(circle at 82% 78%, rgba(255,90,31,.12), transparent 32%),
@@ -2379,6 +2380,8 @@ select:focus,input:focus,textarea:focus{
 .auth-card{
   width:min(100%,460px);
   padding:32px;
+  position:relative;
+  overflow:hidden;
   border:1px solid var(--border);
   border-radius:22px;
   background:var(--surface);
@@ -2389,12 +2392,19 @@ select:focus,input:focus,textarea:focus{
   align-items:center;
   justify-content:center;
   margin-bottom:22px;
+  width:100%;
+  overflow:hidden;
 }
 .auth-brand img{
   max-width:250px;
   width:100%;
   height:auto;
+  display:block;
 }
+.auth-brand .logo-light{display:block!important}
+.auth-brand .logo-dark{display:none!important}
+:root[data-theme="dark"] .auth-brand .logo-light{display:none!important}
+:root[data-theme="dark"] .auth-brand .logo-dark{display:block!important}
 .auth-card h1{
   margin:12px 0 8px;
   font-size:2rem;
@@ -2420,18 +2430,29 @@ select:focus,input:focus,textarea:focus{
 }
 .google-login-button{
   width:100%;
-  min-height:46px;
+  min-height:48px;
   margin-top:14px;
-  border:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  border:1px solid #dadce0;
   border-radius:12px;
-  background:var(--surface-2);
-  color:var(--text);
+  background:#ffffff;
+  color:#3c4043;
   font:inherit;
   font-weight:800;
   cursor:pointer;
+  box-shadow:0 1px 2px rgba(0,0,0,.08);
 }
 .google-login-button:hover{
-  border-color:#5d62ff;
+  background:#f8f9fa;
+  border-color:#c6c9cf;
+}
+.google-g-icon{
+  width:20px;
+  height:20px;
+  flex:0 0 20px;
 }
 .google-login-button:disabled{
   opacity:.6;
