@@ -1,8 +1,9 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, signOut, User } from 'firebase/auth'
-import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore'
-import { AlertTriangle, BrainCircuit, CheckCircle2, ChevronRight, Download, FilePenLine, FileText, LockKeyhole, Moon, Pencil, Plus, Save, Search, ShieldCheck, Sun, Trash2, UploadCloud, X } from 'lucide-react'
-import { auth, db, firebaseConfigured } from './firebase'
+import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore'
+import { AlertTriangle, BrainCircuit, CheckCircle2, ChevronRight, CreditCard, Download, FilePenLine, FileText, LockKeyhole, Moon, Pencil, Plus, Save, Search, ShieldCheck, Sun, Trash2, UploadCloud, Users, X } from 'lucide-react'
+import { auth, db, firebaseConfigured, functions } from './firebase'
+import { httpsCallable } from 'firebase/functions'
 import { analyzeUploadedProcess } from './ai'
 import type { AnalysisReport } from './ai'
 import { confirmClaimInOriginal, generateLegalPiece, pieceTypeOptions, suggestPieceType } from './pieces'
@@ -14,6 +15,32 @@ const APP_BUILD = String(import.meta.env.VITE_APP_BUILD || 'dev')
 type Area = 'Trabalhista' | 'Cível' | 'Criminal' | 'Ambiental' | 'Tributário' | 'Administrativo' | 'Previdenciário' | 'Consumidor' | 'Família' | 'Empresarial'
 type PromptArea = Area | 'Global'
 type PromptStatus = 'rascunho' | 'publicado' | 'inativo'
+type SubscriberStatus = 'pendente' | 'ativo' | 'inativo' | 'bloqueado' | 'cancelado'
+type SubscriptionType = 'mensal' | 'anual'
+type PaymentStatus = 'pendente' | 'confirmado'
+
+type SubscriberItem = {
+  id: string
+  uid: string
+  email: string
+  displayName?: string
+  status: SubscriberStatus
+  subscriptionType: SubscriptionType
+  paymentStatus: PaymentStatus
+  createdAt?: any
+  updatedAt?: any
+  activatedAt?: any
+  notes?: string
+}
+
+type SubscriptionConfig = {
+  monthlyPriceLabel: string
+  annualPriceLabel: string
+  monthlyPaymentUrl: string
+  annualPaymentUrl: string
+  paymentInstructions?: string
+}
+
 
 type PromptItem = {
   id: string
@@ -182,6 +209,8 @@ function App() {
   const [adminUser, setAdminUser] = useState<User | null>(null)
   const [appUser, setAppUser] = useState<User | null>(null)
   const [authReady, setAuthReady] = useState(false)
+  const [subscriber, setSubscriber] = useState<SubscriberItem | null>(null)
+  const [subscriberReady, setSubscriberReady] = useState(false)
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
@@ -199,6 +228,48 @@ function App() {
       setAuthReady(true)
     })
   }, [])
+
+  useEffect(() => {
+    if (!appUser || !db) {
+      setSubscriber(null)
+      setSubscriberReady(!appUser)
+      return
+    }
+
+    setSubscriberReady(false)
+    const subscriberRef = doc(db, 'subscribers', appUser.uid)
+    let creating = false
+
+    return onSnapshot(subscriberRef, async snap => {
+      if (snap.exists()) {
+        setSubscriber({ id: snap.id, ...snap.data() } as SubscriberItem)
+        setSubscriberReady(true)
+        return
+      }
+
+      if (creating) return
+      creating = true
+      try {
+        await setDoc(subscriberRef, {
+          uid: appUser.uid,
+          email: String(appUser.email || '').toLowerCase(),
+          displayName: appUser.displayName || '',
+          status: 'pendente',
+          subscriptionType: 'mensal',
+          paymentStatus: 'pendente',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        })
+      } catch (error) {
+        console.error('[Processo 360 IA] Falha ao criar cadastro de assinante.', error)
+        setSubscriberReady(true)
+      }
+    }, error => {
+      console.error('[Processo 360 IA] Falha ao consultar assinatura.', error)
+      setSubscriberReady(true)
+    })
+  }, [appUser?.uid])
+
 
   function changeArea(next: Area) {
     setArea(next)
@@ -256,6 +327,14 @@ function App() {
 
   if (!appUser) {
     return <LoginPage />
+  }
+
+  if (appUser.email !== ADMIN_EMAIL && !subscriberReady) {
+    return <div className="auth-shell"><div className="auth-card"><BrainLoader/><p className="muted">Verificando assinatura...</p></div></div>
+  }
+
+  if (appUser.email !== ADMIN_EMAIL && subscriber?.status !== 'ativo') {
+    return <SubscriptionPage user={appUser} subscriber={subscriber} />
   }
 
   return (
@@ -1028,7 +1107,258 @@ function LoginPage() {
   </div>
 }
 
+
+function SubscriptionPage({user,subscriber}:{user:User;subscriber:SubscriberItem|null}) {
+  const [config,setConfig]=useState<SubscriptionConfig>({
+    monthlyPriceLabel:'',
+    annualPriceLabel:'',
+    monthlyPaymentUrl:'',
+    annualPaymentUrl:'',
+    paymentInstructions:''
+  })
+
+  useEffect(()=>{
+    if(!db) return
+    return onSnapshot(doc(db,'subscriptionConfig','main'), snap=>{
+      if(snap.exists()) setConfig(prev=>({...prev,...snap.data()} as SubscriptionConfig))
+    })
+  },[])
+
+  const status = subscriber?.status || 'pendente'
+  const statusText:Record<string,string> = {
+    pendente:'Assinatura pendente',
+    inativo:'Assinatura inativa',
+    bloqueado:'Acesso bloqueado',
+    cancelado:'Assinatura cancelada'
+  }
+
+  function openPayment(url:string){
+    if(!url) return
+    window.open(url,'_blank','noopener,noreferrer')
+  }
+
+  return <div className="subscription-shell">
+    <div className="subscription-card">
+      <div className="auth-brand">
+        <img className="logo-light" src="/assets/logo-processo-360-ia.svg" alt="Processo 360 IA" />
+        <img className="logo-dark" src="/assets/logo-processo-360-ia-dark.svg" alt="Processo 360 IA" />
+      </div>
+
+      <span className={`subscriber-status-badge ${status}`}>{statusText[status] || 'Assinatura necessária'}</span>
+      <h1>Ative sua assinatura</h1>
+      <p className="muted">Sua conta está cadastrada como <b>{user.email}</b>. Para utilizar as análises e peças jurídicas, é necessária uma assinatura ativa.</p>
+
+      <div className="subscription-plans">
+        <article>
+          <CreditCard size={24}/>
+          <h3>Assinatura mensal</h3>
+          <strong>{config.monthlyPriceLabel || 'Valor a definir'}</strong>
+          <button className="primary-button" disabled={!config.monthlyPaymentUrl} onClick={()=>openPayment(config.monthlyPaymentUrl)}>
+            Ir para pagamento mensal
+          </button>
+        </article>
+        <article>
+          <CreditCard size={24}/>
+          <h3>Assinatura anual</h3>
+          <strong>{config.annualPriceLabel || 'Valor a definir'}</strong>
+          <button className="primary-button" disabled={!config.annualPaymentUrl} onClick={()=>openPayment(config.annualPaymentUrl)}>
+            Ir para pagamento anual
+          </button>
+        </article>
+      </div>
+
+      {(config.paymentInstructions || (!config.monthlyPaymentUrl && !config.annualPaymentUrl)) &&
+        <div className="subscription-notice">
+          {config.paymentInstructions || 'O link de pagamento ainda não foi configurado pelo administrador.'}
+        </div>}
+
+      <p className="subscription-footnote">Após a confirmação do pagamento e ativação da assinatura, o acesso ao Processo 360 IA será liberado.</p>
+      <button className="secondary-button" onClick={()=>auth&&signOut(auth)}>Sair da conta</button>
+    </div>
+  </div>
+}
+
+function SubscriberManager({user,onLogout}:{user:User;onLogout:()=>void}) {
+  const [items,setItems]=useState<SubscriberItem[]>([])
+  const [filter,setFilter]=useState('')
+  const [error,setError]=useState('')
+  const [savingConfig,setSavingConfig]=useState(false)
+  const [config,setConfig]=useState<SubscriptionConfig>({
+    monthlyPriceLabel:'',
+    annualPriceLabel:'',
+    monthlyPaymentUrl:'',
+    annualPaymentUrl:'',
+    paymentInstructions:''
+  })
+
+  useEffect(()=>{
+    if(!db) return
+    const unsubscribeSubscribers = onSnapshot(collection(db,'subscribers'), snap=>{
+      const rows=snap.docs.map(d=>({id:d.id,...d.data()} as SubscriberItem))
+      rows.sort((a,b)=>String(a.email||'').localeCompare(String(b.email||'')))
+      setItems(rows)
+    },()=>setError('Não foi possível carregar os assinantes.'))
+
+    const unsubscribeConfig = onSnapshot(doc(db,'subscriptionConfig','main'), snap=>{
+      if(snap.exists()) setConfig(prev=>({...prev,...snap.data()} as SubscriptionConfig))
+    })
+
+    return ()=>{unsubscribeSubscribers();unsubscribeConfig()}
+  },[])
+
+  async function changeStatus(item:SubscriberItem,status:SubscriberStatus){
+    if(!db) return
+    setError('')
+    try{
+      const payload:any={
+        status,
+        updatedAt:serverTimestamp(),
+        updatedBy:user.email
+      }
+      if(status==='ativo'){
+        payload.paymentStatus='confirmado'
+        payload.activatedAt=serverTimestamp()
+      }
+      await updateDoc(doc(db,'subscribers',item.id),payload)
+    }catch{
+      setError('Não foi possível alterar o status do assinante.')
+    }
+  }
+
+  async function changePlan(item:SubscriberItem,subscriptionType:SubscriptionType){
+    if(!db) return
+    try{
+      await updateDoc(doc(db,'subscribers',item.id),{
+        subscriptionType,
+        updatedAt:serverTimestamp(),
+        updatedBy:user.email
+      })
+    }catch{
+      setError('Não foi possível alterar o tipo de assinatura.')
+    }
+  }
+
+  async function removeSubscriber(item:SubscriberItem){
+    if(!functions) return
+    if(!window.confirm(`Excluir definitivamente o assinante ${item.email}? O acesso de autenticação também será removido.`)) return
+    try{
+      const call=httpsCallable(functions,'adminDeleteSubscriber')
+      await call({uid:item.uid})
+    }catch(err:any){
+      console.error(err)
+      setError('Não foi possível excluir o assinante.')
+    }
+  }
+
+  async function saveConfig(e:FormEvent){
+    e.preventDefault()
+    if(!db) return
+    setSavingConfig(true)
+    setError('')
+    try{
+      await setDoc(doc(db,'subscriptionConfig','main'),{
+        ...config,
+        updatedAt:serverTimestamp(),
+        updatedBy:user.email
+      },{merge:true})
+    }catch{
+      setError('Não foi possível salvar a configuração de pagamento.')
+    }finally{
+      setSavingConfig(false)
+    }
+  }
+
+  const visible=items.filter(item=>{
+    const q=filter.trim().toLowerCase()
+    if(!q) return true
+    return String(item.email||'').toLowerCase().includes(q) || String(item.displayName||'').toLowerCase().includes(q)
+  })
+
+  const totals={
+    total:items.length,
+    ativo:items.filter(i=>i.status==='ativo').length,
+    pendente:items.filter(i=>i.status==='pendente').length,
+    bloqueado:items.filter(i=>i.status==='bloqueado').length
+  }
+
+  return <>
+    <div className="admin-header">
+      <div>
+        <span className="admin-badge"><Users/> Assinaturas</span>
+        <h2>Controle de assinantes</h2>
+        <p className="muted">Ative, desative, bloqueie e exclua assinantes. O padrão segue o controle comercial já usado no CondoGestor.</p>
+      </div>
+      <button className="secondary-button compact" onClick={onLogout}>Sair</button>
+    </div>
+
+    <div className="subscriber-summary">
+      <span><b>{totals.total}</b><small>Total</small></span>
+      <span><b>{totals.ativo}</b><small>Ativos</small></span>
+      <span><b>{totals.pendente}</b><small>Pendentes</small></span>
+      <span><b>{totals.bloqueado}</b><small>Bloqueados</small></span>
+    </div>
+
+    <form className="subscription-config-form" onSubmit={saveConfig}>
+      <div className="form-title"><CreditCard size={18}/><b>Assinatura e links de pagamento</b></div>
+      <div className="admin-form-grid">
+        <label>Valor mensal
+          <input value={config.monthlyPriceLabel} onChange={e=>setConfig({...config,monthlyPriceLabel:e.target.value})} placeholder="Ex.: R$ 99,00 / mês"/>
+        </label>
+        <label>Valor anual
+          <input value={config.annualPriceLabel} onChange={e=>setConfig({...config,annualPriceLabel:e.target.value})} placeholder="Ex.: R$ 990,00 / ano"/>
+        </label>
+      </div>
+      <label>Link de pagamento mensal
+        <input type="url" value={config.monthlyPaymentUrl} onChange={e=>setConfig({...config,monthlyPaymentUrl:e.target.value})} placeholder="https://..."/>
+      </label>
+      <label>Link de pagamento anual
+        <input type="url" value={config.annualPaymentUrl} onChange={e=>setConfig({...config,annualPaymentUrl:e.target.value})} placeholder="https://..."/>
+      </label>
+      <label>Orientação ao assinante
+        <input value={config.paymentInstructions||''} onChange={e=>setConfig({...config,paymentInstructions:e.target.value})} placeholder="Ex.: Após o pagamento, aguarde a confirmação da assinatura."/>
+      </label>
+      <button className="primary-button compact" disabled={savingConfig}><Save size={17}/>{savingConfig?'Salvando...':'Salvar configuração'}</button>
+    </form>
+
+    <div className="subscriber-toolbar">
+      <label><Search size={17}/><input value={filter} onChange={e=>setFilter(e.target.value)} placeholder="Buscar por nome ou e-mail"/></label>
+      <span>{visible.length} assinante(s)</span>
+    </div>
+
+    {error&&<p className="error">{error}</p>}
+
+    <div className="subscriber-table-wrap">
+      <table className="subscriber-table">
+        <thead><tr><th>Assinante</th><th>Plano</th><th>Pagamento</th><th>Status</th><th>Ações</th></tr></thead>
+        <tbody>
+          {visible.map(item=><tr key={item.id}>
+            <td><strong>{item.displayName||'—'}</strong><small>{item.email}</small></td>
+            <td>
+              <select value={item.subscriptionType||'mensal'} onChange={e=>changePlan(item,e.target.value as SubscriptionType)}>
+                <option value="mensal">Mensal</option>
+                <option value="anual">Anual</option>
+              </select>
+            </td>
+            <td><span className={`payment-chip ${item.paymentStatus||'pendente'}`}>{item.paymentStatus||'pendente'}</span></td>
+            <td><span className={`subscriber-status-badge ${item.status}`}>{item.status}</span></td>
+            <td>
+              <div className="subscriber-actions">
+                <button className="sub-action activate" onClick={()=>changeStatus(item,'ativo')}>Ativar</button>
+                <button className="sub-action deactivate" onClick={()=>changeStatus(item,'inativo')}>Desativar</button>
+                <button className="sub-action block" onClick={()=>changeStatus(item,'bloqueado')}>Bloquear</button>
+                <button className="sub-action delete" onClick={()=>removeSubscriber(item)}><Trash2 size={14}/> Apagar</button>
+              </div>
+            </td>
+          </tr>)}
+          {visible.length===0&&<tr><td colSpan={5}><div className="empty-admin"><Users/><b>Nenhum assinante encontrado</b></div></td></tr>}
+        </tbody>
+      </table>
+    </div>
+  </>
+}
+
 function AdminModal({user,onUser,onClose}:{user:User|null;onUser:(u:User|null)=>void;onClose:()=>void}) {
+  const [section,setSection]=useState<'assinantes'|'prompts'>('assinantes')
   const [password,setPassword]=useState('')
   const [error,setError]=useState('')
   const [loading,setLoading]=useState(false)
@@ -1064,7 +1394,15 @@ function AdminModal({user,onUser,onClose}:{user:User|null;onUser:(u:User|null)=>
     <div className={`admin-modal ${user ? 'admin-modal-large' : ''}`}>
       <button className="modal-close" onClick={onClose} aria-label="Fechar"><X/></button>
       {user
-        ? <PromptManager user={user} onLogout={logout}/>
+        ? <>
+            <div className="admin-section-tabs">
+              <button className={section==='assinantes'?'active':''} onClick={()=>setSection('assinantes')}><Users size={17}/> Assinantes</button>
+              <button className={section==='prompts'?'active':''} onClick={()=>setSection('prompts')}><BrainCircuit size={17}/> Prompts</button>
+            </div>
+            {section === 'assinantes'
+              ? <SubscriberManager user={user} onLogout={logout}/>
+              : <PromptManager user={user} onLogout={logout}/>}
+          </>
         : <form onSubmit={login}>
             <span className="admin-badge"><LockKeyhole/> Acesso restrito</span>
             <h2>Área ADM</h2>
