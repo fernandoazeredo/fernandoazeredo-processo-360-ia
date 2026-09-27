@@ -1,0 +1,58 @@
+/* Processo 360 IA — destaques do login: lista limpa, sem cards */
+.auth-highlights{
+  display:grid!important;
+  grid-template-columns:1fr!important;
+  gap:14px!important;
+  margin-top:22px!important;
+  padding-top:20px!important;
+  border-top:1px solid var(--border)!important;
+}
+.auth-highlights article{
+  position:relative!important;
+  display:flex!important;
+  align-items:flex-start!important;
+  gap:12px!important;
+  padding:0!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+}
+.auth-highlights article>svg{
+  display:none!important;
+}
+.auth-highlights article::before{
+  content:'✓'!important;
+  flex:0 0 auto!important;
+  width:25px!important;
+  height:25px!important;
+  display:grid!important;
+  place-items:center!important;
+  margin-top:1px!important;
+  border-radius:50%!important;
+  background:transparent!important;
+  color:#20e77a!important;
+  font-size:1.35rem!important;
+  line-height:1!important;
+  font-weight:1000!important;
+  text-shadow:0 0 10px rgba(32,231,122,.62)!important;
+}
+.auth-highlights article div{
+  display:grid!important;
+  gap:2px!important;
+}
+.auth-highlights b{
+  color:var(--text)!important;
+  font-size:.96rem!important;
+  line-height:1.25!important;
+}
+.auth-highlights span{
+  color:var(--muted)!important;
+  font-size:.84rem!important;
+  line-height:1.4!important;
+}
+@media(max-width:600px){
+  .auth-highlights{gap:16px!important;margin-top:20px!important;padding-top:18px!important}
+  .auth-highlights article{gap:10px!important}
+  .auth-highlights article::before{width:23px!important;height:23px!important;font-size:1.25rem!important}
+}
