@@ -1,5 +1,6 @@
-/* Ajuste exclusivo da logomarca na tela de login em dispositivos móveis. */
+/* Ajustes exclusivos da tela de login em dispositivos móveis. */
 @media (max-width: 700px) {
+  /* Logomarca: um pouco maior e rigorosamente centralizada no card. */
   .auth-brand {
     width: 100%;
     display: flex;
@@ -8,14 +9,21 @@
     overflow: visible;
     margin-left: auto;
     margin-right: auto;
+    text-align: center;
   }
 
   .auth-brand img {
-    width: min(78vw, 310px) !important;
-    max-width: 310px !important;
+    width: min(88vw, 340px) !important;
+    max-width: 340px !important;
     height: auto !important;
     margin: 0 auto !important;
     object-fit: contain;
     object-position: center center;
+  }
+
+  /* No mobile, os diferenciais ficam limpos: sem os checks verdes. */
+  .auth-highlights article::after {
+    content: none !important;
+    display: none !important;
   }
 }
