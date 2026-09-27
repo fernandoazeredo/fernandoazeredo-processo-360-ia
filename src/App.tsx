@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react'
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut, User } from 'firebase/auth'
+import { createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, signOut, User } from 'firebase/auth'
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { AlertTriangle, BrainCircuit, CheckCircle2, ChevronRight, Download, FilePenLine, FileText, LockKeyhole, Moon, Pencil, Plus, Save, Search, ShieldCheck, Sun, Trash2, UploadCloud, X } from 'lucide-react'
 import { auth, db, firebaseConfigured } from './firebase'
@@ -180,6 +180,8 @@ function App() {
   const [analysisError, setAnalysisError] = useState('')
   const [adminOpen, setAdminOpen] = useState(false)
   const [adminUser, setAdminUser] = useState<User | null>(null)
+  const [appUser, setAppUser] = useState<User | null>(null)
+  const [authReady, setAuthReady] = useState(false)
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
@@ -187,8 +189,15 @@ function App() {
   }, [dark])
 
   useEffect(() => {
-    if (!auth) return
-    return onAuthStateChanged(auth, user => setAdminUser(user?.email === ADMIN_EMAIL ? user : null))
+    if (!auth) {
+      setAuthReady(true)
+      return
+    }
+    return onAuthStateChanged(auth, user => {
+      setAppUser(user)
+      setAdminUser(user?.email === ADMIN_EMAIL ? user : null)
+      setAuthReady(true)
+    })
   }, [])
 
   function changeArea(next: Area) {
@@ -241,6 +250,14 @@ function App() {
     }
   }
 
+  if (!authReady) {
+    return <div className="auth-shell"><div className="auth-card"><BrainLoader/><p className="muted">Verificando acesso...</p></div></div>
+  }
+
+  if (!appUser) {
+    return <LoginPage />
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -248,9 +265,13 @@ function App() {
           <img className="logo-light" src="/assets/logo-processo-360-ia.svg" alt="Processo 360 IA" />
           <img className="logo-dark" src="/assets/logo-processo-360-ia-dark.svg" alt="Processo 360 IA" />
         </div>
-        <button className="icon-button" onClick={() => setDark(!dark)} aria-label="Alternar tema">
-          {dark ? <Sun size={19} /> : <Moon size={19} />}
-        </button>
+        <div className="topbar-actions">
+          <span className="signed-user">{appUser.displayName || appUser.email || 'Usuário'}</span>
+          <button className="icon-button" onClick={() => setDark(!dark)} aria-label="Alternar tema">
+            {dark ? <Sun size={19} /> : <Moon size={19} />}
+          </button>
+          <button className="secondary-button compact" onClick={() => auth && signOut(auth)}>Sair</button>
+        </div>
       </header>
 
       <main>
@@ -305,7 +326,7 @@ function App() {
         </section>
       </main>
 
-      <footer><span>© 2026 Processo 360 IA</span><button onClick={() => setAdminOpen(true)}>Área ADM</button></footer>
+      <footer><span>© 2026 Processo 360 IA</span>{adminUser && <button onClick={() => setAdminOpen(true)}>Área ADM</button>}</footer>
 
       {processing && <div className="processing-overlay" role="dialog" aria-modal="true" aria-label="Análise em andamento">
         <div className="processing-inner">
@@ -919,6 +940,91 @@ function BrainLoader() {
         {nodes.map(([x,y],i)=><circle key={i} cx={x} cy={y} r="1.6" style={{animationDelay:`-${i*.17}s`}}/>)}
       </g>
     </svg>
+  </div>
+}
+
+function LoginPage() {
+  const [mode, setMode] = useState<'login' | 'signup'>('login')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    if (!auth) return
+    setError('')
+    setLoading(true)
+    try {
+      if (mode === 'signup') {
+        await createUserWithEmailAndPassword(auth, email.trim(), password)
+      } else {
+        await signInWithEmailAndPassword(auth, email.trim(), password)
+      }
+    } catch (err: any) {
+      const code = String(err?.code || '')
+      if (code.includes('email-already-in-use')) setError('Este e-mail já possui cadastro. Entre com sua senha.')
+      else if (code.includes('weak-password')) setError('Use uma senha com pelo menos 6 caracteres.')
+      else if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found')) setError('E-mail ou senha inválidos.')
+      else setError('Não foi possível concluir o acesso. Tente novamente.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function loginWithGoogle() {
+    if (!auth) return
+    setError('')
+    setLoading(true)
+    try {
+      const provider = new GoogleAuthProvider()
+      provider.setCustomParameters({ prompt: 'select_account' })
+      await signInWithPopup(auth, provider)
+    } catch (err: any) {
+      const code = String(err?.code || '')
+      if (!code.includes('popup-closed-by-user')) {
+        setError(code.includes('operation-not-allowed')
+          ? 'O login com Google precisa ser habilitado no Firebase Authentication.'
+          : 'Não foi possível entrar com Google. Tente novamente.')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return <div className="auth-shell">
+    <div className="auth-card">
+      <div className="auth-brand">
+        <img className="logo-light" src="/assets/logo-processo-360-ia.svg" alt="Processo 360 IA" />
+        <img className="logo-dark" src="/assets/logo-processo-360-ia-dark.svg" alt="Processo 360 IA" />
+      </div>
+      <span className="eyebrow"><ShieldCheck size={16}/> Acesso ao Processo 360 IA</span>
+      <h1>{mode === 'login' ? 'Entrar' : 'Criar conta'}</h1>
+      <p className="muted">Use e-mail e senha ou sua conta Google.</p>
+
+      <button type="button" className="google-login-button" onClick={loginWithGoogle} disabled={loading}>
+        Entrar com Google
+      </button>
+
+      <div className="auth-divider"><span>ou</span></div>
+
+      <form onSubmit={submit}>
+        <label>E-mail
+          <input type="email" value={email} onChange={e=>setEmail(e.target.value)} required autoComplete="email"/>
+        </label>
+        <label>Senha
+          <input type="password" value={password} onChange={e=>setPassword(e.target.value)} minLength={6} required autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}/>
+        </label>
+        {error && <p className="error">{error}</p>}
+        <button className="primary-button" disabled={loading}>
+          {loading ? 'Aguarde...' : mode === 'login' ? 'Entrar' : 'Criar conta e entrar'}
+        </button>
+      </form>
+
+      <button type="button" className="auth-switch" onClick={()=>{setMode(mode === 'login' ? 'signup' : 'login');setError('')}}>
+        {mode === 'login' ? 'Ainda não tenho conta — criar cadastro' : 'Já tenho conta — entrar'}
+      </button>
+    </div>
   </div>
 }
 
