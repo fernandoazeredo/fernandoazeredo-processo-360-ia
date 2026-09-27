@@ -360,7 +360,16 @@ function App() {
   }
 
   if (!authReady) {
-    return <div className="auth-shell"><div className="auth-card"><BrainLoader/><p className="muted">Verificando acesso...</p></div></div>
+    return <div className="auth-shell">
+      <div className="auth-card auth-loading-card">
+        <div className="auth-brand">
+          <img className="logo-light" src="/assets/logo-processo-360-ia.svg" alt="Processo 360 IA" />
+          <img className="logo-dark" src="/assets/logo-processo-360-ia-dark.svg" alt="Processo 360 IA" />
+        </div>
+        <div className="auth-loading-line" aria-hidden="true" />
+        <p className="muted">Carregando acesso...</p>
+      </div>
+    </div>
   }
 
   if (!appUser) {
@@ -368,7 +377,16 @@ function App() {
   }
 
   if (appUser.email !== ADMIN_EMAIL && !walletReady) {
-    return <div className="auth-shell"><div className="auth-card"><BrainLoader/><p className="muted">Verificando carteira...</p></div></div>
+    return <div className="auth-shell">
+      <div className="auth-card auth-loading-card">
+        <div className="auth-brand">
+          <img className="logo-light" src="/assets/logo-processo-360-ia.svg" alt="Processo 360 IA" />
+          <img className="logo-dark" src="/assets/logo-processo-360-ia-dark.svg" alt="Processo 360 IA" />
+        </div>
+        <div className="auth-loading-line" aria-hidden="true" />
+        <p className="muted">Carregando sua conta...</p>
+      </div>
+    </div>
   }
 
   if (appUser.email !== ADMIN_EMAIL && wallet?.status !== 'ativo') {
