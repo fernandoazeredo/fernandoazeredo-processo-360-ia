@@ -1,0 +1,155 @@
+/* Processo 360 IA — cabeçalho limpo + carteira em faixa própria */
+
+.topbar:has(.wallet-balance){
+  height:auto !important;
+  min-height:142px;
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) auto auto;
+  grid-template-areas:
+    "brand theme logout"
+    "balance balance buy";
+  align-items:center;
+  column-gap:10px;
+  row-gap:12px;
+  padding-top:12px !important;
+  padding-bottom:12px !important;
+}
+
+.topbar:has(.wallet-balance) .brand{
+  grid-area:brand;
+  min-width:0;
+  align-self:center;
+}
+
+.topbar:has(.wallet-balance) .brand img{
+  width:min(230px,48vw) !important;
+  height:46px !important;
+}
+
+.topbar:has(.wallet-balance) .topbar-actions{
+  display:contents !important;
+}
+
+.topbar:has(.wallet-balance) .signed-user{
+  display:none !important;
+}
+
+.topbar:has(.wallet-balance) .icon-button{
+  grid-area:theme;
+  margin:0 !important;
+}
+
+.topbar:has(.wallet-balance) .secondary-button.compact{
+  grid-area:logout;
+  margin:0 !important;
+  min-height:42px;
+  padding:10px 16px !important;
+  background:var(--surface-2);
+  border:1px solid var(--border);
+}
+
+.topbar:has(.wallet-balance) .wallet-balance{
+  grid-area:balance;
+  width:100% !important;
+  min-height:54px;
+  display:flex !important;
+  align-items:center;
+  justify-content:flex-start !important;
+  gap:6px;
+  padding:12px 18px !important;
+  margin:0 !important;
+  border:1px solid var(--border);
+  border-right:0;
+  border-radius:16px 0 0 16px !important;
+  background:var(--surface-2);
+  font-size:.9rem;
+  order:initial !important;
+}
+
+.topbar:has(.wallet-balance) .wallet-balance::before{
+  content:"Créditos disponíveis";
+  margin-right:auto;
+  color:var(--muted);
+  font-weight:700;
+}
+
+.topbar:has(.wallet-balance) .buy-credits-button{
+  grid-area:buy;
+  width:auto !important;
+  min-width:190px;
+  min-height:54px;
+  margin:0 !important;
+  padding:12px 18px !important;
+  border-radius:0 16px 16px 0 !important;
+  order:initial !important;
+  background:linear-gradient(90deg,rgba(0,174,255,.16),rgba(110,88,255,.14),rgba(255,112,24,.14));
+}
+
+@media(max-width:720px){
+  .topbar:has(.wallet-balance){
+    min-height:148px;
+    grid-template-columns:minmax(0,1fr) 42px auto;
+    grid-template-areas:
+      "brand theme logout"
+      "balance balance buy";
+    column-gap:8px;
+    row-gap:10px;
+    padding:10px 16px 12px !important;
+  }
+
+  .topbar:has(.wallet-balance) .brand img{
+    width:min(180px,42vw) !important;
+    height:42px !important;
+  }
+
+  .topbar:has(.wallet-balance) .icon-button{
+    width:40px;
+    height:40px;
+  }
+
+  .topbar:has(.wallet-balance) .secondary-button.compact{
+    min-height:40px;
+    padding:9px 13px !important;
+    font-size:.88rem;
+  }
+
+  .topbar:has(.wallet-balance) .wallet-balance{
+    min-height:52px;
+    padding:10px 12px !important;
+    font-size:.82rem;
+  }
+
+  .topbar:has(.wallet-balance) .wallet-balance::before{
+    content:"Saldo";
+  }
+
+  .topbar:has(.wallet-balance) .buy-credits-button{
+    min-width:154px;
+    min-height:52px;
+    padding:10px 12px !important;
+    font-size:.8rem;
+  }
+}
+
+@media(max-width:430px){
+  .topbar:has(.wallet-balance){
+    grid-template-columns:minmax(0,1fr) 40px auto;
+    padding-left:12px !important;
+    padding-right:12px !important;
+  }
+
+  .topbar:has(.wallet-balance) .brand img{
+    width:min(156px,39vw) !important;
+  }
+
+  .topbar:has(.wallet-balance) .wallet-balance{
+    padding-left:10px !important;
+    padding-right:10px !important;
+  }
+
+  .topbar:has(.wallet-balance) .buy-credits-button{
+    min-width:145px;
+    padding-left:10px !important;
+    padding-right:10px !important;
+  }
+}
