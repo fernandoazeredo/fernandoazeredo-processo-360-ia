@@ -1,4 +1,8 @@
 import { analyzePdfWithGemini } from './gemini'
+import { auth } from './firebase'
+import { chargeAnalysis, quoteAnalysis } from './wallet'
+
+const ADMIN_EMAIL = 'fernandoazeredo64@gmail.com'
 
 export type AnalysisReport = {
   analysisId: string
@@ -18,18 +22,11 @@ export type AnalysisReport = {
 
 function normalizeGeneratedText<T>(value: T): T {
   if (typeof value === 'string') {
-    return value
-      .replace(/\\r\\n/g, '\n')
-      .replace(/\\n/g, '\n')
-      .replace(/\\t/g, ' ') as T
+    return value.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\\t/g, ' ') as T
   }
-  if (Array.isArray(value)) {
-    return value.map(item => normalizeGeneratedText(item)) as T
-  }
+  if (Array.isArray(value)) return value.map(item => normalizeGeneratedText(item)) as T
   if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, normalizeGeneratedText(item)])
-    ) as T
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, normalizeGeneratedText(item)])) as T
   }
   return value
 }
@@ -42,12 +39,16 @@ export async function analyzeUploadedProcess(
 ): Promise<AnalysisReport> {
   const analysisId = crypto.randomUUID()
 
-  const geminiReport = normalizeGeneratedText(await analyzePdfWithGemini(
-    file,
-    area,
-    perspective,
-    onProgress
-  ))
+  // O frontend historicamente liberava o administrador para testes. Para validar o
+  // produto comercial real, o administrador também passa pela carteira aqui.
+  // Usuários comuns continuam sendo cobrados no fluxo normal de App.tsx, evitando débito duplo.
+  const currentEmail = String(auth?.currentUser?.email || '').toLowerCase()
+  if (currentEmail === ADMIN_EMAIL) {
+    const quote = await quoteAnalysis(file)
+    await chargeAnalysis(quote.pageCount)
+  }
+
+  const geminiReport = normalizeGeneratedText(await analyzePdfWithGemini(file, area, perspective, onProgress))
 
   return {
     analysisId,
