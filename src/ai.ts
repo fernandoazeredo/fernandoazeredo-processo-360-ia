@@ -16,6 +16,24 @@ export type AnalysisReport = {
   sources: Array<{ lot: number; pages: string; note: string }>
 }
 
+function normalizeGeneratedText<T>(value: T): T {
+  if (typeof value === 'string') {
+    return value
+      .replace(/\\r\\n/g, '\n')
+      .replace(/\\n/g, '\n')
+      .replace(/\\t/g, ' ') as T
+  }
+  if (Array.isArray(value)) {
+    return value.map(item => normalizeGeneratedText(item)) as T
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, normalizeGeneratedText(item)])
+    ) as T
+  }
+  return value
+}
+
 export async function analyzeUploadedProcess(
   file: File,
   area: string,
@@ -24,12 +42,12 @@ export async function analyzeUploadedProcess(
 ): Promise<AnalysisReport> {
   const analysisId = crypto.randomUUID()
 
-  const geminiReport = await analyzePdfWithGemini(
+  const geminiReport = normalizeGeneratedText(await analyzePdfWithGemini(
     file,
     area,
     perspective,
     onProgress
-  )
+  ))
 
   return {
     analysisId,
