@@ -1004,9 +1004,7 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, user}:{
     {pieceOpen && <section className="piece-module" id="piece-module">
       <div className="piece-controls no-print" data-ui-only="true">
         <div>
-          <span className="eyebrow"><FilePenLine size={16}/> Módulo opcional</span>
           <h2>Gerar Peça Jurídica</h2>
-          <p>O Motor B usa somente o relatório consolidado. O PDF original não será reprocessado.</p>
         </div>
         <div className="piece-context">
           <span><b>Área:</b> {report.area}</span>
@@ -1042,9 +1040,7 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, user}:{
 
         <div className="piece-review-heading">
           <div>
-            <span className="eyebrow">Minuta validada</span>
             <h2>{piece.title}</h2>
-            <small>Tipo: {piece.pieceType} · Prompt: {piece.promptVersion} · Modelo: {piece.model}</small>
           </div>
           <div className="piece-actions no-print" data-ui-only="true">
             <button onClick={() => exportPieceAsWord(report, piece)}><Download size={17}/> Exportar Word</button>
@@ -1053,7 +1049,6 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, user}:{
         </div>
 
         <div className="piece-validation-panel no-print" data-ui-only="true">
-          <h3>Validação factual automática</h3>
           <div className="validation-counts">
             <span><CheckCircle2 size={16}/> {piece.validation.confirmed} confirmadas</span>
             <span>{piece.validation.partiallyConfirmed} parcialmente confirmadas</span>

@@ -9,7 +9,7 @@ const PIECE_MODEL = 'gemini-3.8-flash'
 const PIECE_FALLBACK_MODELS = [PIECE_MODEL, 'gemini-3.5-flash', 'gemini-3.5-flash-lite'] as const
 const REQUEST_TIMEOUT_MS = 90_000
 const PLACEHOLDER = '[DADO A CONFIRMAR]'
-const MOTOR_B_LOCAL_VERSION = 3
+const MOTOR_B_LOCAL_VERSION = 4
 
 export type ClaimStatus = 'CONFIRMADA' | 'PARCIALMENTE CONFIRMADA' | 'NÃO CONFIRMADA' | 'CONFLITANTE'
 export type PieceSection = { title: string; content: string }
@@ -47,7 +47,7 @@ type MotorBPromptDoc = {
   status?: string
 }
 
-type LoadedPrompt = { content: string; version: number; source: 'firestore' | 'local-v3' }
+type LoadedPrompt = { content: string; version: number; source: 'firestore' | 'local-v4' }
 
 const pieceMapping: Record<string, Record<string, string>> = {
   Trabalhista: { Reclamante: 'Petição / Manifestação', Reclamada: 'Contestação / Defesa' },
@@ -116,7 +116,7 @@ const confirmationSchema = Schema.object({ properties: {
 } })
 
 async function loadMotorBPrompt(area: string, perspective: string, purpose: string, localPrompt: string): Promise<LoadedPrompt> {
-  if (!db) return { content: localPrompt, version: MOTOR_B_LOCAL_VERSION, source: 'local-v3' }
+  if (!db) return { content: localPrompt, version: MOTOR_B_LOCAL_VERSION, source: 'local-v4' }
   try {
     const snap = await getDocs(query(collection(db, 'prompts'), where('status', '==', 'publicado')))
     const candidates = snap.docs
@@ -131,10 +131,10 @@ async function loadMotorBPrompt(area: string, perspective: string, purpose: stri
     if (selected && (Number(selected.version) || 0) >= MOTOR_B_LOCAL_VERSION) {
       return { content: String(selected.content || '').trim(), version: Number(selected.version), source: 'firestore' }
     }
-    return { content: localPrompt, version: MOTOR_B_LOCAL_VERSION, source: 'local-v3' }
+    return { content: localPrompt, version: MOTOR_B_LOCAL_VERSION, source: 'local-v4' }
   } catch (error) {
-    console.warn('[Processo 360 IA][Motor B] Prompt publicado indisponível; usando Motor B local v3.', purpose, error)
-    return { content: localPrompt, version: MOTOR_B_LOCAL_VERSION, source: 'local-v3' }
+    console.warn('[Processo 360 IA][Motor B] Prompt publicado indisponível; usando Motor B local v4.', purpose, error)
+    return { content: localPrompt, version: MOTOR_B_LOCAL_VERSION, source: 'local-v4' }
   }
 }
 
@@ -163,6 +163,7 @@ function reportToSource(report: AnalysisReport) {
     perspective: report.perspective,
     processNumber: report.processNumber,
     processNumberWarning: report.processNumberWarning,
+    parties: report.parties,
     executiveSummary: report.executiveSummary,
     timeline: report.timeline,
     claimsEvidenceDecisions: report.claimsEvidenceDecisions,
@@ -274,6 +275,28 @@ function hardenCorrectedSections(sections: PieceSection[], claims: PieceClaim[])
   return cleanSections(hardened)
 }
 
+
+function applyDeterministicPieceFields(sections: PieceSection[], professionalProfile: ProfessionalProfile | undefined, currentDate: string) {
+  const profile = professionalProfile || { name: '', oab: '', address: '', email: '' }
+  const replacements: Array<[RegExp, string]> = [
+    [/\[(?:NOME DO )?ADVOGADO(?:\(A\))?\]/gi, profile.name],
+    [/\[OAB(?:\/UF)?\]/gi, profile.oab],
+    [/\[ENDEREÇO (?:PROFISSIONAL|DO ADVOGADO)\]/gi, profile.address],
+    [/\[E-?MAIL (?:PROFISSIONAL|DO ADVOGADO)\]/gi, profile.email],
+    [/\[DATA\]/gi, currentDate]
+  ]
+  return cleanSections(sections.map(section => {
+    let title = section.title
+    let content = section.content
+    for (const [pattern, value] of replacements) {
+      if (!value) continue
+      title = title.replace(pattern, value)
+      content = content.replace(pattern, value)
+    }
+    return { title, content }
+  }))
+}
+
 export async function generateLegalPiece(report: AnalysisReport, pieceType: string, professionalProfile?: ProfessionalProfile): Promise<LegalPieceDraft> {
   if (/réplica|replica/i.test(pieceType) && !hasDefenseInRecord(report)) {
     throw new Error('PIECE_REPLICA_WITHOUT_DEFENSE')
@@ -297,7 +320,7 @@ export async function generateLegalPiece(report: AnalysisReport, pieceType: stri
   const draftResult = await generateJson(draftPrompt, draftSchema, 'geração do rascunho especializado v3')
   const rawSections = cleanSections(Array.isArray(draftResult.parsed.sections) ? draftResult.parsed.sections.map((item: any) => ({ title: String(item.title || ''), content: String(item.content || '') })) : [])
 
-  const validationPrompt = `${validatorPromptDoc.content}\n\nFASE PROCESSUAL INFERIDA: ${phase}\n\n[DADOS_CONSOLIDADOS_DO_PROCESSO]\n${source}\n\n[DIAGNOSTICO_JURIDICO]\n${diagnostic}\n\n[MINUTA_GERADA]\n${JSON.stringify(rawSections, null, 2)}\n\nINSTRUÇÃO: claims guarda a auditoria e sourceReference. correctedSections deve permanecer limpa e exportável.`
+  const validationPrompt = `${validatorPromptDoc.content}\n\nFASE PROCESSUAL INFERIDA: ${phase}\nDATA ATUAL DO SISTEMA: ${currentDate}\n\n[DADOS_PROFISSIONAIS_DO_ADVOGADO]\n${professional}\n\n[DADOS_CONSOLIDADOS_DO_PROCESSO]\n${source}\n\n[DIAGNOSTICO_JURIDICO]\n${diagnostic}\n\n[MINUTA_GERADA]\n${JSON.stringify(rawSections, null, 2)}\n\nINSTRUÇÃO: claims guarda a auditoria e sourceReference. correctedSections deve permanecer limpa e exportável.`
   const validationResult = await generateJson(validationPrompt, validationSchema, 'validação factual v3')
 
   const claims: PieceClaim[] = Array.isArray(validationResult.parsed.claims) ? validationResult.parsed.claims.map((item: any, index: number) => ({
@@ -310,13 +333,13 @@ export async function generateLegalPiece(report: AnalysisReport, pieceType: stri
     : rawSections
   const factSafeSections = hardenCorrectedSections(corrected, claims)
 
-  const reviewPrompt = `${reviewerPromptDoc.content}\n\nÁREA: ${report.area}\nPERSPECTIVA: ${report.perspective}\nTIPO: ${pieceType}\nFASE: ${phase}\n\n[DADOS_CONSOLIDADOS_DO_PROCESSO]\n${source}\n\n[DIAGNOSTICO_JURIDICO]\n${diagnostic}\n\n[VALIDACAO]\n${JSON.stringify({ claims, validation: countValidation(claims) }, null, 2)}\n\n[MINUTA_CORRIGIDA]\n${JSON.stringify(factSafeSections, null, 2)}\n\nINSTRUÇÃO: devolva title e sections. Não reinsira referências técnicas ou avisos internos.`
+  const reviewPrompt = `${reviewerPromptDoc.content}\n\nÁREA: ${report.area}\nPERSPECTIVA: ${report.perspective}\nTIPO: ${pieceType}\nFASE: ${phase}\nDATA ATUAL DO SISTEMA: ${currentDate}\n\n[DADOS_PROFISSIONAIS_DO_ADVOGADO]\n${professional}\n\n[DADOS_CONSOLIDADOS_DO_PROCESSO]\n${source}\n\n[DIAGNOSTICO_JURIDICO]\n${diagnostic}\n\n[VALIDACAO]\n${JSON.stringify({ claims, validation: countValidation(claims) }, null, 2)}\n\n[MINUTA_CORRIGIDA]\n${JSON.stringify(factSafeSections, null, 2)}\n\nINSTRUÇÃO: devolva title e sections. Não reinsira referências técnicas ou avisos internos.`
   const reviewResult = await generateJson(reviewPrompt, reviewSchema, 'revisão jurídica final v3')
 
   const reviewed = Array.isArray(reviewResult.parsed.sections)
     ? reviewResult.parsed.sections.map((item: any) => ({ title: String(item.title || ''), content: String(item.content || '') }))
     : factSafeSections
-  const safeSections = hardenCorrectedSections(reviewed, claims)
+  const safeSections = applyDeterministicPieceFields(hardenCorrectedSections(reviewed, claims), professionalProfile, currentDate)
 
   const promptVersion = [
     `motor-b-v3:base-${basePromptDoc.source}-v${basePromptDoc.version}`,
