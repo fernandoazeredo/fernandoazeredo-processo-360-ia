@@ -841,7 +841,7 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, user}:{
   const [pieceError, setPieceError] = useState('')
   const [confirmingClaim, setConfirmingClaim] = useState<string | null>(null)
   const [confirmation, setConfirmation] = useState<Record<string, string>>({})
-  const [professionalProfile, setProfessionalProfile] = useState<ProfessionalProfile>({ name: '', oab: '', address: '', email: user.email || '' })
+  const [professionalProfile, setProfessionalProfile] = useState<ProfessionalProfile>({ name: '', oab: '', address: '', email: '' })
   const [profileStatus, setProfileStatus] = useState('')
 
   useEffect(() => {
@@ -853,7 +853,7 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, user}:{
           name: String(data.name || ''),
           oab: String(data.oab || ''),
           address: String(data.address || ''),
-          email: String(data.email || user.email || '')
+          email: String(data.email || '')
         })
       }
     })

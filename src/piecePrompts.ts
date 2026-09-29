@@ -78,6 +78,14 @@ CARTÕES DE PONTO / SÚMULA 338: quando houver horários uniformes ou invariáve
 
 PROVAS: use todas as provas relevantes já identificadas no processo, inclusive as desfavoráveis. Não escreva que a empresa está 'levantando', 'providenciando' ou 'juntará' documento que já consta dos insumos.
 
+TESES DEFENSIVAS JÁ DOCUMENTADAS: antes de concluir a contestação, procure nos dados consolidados argumentos, aditivos, cláusulas, percentuais e pedidos subsidiários que já tenham sido formulados pela defesa real ou estejam documentalmente sustentados. Não omita uma tese defensiva material apenas por já existir uma tese genérica sobre o mesmo pedido. Preserve valores e percentuais literais, sem criar cálculo novo.
+
+HIPERSUFICIÊNCIA / ART. 444, PARÁGRAFO ÚNICO, DA CLT: se os dados demonstrarem os requisitos fáticos pertinentes e houver aditivo/negociação individual relevante, enfrente expressamente a validade e o alcance da negociação individual à luz do art. 444, parágrafo único, da CLT. Se o processo trouxer literalmente aumento remuneratório ligado ao aditivo — por exemplo, percentual de 42,9% — use esse dado como elemento defensivo, sem recalculá-lo nem presumir requisito não comprovado. Se os requisitos legais não estiverem demonstrados, trate a tese como dependente de prova e não afirme hipersuficiência como fato.
+
+DANO MORAL — TESE SUBSIDIÁRIA DE QUANTUM: além da improcedência, verifique se a defesa ou os documentos fornecem pedido subsidiário expresso de limitação/redução do valor. Quando houver limite literal — inclusive R$ 5.000,00 no caso concreto, se esse valor constar dos dados — reproduza-o como pedido subsidiário. Nunca invente teto monetário ausente dos insumos.
+
+SOBREAVISO × HORAS EXTRAS: confronte os intervalos horários de cada pedido. Se houver sobreposição temporal entre período postulado como sobreaviso e período simultaneamente postulado como efetivo trabalho extraordinário, impugne a cumulação pelo mesmo intervalo e peça, subsidiariamente, que não haja pagamento duplicado, com dedução/adequação do período efetivamente trabalhado conforme os fatos e provas. Não trate automaticamente todo o sobreaviso como hora extra e não invente horários.
+
 PROIBIÇÕES
 Não inventar pagamento, jornada, banco de horas, norma coletiva, função, salário, quitação, documento, testemunha, perícia ou fato defensivo. Não omitir prova desfavorável relevante. Não inserir rastreabilidade técnica no corpo da contestação.
 `.trim()
@@ -176,6 +184,9 @@ CHECKLIST FINAL OBRIGATÓRIO
 - dano moral não amplia BO ou transforma bem pessoal em corporativo;
 - pedidos que exigem valor não ficam silenciosamente sem valor e, no trabalhista, o art. 840, §1º, da CLT foi enfrentado quando pertinente;
 - em contestação trabalhista com cartões uniformes/invariáveis, o TEXTO DA PEÇA cita expressamente a Súmula 338, III, do TST e apresenta a defesa probatória possível;
+- se os dados sustentarem hipersuficiência/aditivo, a contestação enfrenta expressamente o art. 444, parágrafo único, da CLT e preserva eventual vantagem remuneratória literal relevante;
+- se houver pedido subsidiário de limitação do dano moral nos dados, a contestação o reproduz com o valor literal, sem inventar quantum;
+- se sobreaviso e horas extras ocuparem o mesmo intervalo, a contestação enfrenta expressamente o risco de duplicidade/cumulação pelo mesmo período;
 - réplica/manifestação à contestação não foi criada sem prova de defesa efetivamente apresentada nos autos;
 - tese principal e subsidiária estão logicamente subordinadas;
 - pedidos finais correspondem à fundamentação;
