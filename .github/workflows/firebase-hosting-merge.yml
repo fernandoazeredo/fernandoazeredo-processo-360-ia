@@ -58,10 +58,15 @@ jobs:
       - name: Instalar dependências de publicação de prompts
         run: npm install --prefix functions
 
-      - name: Publicar prompt Trabalhista da Reclamada
+      - name: Publicar prompts Trabalhistas aprovados
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
         run: node functions/scripts/publish-reclamada-v2.mjs
+
+      - name: Publicar prompts Ambientais 07 e 08
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
+        run: node functions/scripts/publish-ambiental-v1.mjs
 
       - name: Deploy Hosting e regras do Firestore
         env:
