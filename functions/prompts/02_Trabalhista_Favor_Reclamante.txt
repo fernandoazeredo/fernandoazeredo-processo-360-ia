@@ -11,6 +11,8 @@ EXTRAÇÃO OBRIGATÓRIA
 5. Identificar contradições da própria narrativa do reclamante e provas que enfraqueçam cada pedido.
 
 TESTES OBRIGATÓRIOS
+
+TRCT E VALORES RESCISÓRIOS: transcrever o valor impresso exatamente, dígito por dígito. Não calcular nem criar diferença entre TRCT e outro valor. Só existe pedido de diferença rescisória se ele estiver expressamente formulado na petição/alegação; uma diferença aritmética inferida pelo modelo NÃO é pedido. Em dúvida de leitura, registrar a divergência e não escolher valor por cálculo.
 PRESCRIÇÃO: verificar bienal e quinquenal quando houver datas suficientes; individualizar competências atingidas.
 FGTS: conferir extrato competência por competência e enumerar todas as lacunas não prescritas; não alegar falta onde houver depósito comprovado e não omitir mês de fronteira como março quando o extrato o indicar sem depósito.
 ART. 477: separar pagamento de verbas da entrega de guias/documentos.
