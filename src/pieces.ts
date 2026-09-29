@@ -9,7 +9,7 @@ const PIECE_MODEL = 'gemini-3.8-flash'
 const PIECE_FALLBACK_MODELS = [PIECE_MODEL, 'gemini-3.5-flash', 'gemini-3.5-flash-lite'] as const
 const REQUEST_TIMEOUT_MS = 90_000
 const PLACEHOLDER = '[DADO A CONFIRMAR]'
-const MOTOR_B_LOCAL_VERSION = 4
+const MOTOR_B_LOCAL_VERSION = 5
 
 export type ClaimStatus = 'CONFIRMADA' | 'PARCIALMENTE CONFIRMADA' | 'NÃO CONFIRMADA' | 'CONFLITANTE'
 export type PieceSection = { title: string; content: string }
@@ -47,7 +47,7 @@ type MotorBPromptDoc = {
   status?: string
 }
 
-type LoadedPrompt = { content: string; version: number; source: 'firestore' | 'local-v4' }
+type LoadedPrompt = { content: string; version: number; source: 'firestore' | 'local-v5' }
 
 const pieceMapping: Record<string, Record<string, string>> = {
   Trabalhista: { Reclamante: 'Petição / Manifestação', Reclamada: 'Contestação / Defesa' },
@@ -116,7 +116,7 @@ const confirmationSchema = Schema.object({ properties: {
 } })
 
 async function loadMotorBPrompt(area: string, perspective: string, purpose: string, localPrompt: string): Promise<LoadedPrompt> {
-  if (!db) return { content: localPrompt, version: MOTOR_B_LOCAL_VERSION, source: 'local-v4' }
+  if (!db) return { content: localPrompt, version: MOTOR_B_LOCAL_VERSION, source: 'local-v5' }
   try {
     const snap = await getDocs(query(collection(db, 'prompts'), where('status', '==', 'publicado')))
     const candidates = snap.docs
@@ -131,10 +131,10 @@ async function loadMotorBPrompt(area: string, perspective: string, purpose: stri
     if (selected && (Number(selected.version) || 0) >= MOTOR_B_LOCAL_VERSION) {
       return { content: String(selected.content || '').trim(), version: Number(selected.version), source: 'firestore' }
     }
-    return { content: localPrompt, version: MOTOR_B_LOCAL_VERSION, source: 'local-v4' }
+    return { content: localPrompt, version: MOTOR_B_LOCAL_VERSION, source: 'local-v5' }
   } catch (error) {
-    console.warn('[Processo 360 IA][Motor B] Prompt publicado indisponível; usando Motor B local v4.', purpose, error)
-    return { content: localPrompt, version: MOTOR_B_LOCAL_VERSION, source: 'local-v4' }
+    console.warn('[Processo 360 IA][Motor B] Prompt publicado indisponível; usando Motor B local v5.', purpose, error)
+    return { content: localPrompt, version: MOTOR_B_LOCAL_VERSION, source: 'local-v5' }
   }
 }
 
@@ -212,7 +212,7 @@ async function generateJson(prompt: string, schema: any, context: string, conten
       const model = getGenerativeModel(aiClient, {
         model: modelName,
         systemInstruction: [
-          'PROCESSO 360 IA — MOTOR B V4.',
+          'PROCESSO 360 IA — MOTOR B V5.',
           'Nunca invente fatos, datas, valores, documentos, decisões, números, pessoas ou eventos.',
           'Confronte narrativa com prova documental específica; não repita erro do resumo quando documento estruturado o contradisser.',
           'Rastreabilidade técnica pertence ao painel de auditoria, nunca ao corpo exportável da peça.',
@@ -364,7 +364,7 @@ export async function generateLegalPiece(report: AnalysisReport, pieceType: stri
   const safeSections = applyDeterministicPieceFields(applyDefenseSafeguards(hardenCorrectedSections(reviewed, claims), pieceType), professionalProfile, pieceDate)
 
   const promptVersion = [
-    `motor-b-v4:base-${basePromptDoc.source}-v${basePromptDoc.version}`,
+    `motor-b-v5:base-${basePromptDoc.source}-v${basePromptDoc.version}`,
     `piece-${specificPromptDoc.source}-v${specificPromptDoc.version}`,
     `validator-${validatorPromptDoc.source}-v${validatorPromptDoc.version}`,
     `reviewer-${reviewerPromptDoc.source}-v${reviewerPromptDoc.version}`
