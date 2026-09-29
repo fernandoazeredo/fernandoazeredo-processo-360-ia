@@ -1,0 +1,32 @@
+name: Apply v10 profile and signature
+
+on:
+  push:
+    branches:
+      - fix-v10-perfil-assinatura
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: fix-v10-perfil-assinatura
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Apply v10 patch
+        run: python scripts/apply_v10_profile_signature.py
+      - name: Validate build
+        run: npm ci && npm run build
+      - name: Commit final changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Corrige e-mail legado e endereço da assinatura v10"
+          git push origin HEAD:fix-v10-perfil-assinatura
