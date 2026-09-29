@@ -7,7 +7,7 @@ import { httpsCallable } from 'firebase/functions'
 import { analyzeUploadedProcess } from './ai'
 import type { AnalysisReport } from './ai'
 import { confirmClaimInOriginal, generateLegalPiece, pieceTypeOptions, suggestPieceType } from './pieces'
-import type { LegalPieceDraft, PieceClaim } from './pieces'
+import type { LegalPieceDraft, PieceClaim, ProfessionalProfile } from './pieces'
 import { chargeAnalysis, chargePiece, formatBRL, quoteAnalysis } from './wallet'
 import type { WalletRecord, WalletStatus } from './wallet'
 
@@ -454,7 +454,7 @@ function App() {
           )}
         </section>
 
-        {analysis && <AnalysisResult report={analysis} originalFile={file} isAdmin={appUser.email===ADMIN_EMAIL} piecePriceCents={walletConfig.piecePriceCents} />}
+        {analysis && <AnalysisResult report={analysis} originalFile={file} isAdmin={appUser.email===ADMIN_EMAIL} piecePriceCents={walletConfig.piecePriceCents} user={appUser} />}
 
         <section className="trust-row">
           <span><ShieldCheck/> Rastreabilidade documental</span>
@@ -827,7 +827,7 @@ function exportPieceAsWord(report: AnalysisReport, piece: LegalPieceDraft) {
   URL.revokeObjectURL(url)
 }
 
-function AnalysisResult({report, originalFile, isAdmin, piecePriceCents}:{report:AnalysisReport;originalFile:File|null;isAdmin:boolean;piecePriceCents:number}) {
+function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, user}:{report:AnalysisReport;originalFile:File|null;isAdmin:boolean;piecePriceCents:number;user:User}) {
   const [pieceOpen, setPieceOpen] = useState(false)
   const [pieceType, setPieceType] = useState(() => suggestPieceType(report.area, report.perspective))
   const [piece, setPiece] = useState<LegalPieceDraft | null>(null)
@@ -836,18 +836,51 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents}:{report
   const [pieceError, setPieceError] = useState('')
   const [confirmingClaim, setConfirmingClaim] = useState<string | null>(null)
   const [confirmation, setConfirmation] = useState<Record<string, string>>({})
+  const [professionalProfile, setProfessionalProfile] = useState<ProfessionalProfile>({ name: '', oab: '', address: '', email: user.email || '' })
+  const [profileStatus, setProfileStatus] = useState('')
+
+  useEffect(() => {
+    if (!db || !user.uid) return
+    return onSnapshot(doc(db, 'professionalProfiles', user.uid), snap => {
+      if (snap.exists()) {
+        const data = snap.data() as Partial<ProfessionalProfile>
+        setProfessionalProfile({
+          name: String(data.name || ''),
+          oab: String(data.oab || ''),
+          address: String(data.address || ''),
+          email: String(data.email || user.email || '')
+        })
+      }
+    })
+  }, [user.uid])
+
+  async function saveProfessionalProfile() {
+    if (!db) return
+    setProfileStatus('Salvando...')
+    try {
+      await setDoc(doc(db, 'professionalProfiles', user.uid), { ...professionalProfile, uid: user.uid, updatedAt: serverTimestamp() }, { merge: true })
+      setProfileStatus('Dados salvos.')
+    } catch (error) {
+      console.error('[Processo 360 IA] Falha ao salvar dados profissionais', error)
+      setProfileStatus('Não foi possível salvar os dados.')
+    }
+  }
 
   const options = pieceTypeOptions(report.area, report.perspective)
 
   async function handleGeneratePiece() {
     setPieceError('')
     setPiece(null)
+    if (!professionalProfile.name.trim() || !professionalProfile.oab.trim()) {
+      setPieceError('Cadastre o nome do advogado e a OAB antes de gerar a peça. Assim o sistema não criará assinatura com campos em branco.')
+      return
+    }
     setPieceBusy(true)
     setPieceStage('Estruturando e redigindo o rascunho')
     try {
       if (!isAdmin) await chargePiece()
       window.setTimeout(() => setPieceStage('Validando fatos contra o relatório consolidado'), 900)
-      const generated = await generateLegalPiece(report, pieceType)
+      const generated = await generateLegalPiece(report, pieceType, professionalProfile)
       setPiece(generated)
       setPieceStage('Rascunho validado')
       window.setTimeout(() => document.getElementById('piece-review')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
@@ -856,7 +889,9 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents}:{report
       const message=String(error?.message||'')
       setPieceError(message.includes('Saldo insuficiente')
         ? 'Saldo insuficiente para gerar a peça jurídica. Adicione saldo à carteira.'
-        : 'Não foi possível gerar e validar o rascunho. ' + (message || 'Tente novamente.'))
+        : message.includes('PIECE_REPLICA_WITHOUT_DEFENSE')
+          ? 'Não é possível gerar Réplica / Manifestação à contestação porque o relatório não demonstra contestação ou defesa efetivamente apresentada nos autos.'
+          : 'Não foi possível gerar e validar o rascunho. ' + (message || 'Tente novamente.'))
     } finally {
       setPieceBusy(false)
     }
@@ -976,6 +1011,17 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents}:{report
         <div className="piece-context">
           <span><b>Área:</b> {report.area}</span>
           <span><b>Perspectiva:</b> {report.perspective}</span>
+        </div>
+        <div className="professional-profile">
+          <h3>Dados do advogado</h3>
+          <div className="form-grid">
+            <label>Nome profissional<input value={professionalProfile.name} onChange={event => setProfessionalProfile(current => ({ ...current, name: event.target.value }))} placeholder="Nome do advogado" /></label>
+            <label>OAB/UF<input value={professionalProfile.oab} onChange={event => setProfessionalProfile(current => ({ ...current, oab: event.target.value }))} placeholder="OAB/RJ 00.000" /></label>
+            <label>Endereço profissional<input value={professionalProfile.address} onChange={event => setProfessionalProfile(current => ({ ...current, address: event.target.value }))} placeholder="Endereço do escritório" /></label>
+            <label>E-mail<input type="email" value={professionalProfile.email} onChange={event => setProfessionalProfile(current => ({ ...current, email: event.target.value }))} placeholder="E-mail profissional" /></label>
+          </div>
+          <button type="button" className="secondary-button compact" onClick={saveProfessionalProfile}><Save size={16}/> Salvar dados do advogado</button>
+          {profileStatus && <small>{profileStatus}</small>}
         </div>
         <label>Tipo de peça
           <select value={pieceType} onChange={event => setPieceType(event.target.value)}>

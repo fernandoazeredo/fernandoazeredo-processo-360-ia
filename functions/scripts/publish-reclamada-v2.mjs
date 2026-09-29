@@ -10,17 +10,17 @@ const configs = [
     area: 'Trabalhista',
     perspective: 'Reclamada',
     purpose: 'Análise jurídica global',
-    sourceVersion: '2026-09-28-trabalhista-reclamada-v3',
+    sourceVersion: '2026-09-29-trabalhista-reclamada-v4',
     sourceFile: '01_Trabalhista_Favor_Reclamada.txt',
-    title: 'Trabalhista — Reclamada — Análise jurídica global v3'
+    title: 'Trabalhista — Reclamada — Análise jurídica global v4'
   },
   {
     area: 'Trabalhista',
     perspective: 'Reclamante',
     purpose: 'Análise jurídica global',
-    sourceVersion: '2026-09-28-trabalhista-reclamante-v3',
+    sourceVersion: '2026-09-29-trabalhista-reclamante-v4',
     sourceFile: '02_Trabalhista_Favor_Reclamante.txt',
-    title: 'Trabalhista — Reclamante — Análise jurídica global v3'
+    title: 'Trabalhista — Reclamante — Análise jurídica global v4'
   }
 ]
 
