@@ -330,22 +330,32 @@ function App() {
         document.getElementById('analysis-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       }, 150)
     } catch (error: any) {
-      const message = String(error?.message || '')
-      console.error('[Processo 360 IA] Falha na análise', error)
+      const rawMessage = error?.message ?? error
+      let message = ''
+      if (typeof rawMessage === 'string') message = rawMessage
+      else {
+        try { message = JSON.stringify(rawMessage) }
+        catch { message = String(rawMessage || '') }
+      }
+      console.error('[Processo 360 IA] Falha na análise', message, error)
       if (message.includes('WALLET_INSUFFICIENT') || message.includes('Saldo insuficiente')) {
         setAnalysisError('Saldo insuficiente para realizar esta análise. Adicione saldo à sua carteira e tente novamente.')
       } else if (message.includes('WALLET_BLOCKED') || message.includes('carteira está inativa')) {
         setAnalysisError('Sua carteira está inativa ou bloqueada. Entre em contato com o administrador.')
       } else if (message.includes('ANALYSIS_CANCELLED')) {
         setAnalysisError('')
+      } else if (message.includes('GEMINI_CREDIT_DEPLETED')) {
+        setAnalysisError('O crédito/faturamento do provedor de IA não está disponível para concluir a análise. Regularize ou renove o crédito do Google/Firebase antes de tentar novamente.')
       } else if (message.includes('GEMINI_BILLING_STATE_MISMATCH')) {
         setAnalysisError('O Google retornou um estado de faturamento inconsistente para o projeto. Verifique o faturamento do Firebase/Google Cloud e tente novamente.')
       } else if (message.includes('GEMINI_RATE_LIMIT')) {
         setAnalysisError('O Gemini atingiu temporariamente um limite de requisições ou cota do serviço. Aguarde alguns instantes e tente novamente: os lotes já concluídos ficaram salvos para retomada automática.')
       } else if (message.includes('GEMINI_TEMPORARILY_BUSY')) {
-        setAnalysisError('O Gemini está temporariamente com alta demanda. Foram feitas tentativas com os modelos de fallback configurados. Tente novamente; os lotes concluídos ficaram salvos para retomada.')
+        setAnalysisError('O Gemini está temporariamente com alta demanda. Tente novamente mais tarde; os lotes concluídos ficaram salvos para retomada.')
       } else if (message.includes('GEMINI_REQUEST_TIMEOUT')) {
-        setAnalysisError('O Gemini não respondeu dentro do limite de 90 segundos por tentativa. Tente novamente; os lotes já concluídos foram preservados.')
+        setAnalysisError('O Gemini não respondeu dentro do limite de 210 segundos. O lote em andamento não foi concluído; os lotes anteriores já finalizados permanecem salvos para retomada.')
+      } else if (message.includes('GEMINI_PROJECT_CONFIGURATION')) {
+        setAnalysisError('A chamada ao Gemini foi recusada pela configuração do projeto Firebase/Google Cloud. Nenhum modelo alternativo incompatível será usado automaticamente.')
       } else if (message.includes('GEMINI_MODEL_UNAVAILABLE')) {
         setAnalysisError('Nenhum dos modelos Gemini configurados respondeu corretamente nesta tentativa. Tente novamente mais tarde.')
       } else if (message.includes('GEMINI_APP_CHECK_INVALID')) {

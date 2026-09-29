@@ -5,20 +5,12 @@ import { aiClient, db } from './firebase'
 
 export const CONSOLIDATION_MODEL = 'gemini-3.8-flash'
 export const EXTRACTION_MODEL = 'gemini-3.8-flash'
-const EXTRACTION_MODELS = [
-  EXTRACTION_MODEL,
-  'gemini-3.5-flash',
-  'gemini-3.5-flash-lite'
-] as const
-const CONSOLIDATION_MODELS = [
-  CONSOLIDATION_MODEL,
-  'gemini-3.5-flash',
-  'gemini-3.5-flash-lite'
-] as const
-const ARCHITECTURE_VERSION = 'blaze-browser-lots-v7-json-retry'
-const MAX_LOT_PAGES = 80
+const EXTRACTION_MODELS = [EXTRACTION_MODEL] as const
+const CONSOLIDATION_MODELS = [CONSOLIDATION_MODEL] as const
+const ARCHITECTURE_VERSION = 'blaze-browser-lots-v8-timeout-model-errors-values'
+const MAX_LOT_PAGES = 60
 const MAX_LOT_BYTES = 8 * 1024 * 1024
-const REQUEST_TIMEOUT_MS = 90_000
+const REQUEST_TIMEOUT_MS = 210_000
 const RETRY_DELAYS_MS = [3000, 7000]
 
 export type GeminiAnalysisReport = {
@@ -172,30 +164,45 @@ function sleep(ms: number) {
   return new Promise(resolve => window.setTimeout(resolve, ms))
 }
 
+function errorToText(error: any) {
+  const raw = error?.message ?? error
+  if (typeof raw === 'string') return raw
+  if (raw == null) return ''
+  try {
+    return JSON.stringify(raw)
+  } catch {
+    return String(raw)
+  }
+}
+
 function isQuotaError(message: string) {
   return /429|resource.?exhausted|rate.?limit|quota|generate_content_free_tier_requests/i.test(message)
 }
 
 function isBillingError(message: string) {
-  if (isQuotaError(message)) return false
-
-  return /prepayment credits are depleted|account.*not active|payment required|billing account required|billing (?:is )?not enabled|no billing account|billing.*(?:disabled|inactive)/i.test(message)
+  return /prepayment credits are depleted|credits? (?:are )?depleted|insufficient credits?|account.*not active|payment required|billing account required|billing (?:is )?not enabled|no billing account|billing.*(?:disabled|inactive)/i.test(message)
 }
 
 function classifyGeminiError(error: any) {
-  const message = String(error?.message || error || '')
+  const message = errorToText(error)
 
-  // Quota/rate-limit must be checked before any billing wording because
-  // Google's 429 message can also contain "billing details".
+  // Crédito/faturamento explicitamente esgotado deve ser separado de 429/rate-limit.
+  if (isBillingError(message)) {
+    return new Error(
+      'GEMINI_CREDIT_DEPLETED: o provedor informou falta de crédito ou faturamento indisponível para novas chamadas.'
+    )
+  }
+
   if (isQuotaError(message)) {
     return new Error(
       'GEMINI_RATE_LIMIT: o Gemini atingiu temporariamente um limite de requisições ou cota do serviço. Aguarde a liberação e retome a análise; os lotes já concluídos permanecem salvos neste navegador.'
     )
   }
 
-  if (isBillingError(message)) {
+
+  if (/403|valid api key|gcp project is required|permission denied/i.test(message)) {
     return new Error(
-      'GEMINI_BILLING_STATE_MISMATCH: o Google retornou um erro específico de faturamento sem indicação de quota/rate-limit.'
+      'GEMINI_PROJECT_CONFIGURATION: o modelo/chamada foi recusado pela configuração do projeto Firebase/Google Cloud.'
     )
   }
 
@@ -207,7 +214,7 @@ function classifyGeminiError(error: any) {
 
   if (/GEMINI_REQUEST_TIMEOUT/i.test(message)) {
     return new Error(
-      'GEMINI_REQUEST_TIMEOUT: o Gemini não respondeu dentro de 90 segundos. A análise foi interrompida sem perder os lotes já concluídos.'
+      'GEMINI_REQUEST_TIMEOUT: o Gemini não respondeu dentro de 210 segundos. A análise foi interrompida sem perder os lotes já concluídos.'
     )
   }
 
@@ -232,7 +239,7 @@ function withTimeout<T>(promise: Promise<T>, modelName: string, context: string)
   const timeout = new Promise<T>((_, reject) => {
     timeoutId = window.setTimeout(() => {
       reject(new Error(
-        `GEMINI_REQUEST_TIMEOUT: ${context} excedeu 90 segundos no modelo ${modelName}.`
+        `GEMINI_REQUEST_TIMEOUT: ${context} excedeu 210 segundos no modelo ${modelName}.`
       ))
     }, REQUEST_TIMEOUT_MS)
   })
@@ -277,7 +284,7 @@ async function generateContentWithFallback(
       )
     } catch (error: any) {
       lastError = error
-      const message = String(error?.message || error || '')
+      const message = errorToText(error)
 
       console.error('[Processo 360 IA][Gemini]', {
         context,
@@ -289,7 +296,7 @@ async function generateContentWithFallback(
       })
 
       if (
-        /401|app check token is invalid|appcheck/i.test(message) ||
+        /401|403|app check token is invalid|appcheck|valid api key|gcp project is required|permission denied/i.test(message) ||
         isBillingError(message) ||
         isQuotaError(message)
       ) {
@@ -614,6 +621,34 @@ function isValidReport(value: any): value is GeminiAnalysisReport {
   )
 }
 
+function normalizeQuantityToken(value: string) {
+  return value.toLowerCase().replace(/\s+/g, '').replace(/\./g, '').replace(',', '.')
+}
+
+function literalQuantityTokens(lotResults: LotExtraction[]) {
+  const source = JSON.stringify(lotResults)
+  const matches = source.match(/R\$\s*\d+(?:\.\d{3})*(?:,\d{2})?|\b\d+(?:[.,]\d+)?\s*%/gi) || []
+  return new Set(matches.map(normalizeQuantityToken))
+}
+
+function removeUnsupportedDerivedQuantities(report: GeminiAnalysisReport, lotResults: LotExtraction[]) {
+  const allowed = literalQuantityTokens(lotResults)
+  const quantityPattern = /R\$\s*\d+(?:\.\d{3})*(?:,\d{2})?|\b\d+(?:[.,]\d+)?\s*%/gi
+  const clean = (value: string) => String(value || '').replace(quantityPattern, token =>
+    allowed.has(normalizeQuantityToken(token))
+      ? token
+      : '[QUANTIA DERIVADA REMOVIDA — não consta literalmente nos lotes]'
+  )
+
+  report.executiveSummary = clean(report.executiveSummary)
+  report.claimsEvidenceDecisions = clean(report.claimsEvidenceDecisions)
+  report.globalAnalysis = clean(report.globalAnalysis)
+  report.conclusionStrategy = clean(report.conclusionStrategy)
+  report.timeline = report.timeline.map(item => ({ ...item, event: clean(item.event), reference: clean(item.reference) }))
+  report.risks = report.risks.map(item => ({ ...item, item: clean(item.item), basis: clean(item.basis) }))
+  return report
+}
+
 function getProcessNumberConsensus(lotResults: LotExtraction[]) {
   const missing = 'Informação não constante nos dados fornecidos'
   const values = lotResults
@@ -741,6 +776,7 @@ ${JSON.stringify(lotResults)}
 
   parsed.processNumber = consolidatedProcessNumber
   parsed.processNumberWarning = processNumberWarning
+  removeUnsupportedDerivedQuantities(parsed, lotResults)
 
   parsed.sources = lots.map(lot => ({
     lot: lot.number,
