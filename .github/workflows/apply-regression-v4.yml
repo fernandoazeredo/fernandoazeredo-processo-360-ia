@@ -1,0 +1,175 @@
+name: Aplicar correções regressão jurídica v4
+
+on:
+  push:
+    branches: [fix-regressao-juridica-v4]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[regressao-v4-aplicada]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: fix-regressao-juridica-v4
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Aplicar patch v4
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          def patch(path, old, new, count=1):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              found = text.count(old)
+              if found < count:
+                  raise SystemExit(f'{path}: trecho não encontrado ({found} < {count})')
+              text = text.replace(old, new, count)
+              p.write_text(text, encoding='utf-8')
+
+          # ---------- Motor B: tipos de peça, fase e perfil profissional ----------
+          patch('src/pieces.ts',
+          "export type LegalPieceDraft = {\n  pieceType: string\n  title: string\n  sections: PieceSection[]\n  claims: PieceClaim[]\n  validation: { confirmed: number; partiallyConfirmed: number; unconfirmed: number; conflicting: number }\n  model: string\n  promptVersion: string\n}\n",
+          "export type LegalPieceDraft = {\n  pieceType: string\n  title: string\n  sections: PieceSection[]\n  claims: PieceClaim[]\n  validation: { confirmed: number; partiallyConfirmed: number; unconfirmed: number; conflicting: number }\n  model: string\n  promptVersion: string\n}\n\nexport type ProfessionalProfile = {\n  name: string\n  oab: string\n  address: string\n  email: string\n}\n")
+
+          patch('src/pieces.ts',
+          "  Trabalhista: { Reclamante: 'Petição Inicial', Reclamada: 'Contestação / Defesa' },",
+          "  Trabalhista: { Reclamante: 'Petição / Manifestação', Reclamada: 'Contestação / Defesa' },")
+
+          patch('src/pieces.ts',
+          "export function pieceTypeOptions(area: string, perspective: string) {\n  const suggested = suggestPieceType(area, perspective)\n  const generic = ['Petição Inicial', 'Contestação', 'Contestação / Defesa', 'Réplica / Manifestação', 'Defesa / Impugnação', 'Defesa / Recurso', 'Defesa Prévia / Resposta à Acusação', 'Denúncia', 'Petição de Execução', 'Petição / Manifestação']\n  return Array.from(new Set([suggested, ...generic]))\n}\n",
+          "export function pieceTypeOptions(area: string, perspective: string) {\n  const suggested = suggestPieceType(area, perspective)\n  const byArea: Record<string, Record<string, string[]>> = {\n    Trabalhista: {\n      Reclamante: ['Petição / Manifestação', 'Réplica / Manifestação', 'Petição Inicial'],\n      Reclamada: ['Contestação / Defesa', 'Petição / Manifestação']\n    },\n    Cível: { Autor: ['Petição Inicial', 'Petição / Manifestação'], Réu: ['Contestação', 'Petição / Manifestação'] },\n    Criminal: {\n      Acusação: ['Denúncia', 'Petição / Manifestação'],\n      Defesa: ['Defesa Prévia / Resposta à Acusação', 'Petição / Manifestação'],\n      'Assistente de acusação': ['Petição / Manifestação'],\n      Querelante: ['Petição / Manifestação']\n    },\n    Ambiental: { 'Autuado / Réu': ['Defesa / Impugnação', 'Petição / Manifestação'], 'Órgão Ambiental / MP': ['Petição / Manifestação'] },\n    Tributário: { Contribuinte: ['Defesa / Impugnação', 'Petição / Manifestação'], 'Fazenda Pública': ['Petição de Execução', 'Petição / Manifestação'] },\n    Administrativo: { Administrado: ['Defesa / Recurso', 'Petição / Manifestação'], 'Administração Pública': ['Petição / Manifestação'] },\n    Previdenciário: { Segurado: ['Petição Inicial', 'Petição / Manifestação'], INSS: ['Contestação', 'Petição / Manifestação'] },\n    Consumidor: { Consumidor: ['Petição Inicial', 'Petição / Manifestação'], 'Fornecedor / Empresa': ['Contestação', 'Petição / Manifestação'] },\n    Família: { Requerente: ['Petição Inicial', 'Petição / Manifestação'], Requerido: ['Contestação', 'Petição / Manifestação'] },\n    Empresarial: { 'Parte Autora': ['Petição Inicial', 'Petição / Manifestação'], 'Parte Ré': ['Contestação', 'Petição / Manifestação'] }\n  }\n  return Array.from(new Set([suggested, ...(byArea[area]?.[perspective] || ['Petição / Manifestação'])]))\n}\n")
+
+          marker = "function inferProceduralPhase(report: AnalysisReport) {"
+          helper = """function reportText(report: AnalysisReport) {\n  return `${report.executiveSummary}\\n${report.claimsEvidenceDecisions}\\n${report.globalAnalysis}\\n${report.conclusionStrategy}\\n${report.timeline.map(item => `${item.event} ${item.reference}`).join('\\n')}`.toLowerCase()\n}\n\nfunction hasDefenseInRecord(report: AnalysisReport) {\n  const text = reportText(report)\n  const explicitAbsence = /(?:não|nao)\\s+(?:há|ha|consta|existe|foi\\s+(?:localizada|identificada|apresentada|juntada))[^.\\n]{0,80}(?:contestação|contestacao|defesa)/i.test(text)\n    || /(?:contestação|contestacao|defesa)[^.\\n]{0,80}(?:não|nao)\\s+(?:consta|foi\\s+(?:localizada|identificada|apresentada|juntada))/i.test(text)\n  if (explicitAbsence) return false\n  const timelineText = report.timeline.map(item => `${item.event} ${item.reference}`).join(' ').toLowerCase()\n  return /(?:contestação|contestacao|defesa)[^.;]{0,60}(?:apresentad|protocolad|juntad|oferecid)/i.test(timelineText)\n    || /(?:apresentad|protocolad|juntad|oferecid)[^.;]{0,60}(?:contestação|contestacao|defesa)/i.test(timelineText)\n}\n\n"""
+          patch('src/pieces.ts', marker, helper + marker)
+
+          patch('src/pieces.ts',
+          "export async function generateLegalPiece(report: AnalysisReport, pieceType: string): Promise<LegalPieceDraft> {\n  const source = reportToSource(report)\n  const diagnostic = reportToDiagnostic(report)\n  const phase = inferProceduralPhase(report)\n  const specific = specificPiecePrompt(report.area, report.perspective, pieceType)\n",
+          "export async function generateLegalPiece(report: AnalysisReport, pieceType: string, professionalProfile?: ProfessionalProfile): Promise<LegalPieceDraft> {\n  if (/réplica|replica/i.test(pieceType) && !hasDefenseInRecord(report)) {\n    throw new Error('PIECE_REPLICA_WITHOUT_DEFENSE')\n  }\n  const source = reportToSource(report)\n  const diagnostic = reportToDiagnostic(report)\n  const phase = inferProceduralPhase(report)\n  const specific = specificPiecePrompt(report.area, report.perspective, pieceType)\n  const currentDate = new Intl.DateTimeFormat('pt-BR').format(new Date())\n  const professional = professionalProfile ? JSON.stringify(professionalProfile, null, 2) : 'PROFISSIONAL NÃO CADASTRADO'\n")
+
+          patch('src/pieces.ts',
+          "  const draftPrompt = `${basePromptDoc.content}\\n\\n${specificPromptDoc.content}\\n\\nÁREA: ${report.area}\\nPERSPECTIVA: ${report.perspective}\\nTIPO SOLICITADO: ${pieceType}\\nFASE PROCESSUAL INFERIDA: ${phase}\\n\\n[DADOS_CONSOLIDADOS_DO_PROCESSO]\\n${source}\\n\\n[DIAGNOSTICO_JURIDICO]\\n${diagnostic}\\n\\nINSTRUÇÃO DE SAÍDA: JSON do schema. A peça em sections deve estar LIMPA, sem referências de lote/página/folha e sem avisos internos do sistema.`",
+          "  const draftPrompt = `${basePromptDoc.content}\\n\\n${specificPromptDoc.content}\\n\\nÁREA: ${report.area}\\nPERSPECTIVA: ${report.perspective}\\nTIPO SOLICITADO: ${pieceType}\\nFASE PROCESSUAL INFERIDA: ${phase}\\nDATA ATUAL DO SISTEMA: ${currentDate}\\n\\n[DADOS_PROFISSIONAIS_DO_ADVOGADO]\\n${professional}\\n\\n[DADOS_CONSOLIDADOS_DO_PROCESSO]\\n${source}\\n\\n[DIAGNOSTICO_JURIDICO]\\n${diagnostic}\\n\\nINSTRUÇÃO DE SAÍDA: JSON do schema. A peça em sections deve estar LIMPA, sem referências de lote/página/folha e sem avisos internos do sistema. Use a DATA ATUAL DO SISTEMA no fecho e os DADOS PROFISSIONAIS no bloco de assinatura; não substitua dados existentes por placeholders.`")
+
+          # ---------- Prompts Motor B ----------
+          patch('src/piecePrompts.ts',
+          "7. Use qualificação das partes existente nos insumos. Só use marcadores curtos para dados realmente ausentes: [CPF], [CNPJ], [ENDEREÇO], [OAB/UF], [VALOR], [DATA] ou [DADO A CONFIRMAR].",
+          "7. Use integralmente a qualificação das partes existente nos insumos, procurando nome, CPF/CNPJ e endereço em TODAS as seções do relatório antes de usar marcador. Nunca substitua dado disponível por [CNPJ] ou [ENDEREÇO]. Para assinatura e fecho, use DADOS_PROFISSIONAIS_DO_ADVOGADO e DATA ATUAL DO SISTEMA fornecidos pelo aplicativo. Só use marcador curto para dado realmente ausente.")
+
+          patch('src/piecePrompts.ts',
+          "PEDIDOS COM DEFEITO FORMAL: examine individualização, valor e causa de pedir. Se houver suporte para questão processual, trate-a expressamente.",
+          "PEDIDOS COM DEFEITO FORMAL: examine individualização, valor e causa de pedir. Em reclamação escrita, confronte expressamente cada pedido com o art. 840, §1º, da CLT (pedido certo, determinado e com indicação de valor). Se houver pedido sem valor nos dados, trate a questão expressamente na contestação e avalie a consequência processual do §3º, sem inventar ausência quando o valor constar em outro trecho.\n\nCARTÕES DE PONTO / SÚMULA 338: quando houver horários uniformes ou invariáveis, enfrente expressamente a Súmula 338, III, do TST e o efeito probatório pertinente. A mera ausência de assinatura do empregado, isoladamente, não deve ser tratada como causa automática de invalidade do cartão.")
+
+          patch('src/piecePrompts.ts',
+          "FGTS: confronte competência por competência com extrato/guia disponível. Se a inicial alegar período maior do que o extrato demonstra, não reproduza o período maior. Considere também prescrição das competências quando aplicável.",
+          "FGTS: confronte competência por competência com extrato/guia disponível. Enumere TODAS as competências relevantes e não omita mês de fronteira. Se o extrato demonstrar lacunas em janeiro, fevereiro e março e depósitos em abril, maio e junho, preserve as três lacunas, ressalvada a prescrição individual de cada competência. Se a inicial alegar período maior do que o extrato demonstra, não reproduza o período maior. Considere também prescrição das competências quando aplicável.")
+
+          patch('src/piecePrompts.ts',
+          "JORNADA: use exatamente a jornada e o intervalo encontrados. Não invente horários. Se o trabalhador declara 20 minutos de intervalo, não trate automaticamente como ausência integral; diferencie período usufruído e período suprimido conforme regime aplicável.",
+          "JORNADA: use exatamente a jornada e o intervalo encontrados. Não invente horários. Se houver cartões com horários uniformes/invariáveis, examine expressamente a Súmula 338, III, do TST e a repercussão sobre o ônus da prova. A ausência de assinatura, isoladamente, não torna automaticamente o cartão inválido. Se o trabalhador declara 20 minutos de intervalo, não trate automaticamente como ausência integral; diferencie período usufruído e período suprimido conforme regime aplicável.")
+
+          patch('src/piecePrompts.ts',
+          "FASE PROCESSUAL: jamais inserir número de processo ou Vara numa inicial pré-processual por inferência. Em processo já existente, não gerar nova inicial como se o ajuizamento ainda fosse ocorrer.",
+          "FASE PROCESSUAL: jamais inserir número de processo ou Vara numa inicial pré-processual por inferência. Em processo já existente, não gerar nova inicial como se o ajuizamento ainda fosse ocorrer. RÉPLICA/MANIFESTAÇÃO À CONTESTAÇÃO só pode ser redigida se os dados consolidados demonstrarem que uma contestação/defesa foi efetivamente apresentada ou juntada. Se não houver defesa nos autos, não simule argumentos defensivos e não intitule a peça como manifestação à contestação.")
+
+          patch('src/piecePrompts.ts',
+          "- pedidos que exigem valor não ficam silenciosamente sem valor;",
+          "- pedidos que exigem valor não ficam silenciosamente sem valor e, no trabalhista, o art. 840, §1º, da CLT foi enfrentado quando pertinente;\n- cartões de ponto uniformes/invariáveis foram confrontados com a Súmula 338, III, do TST quando pertinente;\n- réplica/manifestação à contestação não foi criada sem prova de defesa efetivamente apresentada nos autos;")
+
+          # ---------- Motor A trabalhista ----------
+          patch('functions/prompts/01_Trabalhista_Favor_Reclamada.txt',
+          "FGTS: conferir extrato competência por competência. Não repetir alegação de ausência de janeiro a junho se o extrato demonstrar depósitos em parte desse intervalo. Distinguir mês sem depósito, mês depositado e mês prescrito.",
+          "FGTS: conferir extrato competência por competência. Enumerar cada competência relevante sem omitir mês de fronteira. Se o extrato indicar ausência em janeiro, fevereiro e março e regularidade em abril, maio e junho, registrar expressamente as três lacunas, ressalvada a prescrição individual. Não repetir alegação agregada de ausência de janeiro a junho se o extrato demonstrar depósitos em parte desse intervalo. Distinguir mês sem depósito, mês depositado e mês prescrito.")
+          patch('functions/prompts/01_Trabalhista_Favor_Reclamada.txt',
+          "PEDIDOS/VALORES: verificar individualização e indicação de valor de cada pedido conforme o regime processual aplicável. Sinalizar pedido sem valor quando isso for juridicamente relevante.",
+          "PEDIDOS/VALORES: verificar individualização e indicação de valor de cada pedido. Em reclamação escrita, confrontar expressamente pedido sem valor com o art. 840, §1º, da CLT e registrar a consequência processual potencial do §3º, sem afirmar ausência se o valor estiver em outra parte da inicial.")
+          patch('functions/prompts/01_Trabalhista_Favor_Reclamada.txt',
+          "JORNADA: examinar cartões de ponto criticamente. Registrar horários invariáveis/repetitivos e o risco probatório correspondente. Não concluir regularidade apenas porque existe cartão de ponto. Confrontar jornada contratual, cartões, depoimentos e demais documentos.",
+          "JORNADA: examinar cartões de ponto criticamente. Registrar horários invariáveis/repetitivos e o risco probatório correspondente. Quando houver horários uniformes, analisar expressamente a Súmula 338, III, do TST e a repercussão no ônus da prova. A ausência de assinatura do empregado, isoladamente, não invalida automaticamente o cartão. Não concluir regularidade apenas porque existe cartão de ponto. Confrontar jornada contratual, cartões, depoimentos e demais documentos.")
+
+          patch('functions/prompts/02_Trabalhista_Favor_Reclamante.txt',
+          "FGTS: conferir extrato competência por competência; não alegar falta onde houver depósito comprovado.",
+          "FGTS: conferir extrato competência por competência e enumerar todas as lacunas não prescritas; não alegar falta onde houver depósito comprovado e não omitir mês de fronteira como março quando o extrato o indicar sem depósito.")
+          patch('functions/prompts/02_Trabalhista_Favor_Reclamante.txt',
+          "PEDIDOS/VALORES: apontar pedido sem valor quando juridicamente exigível; não usar valor 'a arbitrar' sem registrar a questão.",
+          "PEDIDOS/VALORES: apontar pedido sem valor quando juridicamente exigível e confrontar expressamente a exigência do art. 840, §1º, da CLT; não usar valor 'a arbitrar' sem registrar a questão.")
+          patch('functions/prompts/02_Trabalhista_Favor_Reclamante.txt',
+          "JORNADA: confrontar narrativa, cartões e demais provas; registrar horários invariáveis/repetitivos e sua fragilidade probatória.",
+          "JORNADA: confrontar narrativa, cartões e demais provas; registrar horários invariáveis/repetitivos e sua fragilidade probatória, examinando expressamente a Súmula 338, III, do TST quando houver cartões com horários uniformes. A ausência de assinatura, isoladamente, não invalida automaticamente o cartão.")
+          patch('functions/prompts/02_Trabalhista_Favor_Reclamante.txt',
+          "FASE PROCESSUAL: se já houver ação ajuizada e contestação, registrar que uma nova petição inicial tende a ser incompatível com a fase e que a próxima manifestação deve ser definida pelos atos existentes.",
+          "FASE PROCESSUAL: se já houver ação ajuizada, registrar que nova petição inicial é incompatível com a fase. Só indicar réplica/manifestação à contestação quando os lotes demonstrarem que contestação/defesa foi efetivamente apresentada ou juntada. Se não houver contestação nos autos, registrar expressamente essa ausência e não presumir conteúdo defensivo.")
+
+          # Força nova publicação dos dois prompts trabalhistas no próximo deploy.
+          p = Path('functions/scripts/publish-reclamada-v2.mjs')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace('2026-09-28-trabalhista-reclamada-v3', '2026-09-29-trabalhista-reclamada-v4')
+          text = text.replace('2026-09-28-trabalhista-reclamante-v3', '2026-09-29-trabalhista-reclamante-v4')
+          text = text.replace('Análise jurídica global v3', 'Análise jurídica global v4')
+          p.write_text(text, encoding='utf-8')
+
+          # ---------- Perfil profissional na interface ----------
+          patch('src/App.tsx',
+          "import type { LegalPieceDraft, PieceClaim } from './pieces'",
+          "import type { LegalPieceDraft, PieceClaim, ProfessionalProfile } from './pieces'")
+
+          patch('src/App.tsx',
+          "        {analysis && <AnalysisResult report={analysis} originalFile={file} isAdmin={appUser.email===ADMIN_EMAIL} piecePriceCents={walletConfig.piecePriceCents} />}",
+          "        {analysis && <AnalysisResult report={analysis} originalFile={file} isAdmin={appUser.email===ADMIN_EMAIL} piecePriceCents={walletConfig.piecePriceCents} user={appUser} />}")
+
+          patch('src/App.tsx',
+          "function AnalysisResult({report, originalFile, isAdmin, piecePriceCents}:{report:AnalysisReport;originalFile:File|null;isAdmin:boolean;piecePriceCents:number}) {",
+          "function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, user}:{report:AnalysisReport;originalFile:File|null;isAdmin:boolean;piecePriceCents:number;user:User}) {")
+
+          patch('src/App.tsx',
+          "  const [confirmation, setConfirmation] = useState<Record<string, string>>({})\n\n  const options = pieceTypeOptions(report.area, report.perspective)",
+          "  const [confirmation, setConfirmation] = useState<Record<string, string>>({})\n  const [professionalProfile, setProfessionalProfile] = useState<ProfessionalProfile>({ name: '', oab: '', address: '', email: user.email || '' })\n  const [profileStatus, setProfileStatus] = useState('')\n\n  useEffect(() => {\n    if (!db || !user.uid) return\n    return onSnapshot(doc(db, 'professionalProfiles', user.uid), snap => {\n      if (snap.exists()) {\n        const data = snap.data() as Partial<ProfessionalProfile>\n        setProfessionalProfile({\n          name: String(data.name || ''),\n          oab: String(data.oab || ''),\n          address: String(data.address || ''),\n          email: String(data.email || user.email || '')\n        })\n      }\n    })\n  }, [user.uid])\n\n  async function saveProfessionalProfile() {\n    if (!db) return\n    setProfileStatus('Salvando...')\n    try {\n      await setDoc(doc(db, 'professionalProfiles', user.uid), { ...professionalProfile, uid: user.uid, updatedAt: serverTimestamp() }, { merge: true })\n      setProfileStatus('Dados salvos.')\n    } catch (error) {\n      console.error('[Processo 360 IA] Falha ao salvar dados profissionais', error)\n      setProfileStatus('Não foi possível salvar os dados.')\n    }\n  }\n\n  const options = pieceTypeOptions(report.area, report.perspective)")
+
+          patch('src/App.tsx',
+          "  async function handleGeneratePiece() {\n    setPieceError('')\n    setPiece(null)\n    setPieceBusy(true)",
+          "  async function handleGeneratePiece() {\n    setPieceError('')\n    setPiece(null)\n    if (!professionalProfile.name.trim() || !professionalProfile.oab.trim()) {\n      setPieceError('Cadastre o nome do advogado e a OAB antes de gerar a peça. Assim o sistema não criará assinatura com campos em branco.')\n      return\n    }\n    setPieceBusy(true)")
+
+          patch('src/App.tsx',
+          "      const generated = await generateLegalPiece(report, pieceType)",
+          "      const generated = await generateLegalPiece(report, pieceType, professionalProfile)")
+
+          patch('src/App.tsx',
+          "      setPieceError(message.includes('Saldo insuficiente')\n        ? 'Saldo insuficiente para gerar a peça jurídica. Adicione saldo à carteira.'\n        : 'Não foi possível gerar e validar o rascunho. ' + (message || 'Tente novamente.'))",
+          "      setPieceError(message.includes('Saldo insuficiente')\n        ? 'Saldo insuficiente para gerar a peça jurídica. Adicione saldo à carteira.'\n        : message.includes('PIECE_REPLICA_WITHOUT_DEFENSE')\n          ? 'Não é possível gerar Réplica / Manifestação à contestação porque o relatório não demonstra contestação ou defesa efetivamente apresentada nos autos.'\n          : 'Não foi possível gerar e validar o rascunho. ' + (message || 'Tente novamente.'))")
+
+          patch('src/App.tsx',
+          "        <label>Tipo de peça\n          <select value={pieceType} onChange={event => setPieceType(event.target.value)}>\n            {options.map(option => <option key={option}>{option}</option>)}\n          </select>\n        </label>",
+          "        <div className=\"professional-profile\">\n          <h3>Dados do advogado</h3>\n          <div className=\"form-grid\">\n            <label>Nome profissional<input value={professionalProfile.name} onChange={event => setProfessionalProfile(current => ({ ...current, name: event.target.value }))} placeholder=\"Nome do advogado\" /></label>\n            <label>OAB/UF<input value={professionalProfile.oab} onChange={event => setProfessionalProfile(current => ({ ...current, oab: event.target.value }))} placeholder=\"OAB/RJ 00.000\" /></label>\n            <label>Endereço profissional<input value={professionalProfile.address} onChange={event => setProfessionalProfile(current => ({ ...current, address: event.target.value }))} placeholder=\"Endereço do escritório\" /></label>\n            <label>E-mail<input type=\"email\" value={professionalProfile.email} onChange={event => setProfessionalProfile(current => ({ ...current, email: event.target.value }))} placeholder=\"E-mail profissional\" /></label>\n          </div>\n          <button type=\"button\" className=\"secondary-button compact\" onClick={saveProfessionalProfile}><Save size={16}/> Salvar dados do advogado</button>\n          {profileStatus && <small>{profileStatus}</small>}\n        </div>\n        <label>Tipo de peça\n          <select value={pieceType} onChange={event => setPieceType(event.target.value)}>\n            {options.map(option => <option key={option}>{option}</option>)}\n          </select>\n        </label>")
+
+          # ---------- Firestore: perfil profissional por usuário ----------
+          patch('firestore.rules',
+          "    match /walletConfig/{configId} {\n      allow read: if signedIn();\n      allow write: if isAdmin();\n    }",
+          "    match /walletConfig/{configId} {\n      allow read: if signedIn();\n      allow write: if isAdmin();\n    }\n\n    match /professionalProfiles/{uid} {\n      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());\n      allow create, update: if signedIn() && request.auth.uid == uid && request.resource.data.uid == request.auth.uid;\n      allow delete: if signedIn() && request.auth.uid == uid;\n    }")
+
+          # Workflow temporário não deve ir para main.
+          Path('.github/workflows/apply-regression-v4.yml').unlink(missing_ok=True)
+          PY
+
+      - name: Build de validação
+        run: |
+          npm install
+          npm run build
+
+      - name: Commit das correções
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Corrige regressão jurídica v4 [regressao-v4-aplicada]"
+          git push origin HEAD:fix-regressao-juridica-v4
