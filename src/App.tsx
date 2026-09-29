@@ -846,14 +846,40 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, user}:{
 
   useEffect(() => {
     if (!db || !user.uid) return
-    return onSnapshot(doc(db, 'professionalProfiles', user.uid), snap => {
+    const firestore = db
+    return onSnapshot(doc(firestore, 'professionalProfiles', user.uid), async snap => {
       if (snap.exists()) {
-        const data = snap.data() as Partial<ProfessionalProfile>
+        const data = snap.data() as Partial<ProfessionalProfile> & { emailExplicitlySet?: boolean; legacyLoginEmailCleared?: boolean }
+        const storedEmail = String(data.email || '').trim()
+        const loginEmail = String(user.email || '').trim()
+        const isLegacyLoginEmail = Boolean(
+          storedEmail && loginEmail &&
+          storedEmail.toLowerCase() === loginEmail.toLowerCase() &&
+          data.emailExplicitlySet !== true &&
+          data.legacyLoginEmailCleared !== true
+        )
+
+        // Versões antigas gravavam automaticamente o e-mail de autenticação como e-mail profissional.
+        // Limpa esse legado uma única vez. Se o advogado quiser usar o mesmo e-mail profissional,
+        // basta digitá-lo e salvar: a partir daí emailExplicitlySet=true preserva a escolha.
+        if (isLegacyLoginEmail) {
+          try {
+            await setDoc(doc(firestore, 'professionalProfiles', user.uid), {
+              email: '',
+              emailExplicitlySet: false,
+              legacyLoginEmailCleared: true,
+              updatedAt: serverTimestamp()
+            }, { merge: true })
+          } catch (error) {
+            console.error('[Processo 360 IA] Falha ao limpar e-mail profissional legado', error)
+          }
+        }
+
         setProfessionalProfile({
           name: String(data.name || ''),
           oab: String(data.oab || ''),
           address: String(data.address || ''),
-          email: String(data.email || '')
+          email: isLegacyLoginEmail ? '' : storedEmail
         })
       }
     })
@@ -863,7 +889,13 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, user}:{
     if (!db) return
     setProfileStatus('Salvando...')
     try {
-      await setDoc(doc(db, 'professionalProfiles', user.uid), { ...professionalProfile, uid: user.uid, updatedAt: serverTimestamp() }, { merge: true })
+      await setDoc(doc(db, 'professionalProfiles', user.uid), {
+        ...professionalProfile,
+        uid: user.uid,
+        emailExplicitlySet: true,
+        legacyLoginEmailCleared: true,
+        updatedAt: serverTimestamp()
+      }, { merge: true })
       setProfileStatus('Dados salvos.')
     } catch (error) {
       console.error('[Processo 360 IA] Falha ao salvar dados profissionais', error)

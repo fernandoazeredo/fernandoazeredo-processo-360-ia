@@ -305,7 +305,8 @@ function applyDeterministicPieceFields(sections: PieceSection[], professionalPro
     [/\[E-?MAIL (?:PROFISSIONAL|DO ADVOGADO)\]/gi, profile.email],
     [/\[DATA\]/gi, pieceDate]
   ]
-  return cleanSections(sections.map(section => {
+
+  const filled = sections.map(section => {
     let title = section.title
     let content = section.content
     for (const [pattern, value] of replacements) {
@@ -314,7 +315,32 @@ function applyDeterministicPieceFields(sections: PieceSection[], professionalPro
       content = content.replace(pattern, value)
     }
     return { title, content }
-  }))
+  })
+
+  // A assinatura é dado cadastral determinístico: não pode desaparecer porque o revisor da IA
+  // omitiu o placeholder. Se houver endereço cadastrado e ele ainda não estiver na peça,
+  // anexa-o ao último bloco que contém nome/OAB do profissional (normalmente o fecho/assinatura).
+  const address = String(profile.address || '').trim()
+  if (address && !filled.some(section => section.content.toLowerCase().includes(address.toLowerCase()))) {
+    const name = String(profile.name || '').trim().toLowerCase()
+    const oab = String(profile.oab || '').trim().toLowerCase()
+    let signatureIndex = -1
+    for (let index = filled.length - 1; index >= 0; index -= 1) {
+      const content = String(filled[index].content || '').toLowerCase()
+      if ((oab && content.includes(oab)) || (name && content.includes(name))) {
+        signatureIndex = index
+        break
+      }
+    }
+    if (signatureIndex >= 0) {
+      filled[signatureIndex] = {
+        ...filled[signatureIndex],
+        content: `${filled[signatureIndex].content.trim()}\n${address}`
+      }
+    }
+  }
+
+  return cleanSections(filled)
 }
 
 export async function generateLegalPiece(report: AnalysisReport, pieceType: string, professionalProfile?: ProfessionalProfile): Promise<LegalPieceDraft> {
