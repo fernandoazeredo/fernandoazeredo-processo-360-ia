@@ -1,0 +1,40 @@
+name: Apply v12 clean direct PDF
+
+on:
+  push:
+    branches:
+      - fix-v12-pdf-peca-limpo-direto
+    paths:
+      - scripts/apply_v12_clean_direct_pdf.py
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: fix-v12-pdf-peca-limpo-direto
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply v12 patch
+        run: python scripts/apply_v12_clean_direct_pdf.py
+      - name: Validate build
+        run: |
+          npm ci
+          npm run build
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/App.tsx
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Corrige PDF da peça: limpo e download direto v12"
+            git push origin HEAD:fix-v12-pdf-peca-limpo-direto
+          fi
