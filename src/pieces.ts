@@ -31,6 +31,13 @@ export type LegalPieceDraft = {
   promptVersion: string
 }
 
+export type ProfessionalProfile = {
+  name: string
+  oab: string
+  address: string
+  email: string
+}
+
 type MotorBPromptDoc = {
   area?: string
   perspective?: string
@@ -43,7 +50,7 @@ type MotorBPromptDoc = {
 type LoadedPrompt = { content: string; version: number; source: 'firestore' | 'local-v3' }
 
 const pieceMapping: Record<string, Record<string, string>> = {
-  Trabalhista: { Reclamante: 'Petição Inicial', Reclamada: 'Contestação / Defesa' },
+  Trabalhista: { Reclamante: 'Petição / Manifestação', Reclamada: 'Contestação / Defesa' },
   Cível: { Autor: 'Petição Inicial', Réu: 'Contestação' },
   Criminal: { Acusação: 'Denúncia', Defesa: 'Defesa Prévia / Resposta à Acusação' },
   Ambiental: { 'Autuado / Réu': 'Defesa / Impugnação', 'Órgão Ambiental / MP': 'Auto de Infração / Petição' },
@@ -61,8 +68,27 @@ export function suggestPieceType(area: string, perspective: string) {
 
 export function pieceTypeOptions(area: string, perspective: string) {
   const suggested = suggestPieceType(area, perspective)
-  const generic = ['Petição Inicial', 'Contestação', 'Contestação / Defesa', 'Réplica / Manifestação', 'Defesa / Impugnação', 'Defesa / Recurso', 'Defesa Prévia / Resposta à Acusação', 'Denúncia', 'Petição de Execução', 'Petição / Manifestação']
-  return Array.from(new Set([suggested, ...generic]))
+  const byArea: Record<string, Record<string, string[]>> = {
+    Trabalhista: {
+      Reclamante: ['Petição / Manifestação', 'Réplica / Manifestação', 'Petição Inicial'],
+      Reclamada: ['Contestação / Defesa', 'Petição / Manifestação']
+    },
+    Cível: { Autor: ['Petição Inicial', 'Petição / Manifestação'], Réu: ['Contestação', 'Petição / Manifestação'] },
+    Criminal: {
+      Acusação: ['Denúncia', 'Petição / Manifestação'],
+      Defesa: ['Defesa Prévia / Resposta à Acusação', 'Petição / Manifestação'],
+      'Assistente de acusação': ['Petição / Manifestação'],
+      Querelante: ['Petição / Manifestação']
+    },
+    Ambiental: { 'Autuado / Réu': ['Defesa / Impugnação', 'Petição / Manifestação'], 'Órgão Ambiental / MP': ['Petição / Manifestação'] },
+    Tributário: { Contribuinte: ['Defesa / Impugnação', 'Petição / Manifestação'], 'Fazenda Pública': ['Petição de Execução', 'Petição / Manifestação'] },
+    Administrativo: { Administrado: ['Defesa / Recurso', 'Petição / Manifestação'], 'Administração Pública': ['Petição / Manifestação'] },
+    Previdenciário: { Segurado: ['Petição Inicial', 'Petição / Manifestação'], INSS: ['Contestação', 'Petição / Manifestação'] },
+    Consumidor: { Consumidor: ['Petição Inicial', 'Petição / Manifestação'], 'Fornecedor / Empresa': ['Contestação', 'Petição / Manifestação'] },
+    Família: { Requerente: ['Petição Inicial', 'Petição / Manifestação'], Requerido: ['Contestação', 'Petição / Manifestação'] },
+    Empresarial: { 'Parte Autora': ['Petição Inicial', 'Petição / Manifestação'], 'Parte Ré': ['Contestação', 'Petição / Manifestação'] }
+  }
+  return Array.from(new Set([suggested, ...(byArea[area]?.[perspective] || ['Petição / Manifestação'])]))
 }
 
 const draftSchema = Schema.object({ properties: {
@@ -145,6 +171,20 @@ function reportToSource(report: AnalysisReport) {
     conclusionStrategy: report.conclusionStrategy,
     sources: report.sources
   }, null, 2)
+}
+
+function reportText(report: AnalysisReport) {
+  return `${report.executiveSummary}\n${report.claimsEvidenceDecisions}\n${report.globalAnalysis}\n${report.conclusionStrategy}\n${report.timeline.map(item => `${item.event} ${item.reference}`).join('\n')}`.toLowerCase()
+}
+
+function hasDefenseInRecord(report: AnalysisReport) {
+  const text = reportText(report)
+  const explicitAbsence = /(?:não|nao)\s+(?:há|ha|consta|existe|foi\s+(?:localizada|identificada|apresentada|juntada))[^.\n]{0,80}(?:contestação|contestacao|defesa)/i.test(text)
+    || /(?:contestação|contestacao|defesa)[^.\n]{0,80}(?:não|nao)\s+(?:consta|foi\s+(?:localizada|identificada|apresentada|juntada))/i.test(text)
+  if (explicitAbsence) return false
+  const timelineText = report.timeline.map(item => `${item.event} ${item.reference}`).join(' ').toLowerCase()
+  return /(?:contestação|contestacao|defesa)[^.;]{0,60}(?:apresentad|protocolad|juntad|oferecid)/i.test(timelineText)
+    || /(?:apresentad|protocolad|juntad|oferecid)[^.;]{0,60}(?:contestação|contestacao|defesa)/i.test(timelineText)
 }
 
 function inferProceduralPhase(report: AnalysisReport) {
@@ -234,11 +274,16 @@ function hardenCorrectedSections(sections: PieceSection[], claims: PieceClaim[])
   return cleanSections(hardened)
 }
 
-export async function generateLegalPiece(report: AnalysisReport, pieceType: string): Promise<LegalPieceDraft> {
+export async function generateLegalPiece(report: AnalysisReport, pieceType: string, professionalProfile?: ProfessionalProfile): Promise<LegalPieceDraft> {
+  if (/réplica|replica/i.test(pieceType) && !hasDefenseInRecord(report)) {
+    throw new Error('PIECE_REPLICA_WITHOUT_DEFENSE')
+  }
   const source = reportToSource(report)
   const diagnostic = reportToDiagnostic(report)
   const phase = inferProceduralPhase(report)
   const specific = specificPiecePrompt(report.area, report.perspective, pieceType)
+  const currentDate = new Intl.DateTimeFormat('pt-BR').format(new Date())
+  const professional = professionalProfile ? JSON.stringify(professionalProfile, null, 2) : 'PROFISSIONAL NÃO CADASTRADO'
 
   const [basePromptDoc, specificPromptDoc, validatorPromptDoc, reviewerPromptDoc] = await Promise.all([
     loadMotorBPrompt(report.area, report.perspective, MOTOR_B_PURPOSES.base, MOTOR_B_BASE_GLOBAL),
@@ -247,7 +292,7 @@ export async function generateLegalPiece(report: AnalysisReport, pieceType: stri
     loadMotorBPrompt(report.area, report.perspective, MOTOR_B_PURPOSES.reviewer, MOTOR_B_REVIEWER)
   ])
 
-  const draftPrompt = `${basePromptDoc.content}\n\n${specificPromptDoc.content}\n\nÁREA: ${report.area}\nPERSPECTIVA: ${report.perspective}\nTIPO SOLICITADO: ${pieceType}\nFASE PROCESSUAL INFERIDA: ${phase}\n\n[DADOS_CONSOLIDADOS_DO_PROCESSO]\n${source}\n\n[DIAGNOSTICO_JURIDICO]\n${diagnostic}\n\nINSTRUÇÃO DE SAÍDA: JSON do schema. A peça em sections deve estar LIMPA, sem referências de lote/página/folha e sem avisos internos do sistema.`
+  const draftPrompt = `${basePromptDoc.content}\n\n${specificPromptDoc.content}\n\nÁREA: ${report.area}\nPERSPECTIVA: ${report.perspective}\nTIPO SOLICITADO: ${pieceType}\nFASE PROCESSUAL INFERIDA: ${phase}\nDATA ATUAL DO SISTEMA: ${currentDate}\n\n[DADOS_PROFISSIONAIS_DO_ADVOGADO]\n${professional}\n\n[DADOS_CONSOLIDADOS_DO_PROCESSO]\n${source}\n\n[DIAGNOSTICO_JURIDICO]\n${diagnostic}\n\nINSTRUÇÃO DE SAÍDA: JSON do schema. A peça em sections deve estar LIMPA, sem referências de lote/página/folha e sem avisos internos do sistema. Use a DATA ATUAL DO SISTEMA no fecho e os DADOS PROFISSIONAIS no bloco de assinatura; não substitua dados existentes por placeholders.`
 
   const draftResult = await generateJson(draftPrompt, draftSchema, 'geração do rascunho especializado v3')
   const rawSections = cleanSections(Array.isArray(draftResult.parsed.sections) ? draftResult.parsed.sections.map((item: any) => ({ title: String(item.title || ''), content: String(item.content || '') })) : [])

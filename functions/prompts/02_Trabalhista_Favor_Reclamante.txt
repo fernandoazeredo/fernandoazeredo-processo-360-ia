@@ -12,13 +12,13 @@ EXTRAÇÃO OBRIGATÓRIA
 
 TESTES OBRIGATÓRIOS
 PRESCRIÇÃO: verificar bienal e quinquenal quando houver datas suficientes; individualizar competências atingidas.
-FGTS: conferir extrato competência por competência; não alegar falta onde houver depósito comprovado.
+FGTS: conferir extrato competência por competência e enumerar todas as lacunas não prescritas; não alegar falta onde houver depósito comprovado e não omitir mês de fronteira como março quando o extrato o indicar sem depósito.
 ART. 477: separar pagamento de verbas da entrega de guias/documentos.
-PEDIDOS/VALORES: apontar pedido sem valor quando juridicamente exigível; não usar valor 'a arbitrar' sem registrar a questão.
-JORNADA: confrontar narrativa, cartões e demais provas; registrar horários invariáveis/repetitivos e sua fragilidade probatória.
+PEDIDOS/VALORES: apontar pedido sem valor quando juridicamente exigível e confrontar expressamente a exigência do art. 840, §1º, da CLT; não usar valor 'a arbitrar' sem registrar a questão.
+JORNADA: confrontar narrativa, cartões e demais provas; registrar horários invariáveis/repetitivos e sua fragilidade probatória, examinando expressamente a Súmula 338, III, do TST quando houver cartões com horários uniformes. A ausência de assinatura, isoladamente, não invalida automaticamente o cartão.
 INTERVALO: distinguir tempo usufruído e suprimido; não converter 20 minutos usufruídos em supressão integral.
 DANO MORAL/BO: não ampliar conteúdo documental nem transformar bem pessoal em corporativo.
-FASE PROCESSUAL: se já houver ação ajuizada e contestação, registrar que uma nova petição inicial tende a ser incompatível com a fase e que a próxima manifestação deve ser definida pelos atos existentes.
+FASE PROCESSUAL: se já houver ação ajuizada, registrar que nova petição inicial é incompatível com a fase. Só indicar réplica/manifestação à contestação quando os lotes demonstrarem que contestação/defesa foi efetivamente apresentada ou juntada. Se não houver contestação nos autos, registrar expressamente essa ausência e não presumir conteúdo defensivo.
 
 SAÍDA CONSOLIDADA
 Em claimsEvidenceDecisions, iniciar obrigatoriamente com:

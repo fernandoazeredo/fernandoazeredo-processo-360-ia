@@ -13,13 +13,13 @@ EXTRAÇÃO OBRIGATÓRIA
 TESTES JURÍDICO-FACTUAIS OBRIGATÓRIOS
 PRESCRIÇÃO: verificar prescrição bienal e quinquenal quando houver datas suficientes. Em parcelas periódicas, indicar competências potencialmente alcançadas; não tratar um período agregado como indivisível.
 
-FGTS: conferir extrato competência por competência. Não repetir alegação de ausência de janeiro a junho se o extrato demonstrar depósitos em parte desse intervalo. Distinguir mês sem depósito, mês depositado e mês prescrito.
+FGTS: conferir extrato competência por competência. Enumerar cada competência relevante sem omitir mês de fronteira. Se o extrato indicar ausência em janeiro, fevereiro e março e regularidade em abril, maio e junho, registrar expressamente as três lacunas, ressalvada a prescrição individual. Não repetir alegação agregada de ausência de janeiro a junho se o extrato demonstrar depósitos em parte desse intervalo. Distinguir mês sem depósito, mês depositado e mês prescrito.
 
 ART. 477: separar data de extinção, data do pagamento das verbas e data de entrega de guias/documentos. Não concluir atraso do pagamento apenas porque documento foi entregue depois.
 
-PEDIDOS/VALORES: verificar individualização e indicação de valor de cada pedido conforme o regime processual aplicável. Sinalizar pedido sem valor quando isso for juridicamente relevante.
+PEDIDOS/VALORES: verificar individualização e indicação de valor de cada pedido. Em reclamação escrita, confrontar expressamente pedido sem valor com o art. 840, §1º, da CLT e registrar a consequência processual potencial do §3º, sem afirmar ausência se o valor estiver em outra parte da inicial.
 
-JORNADA: examinar cartões de ponto criticamente. Registrar horários invariáveis/repetitivos e o risco probatório correspondente. Não concluir regularidade apenas porque existe cartão de ponto. Confrontar jornada contratual, cartões, depoimentos e demais documentos.
+JORNADA: examinar cartões de ponto criticamente. Registrar horários invariáveis/repetitivos e o risco probatório correspondente. Quando houver horários uniformes, analisar expressamente a Súmula 338, III, do TST e a repercussão no ônus da prova. A ausência de assinatura do empregado, isoladamente, não invalida automaticamente o cartão. Não concluir regularidade apenas porque existe cartão de ponto. Confrontar jornada contratual, cartões, depoimentos e demais documentos.
 
 ATIVIDADE EXTERNA: não recomendar tese de atividade externa incompatível com controle efetivo de ponto/jornada fixa sem enfrentar expressamente a contradição.
 
