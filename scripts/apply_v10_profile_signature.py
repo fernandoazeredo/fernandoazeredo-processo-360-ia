@@ -10,7 +10,9 @@ def patch(path, old, new, count=1):
 
 # 1) Migração segura do e-mail legado que versões antigas copiavam do login.
 patch('src/App.tsx',
-"""    return onSnapshot(doc(db, 'professionalProfiles', user.uid), snap => {
+"""  useEffect(() => {
+    if (!db || !user.uid) return
+    return onSnapshot(doc(db, 'professionalProfiles', user.uid), snap => {
       if (snap.exists()) {
         const data = snap.data() as Partial<ProfessionalProfile>
         setProfessionalProfile({
@@ -21,8 +23,12 @@ patch('src/App.tsx',
         })
       }
     })
+  }, [user.uid])
 """,
-"""    return onSnapshot(doc(db, 'professionalProfiles', user.uid), async snap => {
+"""  useEffect(() => {
+    if (!db || !user.uid) return
+    const firestore = db
+    return onSnapshot(doc(firestore, 'professionalProfiles', user.uid), async snap => {
       if (snap.exists()) {
         const data = snap.data() as Partial<ProfessionalProfile> & { emailExplicitlySet?: boolean; legacyLoginEmailCleared?: boolean }
         const storedEmail = String(data.email || '').trim()
@@ -39,7 +45,7 @@ patch('src/App.tsx',
         // basta digitá-lo e salvar: a partir daí emailExplicitlySet=true preserva a escolha.
         if (isLegacyLoginEmail) {
           try {
-            await setDoc(doc(db, 'professionalProfiles', user.uid), {
+            await setDoc(doc(firestore, 'professionalProfiles', user.uid), {
               email: '',
               emailExplicitlySet: false,
               legacyLoginEmailCleared: true,
@@ -58,6 +64,7 @@ patch('src/App.tsx',
         })
       }
     })
+  }, [user.uid])
 """)
 
 patch('src/App.tsx',
