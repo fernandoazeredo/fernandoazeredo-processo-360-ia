@@ -1,0 +1,32 @@
+name: Apply regression v6
+
+on:
+  push:
+    branches:
+      - fix-regressao-v6-acabamento-juridico
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: fix-regressao-v6-acabamento-juridico
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Apply v6 patch
+        run: python scripts/apply_regressao_v6.py
+      - name: Validate build
+        run: npm ci && npm run build
+      - name: Commit final changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Corrige acabamento jurídico e interface v6"
+          git push origin HEAD:fix-regressao-v6-acabamento-juridico
