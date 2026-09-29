@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - fix-v12-pdf-peca-limpo-direto
-    paths:
-      - scripts/apply_v12_clean_direct_pdf.py
 
 permissions:
   contents: write
