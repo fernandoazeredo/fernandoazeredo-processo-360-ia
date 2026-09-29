@@ -214,7 +214,7 @@ function classifyGeminiError(error: any) {
 
   if (/GEMINI_REQUEST_TIMEOUT/i.test(message)) {
     return new Error(
-      'GEMINI_REQUEST_TIMEOUT: o Gemini não respondeu dentro de 90 segundos. A análise foi interrompida sem perder os lotes já concluídos.'
+      'GEMINI_REQUEST_TIMEOUT: o Gemini não respondeu dentro de 210 segundos. A análise foi interrompida sem perder os lotes já concluídos.'
     )
   }
 
@@ -627,13 +627,13 @@ function normalizeQuantityToken(value: string) {
 
 function literalQuantityTokens(lotResults: LotExtraction[]) {
   const source = JSON.stringify(lotResults)
-  const matches = source.match(/R\$\s*\d{1,3}(?:\.\d{3})*(?:,\d{2})?|\b\d+(?:[.,]\d+)?\s*%/gi) || []
+  const matches = source.match(/R\$\s*\d+(?:\.\d{3})*(?:,\d{2})?|\b\d+(?:[.,]\d+)?\s*%/gi) || []
   return new Set(matches.map(normalizeQuantityToken))
 }
 
 function removeUnsupportedDerivedQuantities(report: GeminiAnalysisReport, lotResults: LotExtraction[]) {
   const allowed = literalQuantityTokens(lotResults)
-  const quantityPattern = /R\$\s*\d{1,3}(?:\.\d{3})*(?:,\d{2})?|\b\d+(?:[.,]\d+)?\s*%/gi
+  const quantityPattern = /R\$\s*\d+(?:\.\d{3})*(?:,\d{2})?|\b\d+(?:[.,]\d+)?\s*%/gi
   const clean = (value: string) => String(value || '').replace(quantityPattern, token =>
     allowed.has(normalizeQuantityToken(token))
       ? token
