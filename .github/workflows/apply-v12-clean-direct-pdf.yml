@@ -38,7 +38,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add v12-build.log
+          git add -f v12-build.log
           git commit -m "diagnostic: registra erro de build v12"
           git push origin HEAD:fix-v12-pdf-peca-limpo-direto
       - name: Commit changes
