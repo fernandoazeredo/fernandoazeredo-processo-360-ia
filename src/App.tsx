@@ -9,6 +9,7 @@ import type { AnalysisReport } from './ai'
 import { confirmClaimInOriginal, generateLegalPiece, pieceTypeOptions, suggestPieceType } from './pieces'
 import type { LegalPieceDraft, PieceClaim, ProfessionalProfile } from './pieces'
 import { chargeAnalysis, chargePiece, formatBRL, quoteAnalysis } from './wallet'
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import type { WalletRecord, WalletStatus } from './wallet'
 
 const ADMIN_EMAIL = 'fernandoazeredo64@gmail.com'
@@ -635,175 +636,146 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
   if (!(await ensureCurrentProductionBuild())) return
 
   const fileName = buildPieceFileName(report, piece.pieceType)
-  const banner = 'RASCUNHO DE PEÇA PROCESSUAL — Revisão jurídica por advogado é obrigatória antes de qualquer protocolo ou utilização processual.'
 
-  const sectionsHtml = piece.sections
-    .filter(section => section.title.trim() || section.content.trim())
-    .map(section => {
-      const body = escapeHtml(section.content)
-        .replace(/\r?\n\r?\n/g, '</p><p>')
-        .replace(/\r?\n/g, '<br>')
-      return `<section class="p360-print-section"><h2>${escapeHtml(section.title)}</h2><div class="p360-print-body"><p>${body}</p></div></section>`
+  // O PDF protocolável contém somente a peça jurídica. Metadados do Motor B,
+  // validação, pontos pendentes e rastreabilidade permanecem exclusivamente na tela.
+  const internalSectionPattern = /^(?:pontos?\s+pendentes?|pend[eê]ncias?|rastreabilidade(?:\s+factual)?|valida[cç][aã]o(?:\s+factual)?|auditoria(?:\s+interna)?|relat[oó]rio\s+interno|dados?\s+t[eé]cnicos?)\b/i
+  const sections = piece.sections
+    .filter(section => {
+      const title = String(section.title || '').trim()
+      const content = String(section.content || '').trim()
+      if (!title && !content) return false
+      if (internalSectionPattern.test(title)) return false
+      if (internalSectionPattern.test(content.split(/\r?\n/, 1)[0] || '')) return false
+      return true
     })
-    .join('')
 
-  const traceabilityHtml = piece.claims.length
-    ? `<section class="p360-print-traceability"><h2>Rastreabilidade factual</h2>${piece.claims.map(claim => `
-        <div class="p360-print-trace-row">
-          <p><strong>${escapeHtml(claim.status)}</strong> — ${escapeHtml(claim.text)}</p>
-          <p><b>Origem:</b> ${escapeHtml(claim.sourceReference || 'Sem referência específica')}</p>
-          ${claim.treatment ? `<p><b>Tratamento:</b> ${escapeHtml(claim.treatment)}</p>` : ''}
-        </div>`).join('')}</section>`
-    : ''
+  const pdf = await PDFDocument.create()
+  const regularFont = await pdf.embedFont(StandardFonts.TimesRoman)
+  const boldFont = await pdf.embedFont(StandardFonts.TimesRomanBold)
+  const pageWidth = 595.28
+  const pageHeight = 841.89
+  const marginX = 56.7
+  const marginTop = 56.7
+  const marginBottom = 56.7
+  const bodySize = 12
+  const headingSize = 12
+  const titleSize = 14
+  const bodyLineHeight = 18
+  const headingLineHeight = 18
+  const textWidth = pageWidth - (marginX * 2)
+  let page = pdf.addPage([pageWidth, pageHeight])
+  let y = pageHeight - marginTop
 
-  const printHtml = `<!doctype html>
-<html lang="pt-BR">
-<head>
-<meta charset="utf-8">
-<title>${escapeHtml(fileName)}</title>
-<style>
-  @page { size: A4; margin: 18mm 17mm 18mm 17mm; }
-  * { box-sizing: border-box; }
-  #p360-print-root,
-  #p360-print-root * {
-    background-image: none !important;
-    box-shadow: none !important;
-    text-shadow: none !important;
-    filter: none !important;
-    outline: 0 !important;
-  }
-  html, body {
-    margin: 0;
-    padding: 0;
-    background: #fff !important;
-    color: #111 !important;
-    font-family: Arial, Helvetica, sans-serif;
-    font-size: 11pt;
-    line-height: 1.5;
-  }
-  body::before, body::after, *::before, *::after {
-    content: none !important;
-    display: none !important;
-  }
-  .p360-print-warning {
-    margin: 0 0 14pt;
-    padding: 0 0 8pt;
-    border: 0;
-    border-bottom: 1px solid #bdbdbd;
-    background: #fff !important;
-    color: #111 !important;
-    font-size: 9.5pt;
-    font-weight: 700;
-  }
-  h1 {
-    margin: 0 0 5pt;
-    padding: 0;
-    text-align: center;
-    color: #111 !important;
-    background: #fff !important;
-    font-size: 14pt;
-    line-height: 1.3;
-  }
-  .p360-print-meta {
-    margin: 0 0 18pt;
-    text-align: center;
-    color: #444 !important;
-    background: #fff !important;
-    font-size: 9pt;
-  }
-  .p360-print-section {
-    margin: 0 0 14pt;
-    padding: 0;
-    border: 0;
-    background: #fff !important;
-    box-shadow: none !important;
-    filter: none !important;
-  }
-  .p360-print-section h2,
-  .p360-print-traceability h2 {
-    margin: 0 0 7pt;
-    padding: 0 0 4pt;
-    border: 0;
-    border-bottom: 1px solid #cfcfcf;
-    background: #fff !important;
-    color: #111 !important;
-    font-size: 11.5pt;
-    break-after: avoid-page;
-  }
-  .p360-print-body, .p360-print-body *, .p360-print-body p {
-    margin-top: 0;
-    background: #fff !important;
-    background-image: none !important;
-    color: #111 !important;
-    border: 0 !important;
-    border-left: 0 !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    text-shadow: none !important;
-    filter: none !important;
-    outline: 0 !important;
-    -webkit-text-fill-color: #111 !important;
-  }
-  .p360-print-body p {
-    margin: 0 0 7pt;
-    padding: 0;
-    orphans: 3;
-    widows: 3;
-  }
-  .p360-print-traceability {
-    margin: 20pt 0 0;
-    padding: 0;
-    border: 0;
-    background: #fff !important;
-  }
-  .p360-print-trace-row {
-    margin: 0 0 9pt;
-    padding: 0 0 7pt;
-    border: 0;
-    border-bottom: 1px solid #e2e2e2;
-    background: #fff !important;
-    break-inside: avoid;
-  }
-  .p360-print-trace-row p, .p360-print-trace-row strong, .p360-print-trace-row b {
-    margin: 0 0 3pt;
-    padding: 0;
-    background: #fff !important;
-    color: #111 !important;
-    border: 0 !important;
-    box-shadow: none !important;
-    text-shadow: none !important;
-    -webkit-text-fill-color: #111 !important;
-  }
-</style>
-</head>
-<body>
-<div id="p360-print-root">
-  <div class="p360-print-warning">${escapeHtml(banner)}</div>
-  <h1>${escapeHtml(piece.title)}</h1>
-  <div class="p360-print-meta">Tipo: ${escapeHtml(piece.pieceType)} · Prompt: ${escapeHtml(piece.promptVersion)} · Modelo: ${escapeHtml(piece.model)} · Build: ${escapeHtml(APP_BUILD.slice(0,12))}</div>
-  ${sectionsHtml}
-  ${traceabilityHtml}
-</div>
-<script>
-  window.addEventListener('load', () => {
-    setTimeout(() => {
-      window.focus();
-      window.print();
-    }, 80);
-  });
-  window.addEventListener('afterprint', () => window.close());
-<\/script>
-</body>
-</html>`
+  const normalizePdfText = (value: string) => String(value || '')
+    .replace(/\r/g, '')
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[–—]/g, '-')
+    .replace(/…/g, '...')
+    .replace(/→/g, '->')
+    .replace(/←/g, '<-')
+    .replace(/•/g, '-')
+    .replace(/⚠/g, 'ATENCAO:')
+    .replace(/\*\*/g, '')
 
-  const printWindow = window.open('', '_blank', 'width=900,height=800')
-  if (!printWindow) {
-    throw new Error('Não foi possível abrir a janela de impressão. Verifique o bloqueio de pop-ups do navegador.')
+  const newPage = () => {
+    page = pdf.addPage([pageWidth, pageHeight])
+    y = pageHeight - marginTop
   }
 
-  printWindow.document.open()
-  printWindow.document.write(printHtml)
-  printWindow.document.close()
+  const ensureSpace = (height: number) => {
+    if (y - height < marginBottom) newPage()
+  }
+
+  const wrapLine = (value: string, font: typeof regularFont, size: number) => {
+    const clean = normalizePdfText(value).trimEnd()
+    if (!clean.trim()) return ['']
+    const words = clean.split(/\s+/)
+    const lines: string[] = []
+    let current = ''
+    for (const word of words) {
+      const candidate = current ? `${current} ${word}` : word
+      if (font.widthOfTextAtSize(candidate, size) <= textWidth) {
+        current = candidate
+        continue
+      }
+      if (current) lines.push(current)
+      if (font.widthOfTextAtSize(word, size) <= textWidth) {
+        current = word
+        continue
+      }
+      let fragment = ''
+      for (const char of word) {
+        const next = fragment + char
+        if (font.widthOfTextAtSize(next, size) <= textWidth) fragment = next
+        else {
+          if (fragment) lines.push(fragment)
+          fragment = char
+        }
+      }
+      current = fragment
+    }
+    if (current) lines.push(current)
+    return lines.length ? lines : ['']
+  }
+
+  const drawWrapped = (value: string, font: typeof regularFont, size: number, lineHeight: number, options?: { centered?: boolean }) => {
+    const sourceLines = normalizePdfText(value).split('\n')
+    for (const sourceLine of sourceLines) {
+      const wrapped = wrapLine(sourceLine, font, size)
+      for (const line of wrapped) {
+        ensureSpace(lineHeight)
+        if (line) {
+          const width = font.widthOfTextAtSize(line, size)
+          const x = options?.centered ? Math.max(marginX, (pageWidth - width) / 2) : marginX
+          page.drawText(line, { x, y, size, font, color: rgb(0, 0, 0) })
+        }
+        y -= lineHeight
+      }
+    }
+  }
+
+  // Título da peça, sem prompt, modelo, build ou qualquer outro dado técnico.
+  drawWrapped(piece.title, boldFont, titleSize, 20, { centered: true })
+  y -= 14
+
+  for (const section of sections) {
+    const title = normalizePdfText(section.title).trim()
+    const content = normalizePdfText(section.content).trim()
+
+    if (title) {
+      ensureSpace(headingLineHeight * 2)
+      drawWrapped(title, boldFont, headingSize, headingLineHeight)
+      y -= 4
+    }
+
+    if (content) {
+      const paragraphs = content.split(/\n{2,}/)
+      for (const paragraph of paragraphs) {
+        drawWrapped(paragraph, regularFont, bodySize, bodyLineHeight)
+        y -= 7
+      }
+    }
+    y -= 5
+  }
+
+  pdf.setTitle(piece.title)
+  pdf.setSubject(piece.pieceType)
+  pdf.setCreator('Processo 360 IA')
+  pdf.setProducer('Processo 360 IA')
+
+  const bytes = await pdf.save()
+  const pdfBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+  const blob = new Blob([pdfBuffer], { type: 'application/pdf' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${fileName}.pdf`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 function exportPieceAsWord(report: AnalysisReport, piece: LegalPieceDraft) {
