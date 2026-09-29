@@ -15,7 +15,7 @@ const CONSOLIDATION_MODELS = [
   'gemini-3.5-flash',
   'gemini-3.5-flash-lite'
 ] as const
-const ARCHITECTURE_VERSION = 'blaze-browser-lots-v5-factual-identity-money'
+const ARCHITECTURE_VERSION = 'blaze-browser-lots-v6-legal-finish'
 const MAX_LOT_PAGES = 80
 const MAX_LOT_BYTES = 8 * 1024 * 1024
 const REQUEST_TIMEOUT_MS = 90_000
@@ -658,7 +658,7 @@ REGRAS OBRIGATÓRIAS:
 - Na linha do tempo final, não invente datas. Quando um evento não tiver data exata, mantenha em date exatamente "Informação não constante nos dados fornecidos" e utilize relações temporais inferidas apenas quando sustentadas pelos lotes, identificando-as expressamente como "Inferência cronológica".
 - Em claimsEvidenceDecisions, consolide separadamente o valor da causa e o valor de cada pedido quando constarem dos lotes, eliminando duplicidades e preservando a referência documental. Não estime quantias ausentes. NUNCA crie pedido de diferença monetária por comparação aritmética entre TRCT, inicial ou outro documento: o pedido deve existir expressamente em claims.
 - Em parties, consolide TODAS as qualifications extraídas dos lotes, preservando nome, CPF/CNPJ, endereço e advogado/OAB. Não troque dado encontrado por 'Informação não constante'.
-- VALORES DO TRCT: trate o valor impresso no documento como transcrição documental, não como resultado de cálculo. Se lotes trouxerem valores conflitantes para o mesmo campo, exponha a divergência e não invente um terceiro valor nem uma diferença.
+- VALORES DO TRCT: trate o valor impresso no documento como transcrição documental, não como resultado de cálculo. Se lotes trouxerem valores conflitantes para o mesmo campo, exponha a divergência e não invente um terceiro valor nem uma diferença.\n- VALORES DERIVADOS: é proibido criar qualquer novo valor em R$ por cálculo, percentual, soma, subtração, projeção ou estimativa. Em especial, se os lotes trouxerem apenas percentual de honorários, preserve o percentual sem convertê-lo em R$. Todo valor monetário em R$ exibido no relatório final deve estar literalmente presente nos lotes extraídos.
 - Ao mencionar legislação, súmulas, OJs ou jurisprudência, utilize somente referências específicas presentes nos lotes ou nos prompts jurídicos publicados. Não invente número, tribunal, enunciado ou precedente. Se a referência específica não estiver disponível, exponha a questão jurídica sem fabricar citação.
 - Em conclusionStrategy, além da conclusão jurídica, apresente de 2 a 3 próximos passos práticos e objetivos coerentes com a perspectiva informada, vinculando cada ação a uma lacuna, prova, pedido ou risco identificado nos lotes (por exemplo: juntar documento já mencionado, requerer prova/perícia pertinente ou impugnar ponto documentalmente identificado). Não recomende medida sem suporte nos dados processados.
 - Entregue exatamente as 8 seções representadas no JSON.

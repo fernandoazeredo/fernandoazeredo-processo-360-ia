@@ -276,14 +276,34 @@ function hardenCorrectedSections(sections: PieceSection[], claims: PieceClaim[])
 }
 
 
-function applyDeterministicPieceFields(sections: PieceSection[], professionalProfile: ProfessionalProfile | undefined, currentDate: string) {
+function inferInitialFilingDate(report: AnalysisReport) {
+  const filingEvent = report.timeline.find(item => {
+    const context = `${item.event || ''} ${item.reference || ''}`
+    return /ajuiz|distribu|protocol|propositura/i.test(context) && /^\d{2}\/\d{2}\/\d{4}$/.test(String(item.date || '').trim())
+  })
+  return filingEvent ? String(filingEvent.date).trim() : '[DATA]'
+}
+
+function applyDefenseSafeguards(sections: PieceSection[], pieceType: string) {
+  if (!/contesta|defesa/i.test(pieceType)) return sections
+  return cleanSections(sections.map(section => ({
+    ...section,
+    content: section.content
+      .replace(/(?:a\s+)?reclamada\s+reconhece\s+expressamente\s+a\s+incidência\s+da\s+Súmula\s+338(?:,\s*III)?(?:,?\s+do\s+TST)?/gi,
+        'a Reclamada sustenta, subsidiariamente, que eventual presunção relacionada à Súmula 338, III, do TST é relativa e deve ser apreciada em conjunto com a prova produzida')
+      .replace(/(?:a\s+)?reclamada\s+(?:admite|reconhece)\s+a\s+incidência\s+da\s+Súmula\s+338(?:,\s*III)?(?:,?\s+do\s+TST)?/gi,
+        'a Reclamada sustenta, subsidiariamente, que eventual presunção relacionada à Súmula 338, III, do TST é relativa e pode ser afastada pelo conjunto probatório')
+  })))
+}
+
+function applyDeterministicPieceFields(sections: PieceSection[], professionalProfile: ProfessionalProfile | undefined, pieceDate: string) {
   const profile = professionalProfile || { name: '', oab: '', address: '', email: '' }
   const replacements: Array<[RegExp, string]> = [
     [/\[(?:NOME DO )?ADVOGADO(?:\(A\))?\]/gi, profile.name],
     [/\[OAB(?:\/UF)?\]/gi, profile.oab],
     [/\[ENDEREÇO (?:PROFISSIONAL|DO ADVOGADO)\]/gi, profile.address],
     [/\[E-?MAIL (?:PROFISSIONAL|DO ADVOGADO)\]/gi, profile.email],
-    [/\[DATA\]/gi, currentDate]
+    [/\[DATA\]/gi, pieceDate]
   ]
   return cleanSections(sections.map(section => {
     let title = section.title
@@ -306,6 +326,8 @@ export async function generateLegalPiece(report: AnalysisReport, pieceType: stri
   const phase = inferProceduralPhase(report)
   const specific = specificPiecePrompt(report.area, report.perspective, pieceType)
   const currentDate = new Intl.DateTimeFormat('pt-BR').format(new Date())
+  const isInitialPiece = /petição inicial/i.test(pieceType)
+  const pieceDate = isInitialPiece ? inferInitialFilingDate(report) : currentDate
   const professional = professionalProfile ? JSON.stringify(professionalProfile, null, 2) : 'PROFISSIONAL NÃO CADASTRADO'
 
   const [basePromptDoc, specificPromptDoc, validatorPromptDoc, reviewerPromptDoc] = await Promise.all([
@@ -315,12 +337,12 @@ export async function generateLegalPiece(report: AnalysisReport, pieceType: stri
     loadMotorBPrompt(report.area, report.perspective, MOTOR_B_PURPOSES.reviewer, MOTOR_B_REVIEWER)
   ])
 
-  const draftPrompt = `${basePromptDoc.content}\n\n${specificPromptDoc.content}\n\nÁREA: ${report.area}\nPERSPECTIVA: ${report.perspective}\nTIPO SOLICITADO: ${pieceType}\nFASE PROCESSUAL INFERIDA: ${phase}\nDATA ATUAL DO SISTEMA: ${currentDate}\n\n[DADOS_PROFISSIONAIS_DO_ADVOGADO]\n${professional}\n\n[DADOS_CONSOLIDADOS_DO_PROCESSO]\n${source}\n\n[DIAGNOSTICO_JURIDICO]\n${diagnostic}\n\nINSTRUÇÃO DE SAÍDA: JSON do schema. A peça em sections deve estar LIMPA, sem referências de lote/página/folha e sem avisos internos do sistema. Use a DATA ATUAL DO SISTEMA no fecho e os DADOS PROFISSIONAIS no bloco de assinatura; não substitua dados existentes por placeholders.`
+  const draftPrompt = `${basePromptDoc.content}\n\n${specificPromptDoc.content}\n\nÁREA: ${report.area}\nPERSPECTIVA: ${report.perspective}\nTIPO SOLICITADO: ${pieceType}\nFASE PROCESSUAL INFERIDA: ${phase}\nDATA ATUAL DO SISTEMA: ${currentDate}\nDATA A UTILIZAR NA PEÇA: ${pieceDate}\nREGRA DE DATA: em Petição Inicial, use a data de ajuizamento/distribuição expressamente identificada; se ela não estiver identificada, preserve [DATA]. Nunca use a data atual como se fosse a data histórica de ajuizamento.\n\n[DADOS_PROFISSIONAIS_DO_ADVOGADO]\n${professional}\n\n[DADOS_CONSOLIDADOS_DO_PROCESSO]\n${source}\n\n[DIAGNOSTICO_JURIDICO]\n${diagnostic}\n\nINSTRUÇÃO DE SAÍDA: JSON do schema. A peça em sections deve estar LIMPA, sem referências de lote/página/folha e sem avisos internos do sistema. Use a DATA A UTILIZAR NA PEÇA no fecho e os DADOS PROFISSIONAIS no bloco de assinatura; em Petição Inicial nunca substitua a data histórica de ajuizamento pela data atual. Não substitua dados existentes por placeholders.`
 
   const draftResult = await generateJson(draftPrompt, draftSchema, 'geração do rascunho especializado v3')
   const rawSections = cleanSections(Array.isArray(draftResult.parsed.sections) ? draftResult.parsed.sections.map((item: any) => ({ title: String(item.title || ''), content: String(item.content || '') })) : [])
 
-  const validationPrompt = `${validatorPromptDoc.content}\n\nFASE PROCESSUAL INFERIDA: ${phase}\nDATA ATUAL DO SISTEMA: ${currentDate}\n\n[DADOS_PROFISSIONAIS_DO_ADVOGADO]\n${professional}\n\n[DADOS_CONSOLIDADOS_DO_PROCESSO]\n${source}\n\n[DIAGNOSTICO_JURIDICO]\n${diagnostic}\n\n[MINUTA_GERADA]\n${JSON.stringify(rawSections, null, 2)}\n\nINSTRUÇÃO: claims guarda a auditoria e sourceReference. correctedSections deve permanecer limpa e exportável.`
+  const validationPrompt = `${validatorPromptDoc.content}\n\nFASE PROCESSUAL INFERIDA: ${phase}\nDATA ATUAL DO SISTEMA: ${currentDate}\nDATA A UTILIZAR NA PEÇA: ${pieceDate}\nREGRA DE DATA: em Petição Inicial, use a data de ajuizamento/distribuição expressamente identificada; se ela não estiver identificada, preserve [DATA]. Nunca use a data atual como se fosse a data histórica de ajuizamento.\n\n[DADOS_PROFISSIONAIS_DO_ADVOGADO]\n${professional}\n\n[DADOS_CONSOLIDADOS_DO_PROCESSO]\n${source}\n\n[DIAGNOSTICO_JURIDICO]\n${diagnostic}\n\n[MINUTA_GERADA]\n${JSON.stringify(rawSections, null, 2)}\n\nINSTRUÇÃO: claims guarda a auditoria e sourceReference. correctedSections deve permanecer limpa e exportável.`
   const validationResult = await generateJson(validationPrompt, validationSchema, 'validação factual v3')
 
   const claims: PieceClaim[] = Array.isArray(validationResult.parsed.claims) ? validationResult.parsed.claims.map((item: any, index: number) => ({
@@ -333,13 +355,13 @@ export async function generateLegalPiece(report: AnalysisReport, pieceType: stri
     : rawSections
   const factSafeSections = hardenCorrectedSections(corrected, claims)
 
-  const reviewPrompt = `${reviewerPromptDoc.content}\n\nÁREA: ${report.area}\nPERSPECTIVA: ${report.perspective}\nTIPO: ${pieceType}\nFASE: ${phase}\nDATA ATUAL DO SISTEMA: ${currentDate}\n\n[DADOS_PROFISSIONAIS_DO_ADVOGADO]\n${professional}\n\n[DADOS_CONSOLIDADOS_DO_PROCESSO]\n${source}\n\n[DIAGNOSTICO_JURIDICO]\n${diagnostic}\n\n[VALIDACAO]\n${JSON.stringify({ claims, validation: countValidation(claims) }, null, 2)}\n\n[MINUTA_CORRIGIDA]\n${JSON.stringify(factSafeSections, null, 2)}\n\nINSTRUÇÃO: devolva title e sections. Não reinsira referências técnicas ou avisos internos.`
+  const reviewPrompt = `${reviewerPromptDoc.content}\n\nÁREA: ${report.area}\nPERSPECTIVA: ${report.perspective}\nTIPO: ${pieceType}\nFASE: ${phase}\nDATA ATUAL DO SISTEMA: ${currentDate}\nDATA A UTILIZAR NA PEÇA: ${pieceDate}\nREGRA DE DATA: em Petição Inicial, use a data de ajuizamento/distribuição expressamente identificada; se ela não estiver identificada, preserve [DATA]. Nunca use a data atual como se fosse a data histórica de ajuizamento.\n\n[DADOS_PROFISSIONAIS_DO_ADVOGADO]\n${professional}\n\n[DADOS_CONSOLIDADOS_DO_PROCESSO]\n${source}\n\n[DIAGNOSTICO_JURIDICO]\n${diagnostic}\n\n[VALIDACAO]\n${JSON.stringify({ claims, validation: countValidation(claims) }, null, 2)}\n\n[MINUTA_CORRIGIDA]\n${JSON.stringify(factSafeSections, null, 2)}\n\nINSTRUÇÃO: devolva title e sections. Não reinsira referências técnicas ou avisos internos.`
   const reviewResult = await generateJson(reviewPrompt, reviewSchema, 'revisão jurídica final v3')
 
   const reviewed = Array.isArray(reviewResult.parsed.sections)
     ? reviewResult.parsed.sections.map((item: any) => ({ title: String(item.title || ''), content: String(item.content || '') }))
     : factSafeSections
-  const safeSections = applyDeterministicPieceFields(hardenCorrectedSections(reviewed, claims), professionalProfile, currentDate)
+  const safeSections = applyDeterministicPieceFields(applyDefenseSafeguards(hardenCorrectedSections(reviewed, claims), pieceType), professionalProfile, pieceDate)
 
   const promptVersion = [
     `motor-b-v4:base-${basePromptDoc.source}-v${basePromptDoc.version}`,
