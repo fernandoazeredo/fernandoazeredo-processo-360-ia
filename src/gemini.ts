@@ -13,7 +13,7 @@ const EXTRACTION_MODELS = [
 const CONSOLIDATION_MODELS = [
   CONSOLIDATION_MODEL,
   'gemini-3.5-flash',
-  EXTRACTION_MODEL
+  'gemini-3.5-flash-lite'
 ] as const
 const ARCHITECTURE_VERSION = 'blaze-browser-lots-v5-factual-identity-money'
 const MAX_LOT_PAGES = 80

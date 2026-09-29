@@ -127,7 +127,7 @@ async function loadMotorBPrompt(area: string, perspective: string, purpose: stri
       ))
       .sort((a, b) => (Number(b.version) || 0) - (Number(a.version) || 0))
     const selected = candidates[0]
-    // V3 local é o piso de qualidade. Prompt publicado só substitui quando for v3 ou superior.
+    // V4 local é o piso de qualidade. Prompt publicado só substitui quando for v4 ou superior.
     if (selected && (Number(selected.version) || 0) >= MOTOR_B_LOCAL_VERSION) {
       return { content: String(selected.content || '').trim(), version: Number(selected.version), source: 'firestore' }
     }
@@ -212,7 +212,7 @@ async function generateJson(prompt: string, schema: any, context: string, conten
       const model = getGenerativeModel(aiClient, {
         model: modelName,
         systemInstruction: [
-          'PROCESSO 360 IA — MOTOR B V3.',
+          'PROCESSO 360 IA — MOTOR B V4.',
           'Nunca invente fatos, datas, valores, documentos, decisões, números, pessoas ou eventos.',
           'Confronte narrativa com prova documental específica; não repita erro do resumo quando documento estruturado o contradisser.',
           'Rastreabilidade técnica pertence ao painel de auditoria, nunca ao corpo exportável da peça.',
@@ -342,7 +342,7 @@ export async function generateLegalPiece(report: AnalysisReport, pieceType: stri
   const safeSections = applyDeterministicPieceFields(hardenCorrectedSections(reviewed, claims), professionalProfile, currentDate)
 
   const promptVersion = [
-    `motor-b-v3:base-${basePromptDoc.source}-v${basePromptDoc.version}`,
+    `motor-b-v4:base-${basePromptDoc.source}-v${basePromptDoc.version}`,
     `piece-${specificPromptDoc.source}-v${specificPromptDoc.version}`,
     `validator-${validatorPromptDoc.source}-v${validatorPromptDoc.version}`,
     `reviewer-${reviewerPromptDoc.source}-v${reviewerPromptDoc.version}`
