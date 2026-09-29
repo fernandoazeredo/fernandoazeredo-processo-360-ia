@@ -1,8 +1,4 @@
 import { analyzePdfWithGemini } from './gemini'
-import { auth } from './firebase'
-import { chargeAnalysis, quoteAnalysis } from './wallet'
-
-const ADMIN_EMAIL = 'fernandoazeredo64@gmail.com'
 
 export type AnalysisReport = {
   analysisId: string
@@ -39,15 +35,9 @@ export async function analyzeUploadedProcess(
 ): Promise<AnalysisReport> {
   const analysisId = crypto.randomUUID()
 
-  // O frontend historicamente liberava o administrador para testes. Para validar o
-  // produto comercial real, o administrador também passa pela carteira aqui.
-  // Usuários comuns continuam sendo cobrados no fluxo normal de App.tsx, evitando débito duplo.
-  const currentEmail = String(auth?.currentUser?.email || '').toLowerCase()
-  if (currentEmail === ADMIN_EMAIL) {
-    const quote = await quoteAnalysis(file)
-    await chargeAnalysis(quote.pageCount)
-  }
-
+  // A camada de IA não executa cobrança. A carteira é tratada exclusivamente no
+  // fluxo de startAnalysis em App.tsx, evitando uma segunda chamada síncrona a
+  // Cloud Functions antes do Gemini e preservando o bypass administrativo de teste.
   const geminiReport = normalizeGeneratedText(await analyzePdfWithGemini(file, area, perspective, onProgress))
 
   return {
