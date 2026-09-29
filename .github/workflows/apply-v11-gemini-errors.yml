@@ -1,0 +1,33 @@
+name: Apply v11 Gemini errors
+
+on:
+  push:
+    branches:
+      - fix-v11-gemini-error-classification
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: fix-v11-gemini-error-classification
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Apply v11 patch
+        run: python scripts/apply_v11_gemini_errors.py
+      - name: Validate build
+        run: npm ci && npm run build
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/gemini.ts
+          git commit -m "Corrige classificação e logs de erros Gemini v11"
+          git push origin HEAD:fix-v11-gemini-error-classification
