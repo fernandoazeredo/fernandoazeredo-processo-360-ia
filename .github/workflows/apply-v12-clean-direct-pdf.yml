@@ -20,29 +20,14 @@ jobs:
           node-version: 22
           cache: npm
       - name: Apply v12 patch
-        run: python scripts/apply_v12_clean_direct_pdf.py
-      - name: Install
-        run: npm ci
-      - name: Validate build and capture diagnostics
-        id: build
-        shell: bash
         run: |
-          set +e
-          npm run build > v12-build.log 2>&1
-          code=$?
-          cat v12-build.log
-          echo "code=$code" >> "$GITHUB_OUTPUT"
-          exit 0
-      - name: Commit build diagnostics on failure
-        if: steps.build.outputs.code != '0'
+          python scripts/apply_v12_clean_direct_pdf.py
+          python scripts/fix_v12_blob_type.py
+      - name: Validate build
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f v12-build.log
-          git commit -m "diagnostic: registra erro de build v12"
-          git push origin HEAD:fix-v12-pdf-peca-limpo-direto
+          npm ci
+          npm run build
       - name: Commit changes
-        if: steps.build.outputs.code == '0'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
