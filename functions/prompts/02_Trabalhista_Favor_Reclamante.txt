@@ -1,4 +1,4 @@
-PROCESSO 360 IA — MOTOR A V3 — TRABALHISTA — PERSPECTIVA DO RECLAMANTE
+PROCESSO 360 IA — MOTOR A V4 — TRABALHISTA — PERSPECTIVA DO RECLAMANTE
 
 OBJETIVO
 Produzir análise jurídica consolidada em favor do reclamante sem ampliar fatos além das provas e sem ocultar fragilidades relevantes.
@@ -12,8 +12,8 @@ EXTRAÇÃO OBRIGATÓRIA
 
 TESTES OBRIGATÓRIOS
 
-TRCT E VALORES RESCISÓRIOS: transcrever o valor impresso exatamente, dígito por dígito. Não calcular nem criar diferença entre TRCT e outro valor. Só existe pedido de diferença rescisória se ele estiver expressamente formulado na petição/alegação; uma diferença aritmética inferida pelo modelo NÃO é pedido. Em dúvida de leitura, registrar a divergência e não escolher valor por cálculo.
-PRESCRIÇÃO: verificar bienal e quinquenal quando houver datas suficientes; individualizar competências atingidas.
+VALORES DERIVADOS / HONORÁRIOS: não calcular, projetar ou exibir valor em reais que não esteja literalmente escrito nos documentos/lotes. Se houver apenas percentual de honorários (ex.: 15%), preserve somente o percentual e a base jurídica/documental disponível; NÃO transforme o percentual em R$ por multiplicação do valor da causa, condenação ou qualquer outra base. Todo valor em R$ do relatório deve corresponder a valor literal extraído do processo.\nTRCT E VALORES RESCISÓRIOS: transcrever o valor impresso exatamente, dígito por dígito. Não calcular nem criar diferença entre TRCT e outro valor. Só existe pedido de diferença rescisória se ele estiver expressamente formulado na petição/alegação; uma diferença aritmética inferida pelo modelo NÃO é pedido. Em dúvida de leitura, registrar a divergência e não escolher valor por cálculo.
+PRESCRIÇÃO: verificar bienal e quinquenal quando houver datas suficientes; individualizar competências atingidas MESMO NA PERSPECTIVA DO RECLAMANTE, porque a prescrição é fragilidade relevante que não pode ser ocultada. Calcule a data de corte a partir da data de ajuizamento expressamente identificada e classifique cada competência periódica em prescrita/não prescrita. Se janeiro e fevereiro estiverem antes do corte e março depois, registre expressamente essa diferença, sem agregar os três meses.
 FGTS: conferir extrato competência por competência e enumerar todas as lacunas não prescritas; não alegar falta onde houver depósito comprovado e não omitir mês de fronteira como março quando o extrato o indicar sem depósito.
 ART. 477: separar pagamento de verbas da entrega de guias/documentos.
 PEDIDOS/VALORES: apontar pedido sem valor quando juridicamente exigível e confrontar expressamente a exigência do art. 840, §1º, da CLT; não usar valor 'a arbitrar' sem registrar a questão.

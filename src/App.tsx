@@ -456,11 +456,6 @@ function App() {
 
         {analysis && <AnalysisResult report={analysis} originalFile={file} isAdmin={appUser.email===ADMIN_EMAIL} piecePriceCents={walletConfig.piecePriceCents} user={appUser} />}
 
-        <section className="trust-row">
-          <span><ShieldCheck/> Rastreabilidade documental</span>
-          <span><LockKeyhole/> Prompts protegidos</span>
-          <span><BrainCircuit/> Diagnóstico somente após leitura integral</span>
-        </section>
       </main>
 
       <footer><span>© 2026 Processo 360 IA</span>{adminUser && <button onClick={() => setAdminOpen(true)}>Área ADM</button>}</footer>
@@ -946,8 +941,6 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, user}:{
       <span><b>Área:</b> {report.area}</span>
       <span><b>Perspectiva:</b> {report.perspective}</span>
       <span><b>Nº do processo:</b> {report.processNumber}</span>
-      <span><b>ID:</b> {report.analysisId}</span>
-      <span><b>Build:</b> {APP_BUILD.slice(0,12)}</span>
     </div>
     {report.processNumberWarning && (
       <div className="analysis-warning">
