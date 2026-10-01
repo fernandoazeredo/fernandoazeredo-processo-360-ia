@@ -40,6 +40,16 @@ export async function quoteAnalysis(file: File): Promise<WalletQuote> {
   }
 }
 
+export async function quotePiece(): Promise<{ priceCents: number }> {
+  const call = httpsCallable(requireFunctions(), 'walletQuotePiece')
+  const result = await call({})
+  const data = result.data as any
+
+  return {
+    priceCents: Math.max(0, Number(data?.priceCents || 0))
+  }
+}
+
 export async function chargeAnalysis(pageCount: number): Promise<{ chargeId: string; priceCents: number; balanceCents: number }> {
   const call = httpsCallable(requireFunctions(), 'walletChargeAnalysis')
   const result = await call({ pageCount })
