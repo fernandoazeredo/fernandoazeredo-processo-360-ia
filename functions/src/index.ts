@@ -787,8 +787,24 @@ export const adminAdjustWallet = onCall(
     if (!uid || !Number.isFinite(deltaCents) || deltaCents === 0) {
       throw new HttpsError('invalid-argument', 'Informe usuário e valor do ajuste.')
     }
-    if (deltaCents > 0 && (deltaCents < 4000 || deltaCents > 12000)) {
-      throw new HttpsError('invalid-argument', 'RECARGA_FORA_DA_FAIXA: créditos devem ficar entre R$ 40,00 e R$ 120,00 por recarga.')
+    if (deltaCents > 0) {
+      const configSnap = await db.collection('walletConfig').doc('main').get()
+      const config = configSnap.exists ? configSnap.data() || {} : {}
+      const allowedTopups = [
+        Number(config.package1Cents || 4000),
+        Number(config.package2Cents || 8000),
+        Number(config.package3Cents || 12000)
+      ].filter(value => Number.isFinite(value) && value > 0)
+
+      if (!allowedTopups.includes(deltaCents)) {
+        const labels = allowedTopups
+          .map(value => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100))
+          .join(', ')
+        throw new HttpsError(
+          'invalid-argument',
+          `RECARGA_VALOR_INVALIDO: use exatamente um dos valores dos links de compra: ${labels}.`
+        )
+      }
     }
 
     const walletRef = db.collection('wallets').doc(uid)
