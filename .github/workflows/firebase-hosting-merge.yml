@@ -55,7 +55,7 @@ jobs:
           fi
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-service-account.json"
 
-      - name: Instalar dependências de publicação de prompts
+      - name: Instalar dependências de publicação de prompts e Functions
         run: npm install --prefix functions
 
       - name: Publicar prompts Trabalhistas aprovados
@@ -67,6 +67,16 @@ jobs:
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
         run: node functions/scripts/publish-ambiental-v1.mjs
+
+      - name: Deploy das funções da carteira pré-paga
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
+          CI: "true"
+        run: |
+          npx --yes firebase-tools@latest deploy \
+            --project processo-360-ia \
+            --only "functions:walletQuoteAnalysis,functions:walletChargeAnalysis,functions:walletChargePiece,functions:adminAdjustWallet,functions:adminDeleteWalletUser" \
+            --non-interactive
 
       - name: Deploy Hosting e regras do Firestore
         env:
