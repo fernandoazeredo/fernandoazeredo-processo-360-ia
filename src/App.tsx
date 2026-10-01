@@ -1426,22 +1426,37 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
 
   async function adjustBalance(item:WalletRecord){
     if(!functions) return
-    const raw=window.prompt(`Ajuste de saldo de ${item.email}.\nDigite o valor em reais. Use número negativo para retirar saldo.\nSaldo atual: ${formatBRL(item.balanceCents||0)}`)
+    const allowedTopups=[config.package1Cents,config.package2Cents,config.package3Cents]
+      .map(value=>Number(value||0))
+      .filter(value=>value>0)
+    const labels=allowedTopups.map(value=>formatBRL(value)).join(', ')
+    const raw=window.prompt(`Ajuste de saldo de ${item.email}.\nPara crédito/recarga, use exatamente um dos valores dos links de compra: ${labels}.\nPara retirada administrativa, use número negativo.\nSaldo atual: ${formatBRL(item.balanceCents||0)}`)
     if(raw===null) return
-    const normalized=raw.replace(/\./g,'').replace(',','.')
+    const trimmed=raw.trim()
+    const normalized=trimmed.includes(',')
+      ? trimmed.replace(/\./g,'').replace(',','.')
+      : trimmed
     const value=Number(normalized)
     if(!Number.isFinite(value) || value===0){
-      window.alert('Informe um valor válido diferente de zero.')
+      window.alert('Informe um valor válido diferente de zero. Exemplos aceitos: 40, 40.00, 80,00 ou -10,50.')
+      return
+    }
+    const cents=Math.round(value*100)
+    if(cents>0 && !allowedTopups.includes(cents)){
+      window.alert(`Para adicionar crédito, use exatamente um dos valores dos links de compra: ${labels}.`)
       return
     }
     const reason=window.prompt('Motivo do ajuste (opcional):') || ''
     setAdjustingUid(item.uid)
     try{
       const call=httpsCallable(functions,'adminAdjustWallet')
-      await call({uid:item.uid,deltaCents:Math.round(value*100),reason})
+      await call({uid:item.uid,deltaCents:cents,reason})
     }catch(err:any){
       console.error(err)
-      setError('Não foi possível ajustar o saldo.')
+      const message=String(err?.message||'')
+      setError(message.includes('RECARGA_VALOR_INVALIDO')
+        ? `Valor de crédito inválido. Use exatamente: ${labels}.`
+        : 'Não foi possível ajustar o saldo.')
     }finally{
       setAdjustingUid(null)
     }
@@ -1490,7 +1505,7 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
       <div>
         <span className="admin-badge"><Users/> Usuários e saldo</span>
         <h2>Carteira pré-paga</h2>
-        <p className="muted">Todo usuário começa com saldo zero. O valor de cada análise é calculado antes do uso e debitado da carteira.</p>
+        <p className="muted">Todo usuário começa com saldo zero. O preço é mostrado antes do uso e o débito só ocorre após a operação concluir com sucesso.</p>
       </div>
       <button className="secondary-button compact" onClick={onLogout}>Sair</button>
     </div>
@@ -1505,6 +1520,11 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
     <form className="subscription-config-form" onSubmit={saveConfig}>
       <div className="form-title"><CreditCard size={18}/><b>Preços e recargas</b></div>
       <p className="muted">Estes valores são administrativos. O usuário verá somente o preço final da operação.</p>
+      <div className="wallet-formula-note">
+        <b>Fórmula da análise:</b> preço final = maior valor entre o preço mínimo e (número de páginas × preço por página).
+        <br/>
+        <span>Exemplo com 60 páginas: 60 × {formatBRL(config.analysisPerPageCents||0)} = {formatBRL(60*(config.analysisPerPageCents||0))}; preço final = {formatBRL(Math.max(config.analysisMinimumCents||0,60*(config.analysisPerPageCents||0)))}.</span>
+      </div>
       <div className="admin-form-grid">
         <label>Preço mínimo por análise (centavos)
           <input type="number" min="0" value={config.analysisMinimumCents} onChange={e=>setConfig({...config,analysisMinimumCents:Number(e.target.value)||0})}/>
