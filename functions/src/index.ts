@@ -689,7 +689,7 @@ async function chargeWallet(
 
     const balanceCents = Math.max(0, Number(wallet.balanceCents || 0))
     if (balanceCents < amountCents) {
-      throw new HttpsError('resource-exhausted', 'Saldo insuficiente para esta operação.')
+      throw new HttpsError('resource-exhausted', 'WALLET_INSUFFICIENT: saldo insuficiente para esta operação.')
     }
 
     const newBalanceCents = balanceCents - amountCents
@@ -744,6 +744,20 @@ export const walletChargeAnalysis = onCall(
   }
 )
 
+export const walletQuotePiece = onCall(
+  { region: 'us-central1', cors: true },
+  async request => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'É necessário estar autenticado.')
+
+    const pricing = await readWalletPricing()
+    if (pricing.piecePriceCents <= 0) {
+      throw new HttpsError('failed-precondition', 'O preço para geração de peça ainda não foi configurado.')
+    }
+
+    return { priceCents: pricing.piecePriceCents }
+  }
+)
+
 export const walletChargePiece = onCall(
   { region: 'us-central1', cors: true },
   async request => {
@@ -773,6 +787,25 @@ export const adminAdjustWallet = onCall(
     if (!uid || !Number.isFinite(deltaCents) || deltaCents === 0) {
       throw new HttpsError('invalid-argument', 'Informe usuário e valor do ajuste.')
     }
+    if (deltaCents > 0) {
+      const configSnap = await db.collection('walletConfig').doc('main').get()
+      const config = configSnap.exists ? configSnap.data() || {} : {}
+      const allowedTopups = [
+        Number(config.package1Cents || 4000),
+        Number(config.package2Cents || 8000),
+        Number(config.package3Cents || 12000)
+      ].filter(value => Number.isFinite(value) && value > 0)
+
+      if (!allowedTopups.includes(deltaCents)) {
+        const labels = allowedTopups
+          .map(value => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100))
+          .join(', ')
+        throw new HttpsError(
+          'invalid-argument',
+          `RECARGA_VALOR_INVALIDO: use exatamente um dos valores dos links de compra: ${labels}.`
+        )
+      }
+    }
 
     const walletRef = db.collection('wallets').doc(uid)
     const ledgerRef = db.collection('walletLedger').doc()
@@ -796,7 +829,7 @@ export const adminAdjustWallet = onCall(
 
       tx.set(ledgerRef, {
         uid,
-        operation: 'ajuste_admin',
+        operation: deltaCents > 0 ? 'recarga_admin' : 'ajuste_admin',
         direction: deltaCents > 0 ? 'credit' : 'debit',
         amountCents: Math.abs(deltaCents),
         balanceBeforeCents: before,

@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, signOut, User } from 'firebase/auth'
-import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore'
+import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
 import { AlertTriangle, BrainCircuit, CheckCircle2, ChevronRight, CreditCard, Download, FilePenLine, FileText, LockKeyhole, Moon, Pencil, Plus, Save, Search, ShieldCheck, Sun, Trash2, UploadCloud, Users, X } from 'lucide-react'
 import { auth, db, firebaseConfigured, functions } from './firebase'
 import { httpsCallable } from 'firebase/functions'
@@ -8,7 +8,7 @@ import { analyzeUploadedProcess } from './ai'
 import type { AnalysisReport } from './ai'
 import { confirmClaimInOriginal, generateLegalPiece, pieceTypeOptions, suggestPieceType } from './pieces'
 import type { LegalPieceDraft, PieceClaim, ProfessionalProfile } from './pieces'
-import { chargeAnalysis, chargePiece, formatBRL, quoteAnalysis } from './wallet'
+import { chargeAnalysis, chargePiece, formatBRL, quoteAnalysis, quotePiece } from './wallet'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import type { WalletRecord, WalletStatus } from './wallet'
 
@@ -29,6 +29,18 @@ type WalletConfig = {
   package3Cents: number
   package3Url: string
   paymentInstructions?: string
+}
+
+type WalletLedgerEntry = {
+  id: string
+  uid: string
+  operation: string
+  direction: 'credit' | 'debit' | 'neutral'
+  amountCents: number
+  balanceBeforeCents?: number
+  balanceAfterCents?: number
+  createdAt?: any
+  reason?: string | null
 }
 
 
@@ -205,6 +217,7 @@ function App() {
   const [quote, setQuote] = useState<{pageCount:number;priceCents:number}|null>(null)
   const [quoteBusy, setQuoteBusy] = useState(false)
   const [quoteError, setQuoteError] = useState('')
+  const [walletLedger, setWalletLedger] = useState<WalletLedgerEntry[]>([])
   const [walletConfig, setWalletConfig] = useState<WalletConfig>({analysisMinimumCents:0,analysisPerPageCents:0,piecePriceCents:0,package1Cents:4000,package1Url:'https://payment-link-v3.ton.com.br/pl_L4oBjJNOkKyEJLGCrvCjO31nA9pG78db',package2Cents:8000,package2Url:'https://payment-link-v3.ton.com.br/pl_4n9ELgN872OXmzD9cyT1RMvDdBbxzGaj',package3Cents:12000,package3Url:'https://payment-link-v3.ton.com.br/pl_1wy7Jor82XxB8OEULRIqGdGALMQKzY4N',paymentInstructions:''})
 
   useEffect(() => {
@@ -272,6 +285,19 @@ function App() {
   },[appUser?.uid])
 
   useEffect(()=>{
+    if(!db || !appUser || appUser.email===ADMIN_EMAIL){
+      setWalletLedger([])
+      return
+    }
+    const ledgerQuery=query(collection(db,'walletLedger'),where('uid','==',appUser.uid))
+    return onSnapshot(ledgerQuery,snap=>{
+      const rows=snap.docs.map(item=>({id:item.id,...item.data()} as WalletLedgerEntry))
+      rows.sort((a,b)=>Number(b.createdAt?.toMillis?.()||0)-Number(a.createdAt?.toMillis?.()||0))
+      setWalletLedger(rows)
+    },error=>console.error('[Processo 360 IA] Falha ao carregar extrato da carteira.',error))
+  },[appUser?.uid])
+
+  useEffect(()=>{
     let cancelled=false
     setQuote(null)
     setQuoteError('')
@@ -311,21 +337,26 @@ function App() {
     setProcessing(true)
 
     try {
+      let billableQuote = quote
       if (appUser?.email !== ADMIN_EMAIL) {
         if (!wallet || wallet.status !== 'ativo') {
           throw new Error('WALLET_BLOCKED')
         }
-        const currentQuote = quote || await quoteAnalysis(file)
-        if (wallet.balanceCents < currentQuote.priceCents) {
+        billableQuote = quote || await quoteAnalysis(file)
+        if (wallet.balanceCents < billableQuote.priceCents) {
           throw new Error('WALLET_INSUFFICIENT')
         }
-        await chargeAnalysis(currentQuote.pageCount)
       }
 
       const report = await analyzeUploadedProcess(file, area, perspective, (value, stage) => {
         setProgress(value)
         setProcessingStage(stage)
       })
+
+      if (appUser?.email !== ADMIN_EMAIL && billableQuote) {
+        await chargeAnalysis(billableQuote.pageCount)
+      }
+
       setAnalysis(report)
       window.setTimeout(() => {
         document.getElementById('analysis-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -442,8 +473,9 @@ function App() {
               ? <span>Calculando o valor da análise...</span>
               : quote
                 ? <>
-                    <div><small>Valor para analisar este processo</small><strong>{formatBRL(quote.priceCents)}</strong><span>{quote.pageCount} página(s)</span></div>
-                    <div><small>Saldo disponível</small><strong>{formatBRL(wallet?.balanceCents || 0)}</strong></div>
+                    <div><small>Preço desta operação</small><strong>{formatBRL(quote.priceCents)}</strong><span>{quote.pageCount} página(s)</span></div>
+                    <div><small>Seu saldo</small><strong>{formatBRL(wallet?.balanceCents || 0)}</strong></div>
+                    <div><small>Saldo após a operação</small><strong>{formatBRL((wallet?.balanceCents || 0) - quote.priceCents)}</strong></div>
                     {(wallet?.balanceCents || 0) < quote.priceCents &&
                       <WalletFundingPanel config={walletConfig} missingCents={quote.priceCents-(wallet?.balanceCents||0)} />}
                   </>
@@ -465,7 +497,19 @@ function App() {
           )}
         </section>
 
-        {analysis && <AnalysisResult report={analysis} originalFile={file} isAdmin={appUser.email===ADMIN_EMAIL} piecePriceCents={walletConfig.piecePriceCents} user={appUser} />}
+        {appUser.email !== ADMIN_EMAIL && walletLedger.length > 0 && <details className="wallet-statement">
+          <summary>Extrato da carteira</summary>
+          <div className="wallet-statement-list">
+            {walletLedger.slice(0,20).map(entry=><div key={entry.id} className="wallet-statement-row">
+              <span>{entry.operation.replace(/_/g,' ')}</span>
+              <span>{entry.createdAt?.toDate?.().toLocaleString('pt-BR') || '—'}</span>
+              <b>{entry.direction==='credit'?'+':entry.direction==='debit'?'-':''}{formatBRL(entry.amountCents||0)}</b>
+              <small>{formatBRL(entry.balanceBeforeCents||0)} → {formatBRL(entry.balanceAfterCents||0)}</small>
+            </div>)}
+          </div>
+        </details>}
+
+        {analysis && <AnalysisResult report={analysis} originalFile={file} isAdmin={appUser.email===ADMIN_EMAIL} piecePriceCents={walletConfig.piecePriceCents} walletBalanceCents={wallet?.balanceCents||0} onRecharge={()=>setWalletTopupOpen(true)} user={appUser} />}
 
       </main>
 
@@ -804,7 +848,7 @@ function exportPieceAsWord(report: AnalysisReport, piece: LegalPieceDraft) {
   URL.revokeObjectURL(url)
 }
 
-function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, user}:{report:AnalysisReport;originalFile:File|null;isAdmin:boolean;piecePriceCents:number;user:User}) {
+function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletBalanceCents, onRecharge, user}:{report:AnalysisReport;originalFile:File|null;isAdmin:boolean;piecePriceCents:number;walletBalanceCents:number;onRecharge:()=>void;user:User}) {
   const [pieceOpen, setPieceOpen] = useState(false)
   const [pieceType, setPieceType] = useState(() => suggestPieceType(report.area, report.perspective))
   const [piece, setPiece] = useState<LegalPieceDraft | null>(null)
@@ -815,6 +859,8 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, user}:{
   const [confirmation, setConfirmation] = useState<Record<string, string>>({})
   const [professionalProfile, setProfessionalProfile] = useState<ProfessionalProfile>({ name: '', oab: '', address: '', email: '' })
   const [profileStatus, setProfileStatus] = useState('')
+  const [pieceQuoteCents, setPieceQuoteCents] = useState(piecePriceCents)
+  const [pieceQuoteError, setPieceQuoteError] = useState('')
 
   useEffect(() => {
     if (!db || !user.uid) return
@@ -877,6 +923,25 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, user}:{
 
   const options = pieceTypeOptions(report.area, report.perspective)
 
+  useEffect(()=>{
+    if(!pieceOpen || isAdmin) {
+      setPieceQuoteCents(piecePriceCents)
+      setPieceQuoteError('')
+      return
+    }
+    let cancelled=false
+    quotePiece()
+      .then(result=>{if(!cancelled){setPieceQuoteCents(result.priceCents);setPieceQuoteError('')}})
+      .catch((error:any)=>{
+        if(cancelled) return
+        const message=String(error?.message||'')
+        setPieceQuoteError(message.includes('preço') || message.includes('failed-precondition')
+          ? 'O preço da peça ainda não foi configurado.'
+          : 'Não foi possível consultar o preço da peça.')
+      })
+    return ()=>{cancelled=true}
+  },[pieceOpen,isAdmin,piecePriceCents])
+
   async function handleGeneratePiece() {
     setPieceError('')
     setPiece(null)
@@ -884,12 +949,16 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, user}:{
       setPieceError('Cadastre o nome do advogado e a OAB antes de gerar a peça. Assim o sistema não criará assinatura com campos em branco.')
       return
     }
+    if (!isAdmin && pieceQuoteCents > 0 && walletBalanceCents < pieceQuoteCents) {
+      setPieceError('WALLET_INSUFFICIENT: saldo insuficiente para gerar a peça. Recarregue a carteira.')
+      return
+    }
     setPieceBusy(true)
     setPieceStage('Estruturando e redigindo o rascunho')
     try {
-      if (!isAdmin) await chargePiece()
       window.setTimeout(() => setPieceStage('Validando fatos contra o relatório consolidado'), 900)
       const generated = await generateLegalPiece(report, pieceType, professionalProfile)
+      if (!isAdmin) await chargePiece()
       setPiece(generated)
       setPieceStage('Rascunho validado')
       window.setTimeout(() => document.getElementById('piece-review')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
@@ -1033,10 +1102,17 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, user}:{
             {options.map(option => <option key={option}>{option}</option>)}
           </select>
         </label>
-        <button className="primary-button" disabled={pieceBusy} onClick={handleGeneratePiece}>
-          {pieceBusy ? pieceStage || 'Gerando rascunho...' : `Gerar Rascunho${!isAdmin && piecePriceCents>0 ? ` — ${formatBRL(piecePriceCents)}` : ''}`} <ChevronRight size={18}/>
+        {!isAdmin && <div className="analysis-price-card piece-price-card">
+          <div><small>Preço desta operação</small><strong>{formatBRL(pieceQuoteCents||0)}</strong></div>
+          <div><small>Seu saldo</small><strong>{formatBRL(walletBalanceCents||0)}</strong></div>
+          <div><small>Saldo após a operação</small><strong>{formatBRL((walletBalanceCents||0)-(pieceQuoteCents||0))}</strong></div>
+          {pieceQuoteError && <span className="error">{pieceQuoteError}</span>}
+          {walletBalanceCents < pieceQuoteCents && <button type="button" className="secondary-button compact" onClick={onRecharge}>Recarregar</button>}
+        </div>}
+        <button className="primary-button" disabled={pieceBusy || (!isAdmin && (pieceQuoteCents<=0 || walletBalanceCents<pieceQuoteCents))} onClick={handleGeneratePiece}>
+          {pieceBusy ? pieceStage || 'Gerando rascunho...' : `Gerar Rascunho${!isAdmin && pieceQuoteCents>0 ? ` — ${formatBRL(pieceQuoteCents)}` : ''}`} <ChevronRight size={18}/>
         </button>
-        {pieceError && <p className="analysis-error">{pieceError}</p>}
+        {pieceError && <p className="analysis-error">{pieceError}</p>
       </div>
 
       {piece && <div className="piece-review" id="piece-review">
@@ -1350,22 +1426,37 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
 
   async function adjustBalance(item:WalletRecord){
     if(!functions) return
-    const raw=window.prompt(`Ajuste de saldo de ${item.email}.\nDigite o valor em reais. Use número negativo para retirar saldo.\nSaldo atual: ${formatBRL(item.balanceCents||0)}`)
+    const allowedTopups=[config.package1Cents,config.package2Cents,config.package3Cents]
+      .map(value=>Number(value||0))
+      .filter(value=>value>0)
+    const labels=allowedTopups.map(value=>formatBRL(value)).join(', ')
+    const raw=window.prompt(`Ajuste de saldo de ${item.email}.\nPara crédito/recarga, use exatamente um dos valores dos links de compra: ${labels}.\nPara retirada administrativa, use número negativo.\nSaldo atual: ${formatBRL(item.balanceCents||0)}`)
     if(raw===null) return
-    const normalized=raw.replace(/\./g,'').replace(',','.')
+    const trimmed=raw.trim()
+    const normalized=trimmed.includes(',')
+      ? trimmed.replace(/\./g,'').replace(',','.')
+      : trimmed
     const value=Number(normalized)
     if(!Number.isFinite(value) || value===0){
-      window.alert('Informe um valor válido diferente de zero.')
+      window.alert('Informe um valor válido diferente de zero. Exemplos aceitos: 40, 40.00, 80,00 ou -10,50.')
+      return
+    }
+    const cents=Math.round(value*100)
+    if(cents>0 && !allowedTopups.includes(cents)){
+      window.alert(`Para adicionar crédito, use exatamente um dos valores dos links de compra: ${labels}.`)
       return
     }
     const reason=window.prompt('Motivo do ajuste (opcional):') || ''
     setAdjustingUid(item.uid)
     try{
       const call=httpsCallable(functions,'adminAdjustWallet')
-      await call({uid:item.uid,deltaCents:Math.round(value*100),reason})
+      await call({uid:item.uid,deltaCents:cents,reason})
     }catch(err:any){
       console.error(err)
-      setError('Não foi possível ajustar o saldo.')
+      const message=String(err?.message||'')
+      setError(message.includes('RECARGA_VALOR_INVALIDO')
+        ? `Valor de crédito inválido. Use exatamente: ${labels}.`
+        : 'Não foi possível ajustar o saldo.')
     }finally{
       setAdjustingUid(null)
     }
@@ -1414,7 +1505,7 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
       <div>
         <span className="admin-badge"><Users/> Usuários e saldo</span>
         <h2>Carteira pré-paga</h2>
-        <p className="muted">Todo usuário começa com saldo zero. O valor de cada análise é calculado antes do uso e debitado da carteira.</p>
+        <p className="muted">Todo usuário começa com saldo zero. O preço é mostrado antes do uso e o débito só ocorre após a operação concluir com sucesso.</p>
       </div>
       <button className="secondary-button compact" onClick={onLogout}>Sair</button>
     </div>
@@ -1429,6 +1520,11 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
     <form className="subscription-config-form" onSubmit={saveConfig}>
       <div className="form-title"><CreditCard size={18}/><b>Preços e recargas</b></div>
       <p className="muted">Estes valores são administrativos. O usuário verá somente o preço final da operação.</p>
+      <div className="wallet-formula-note">
+        <b>Fórmula da análise:</b> preço final = maior valor entre o preço mínimo e (número de páginas × preço por página).
+        <br/>
+        <span>Exemplo com 60 páginas: 60 × {formatBRL(config.analysisPerPageCents||0)} = {formatBRL(60*(config.analysisPerPageCents||0))}; preço final = {formatBRL(Math.max(config.analysisMinimumCents||0,60*(config.analysisPerPageCents||0)))}.</span>
+      </div>
       <div className="admin-form-grid">
         <label>Preço mínimo por análise (centavos)
           <input type="number" min="0" value={config.analysisMinimumCents} onChange={e=>setConfig({...config,analysisMinimumCents:Number(e.target.value)||0})}/>

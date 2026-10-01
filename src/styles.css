@@ -3013,3 +3013,38 @@ select:focus,input:focus,textarea:focus{
 .professional-profile .secondary-button.compact{
   margin-top:16px!important;
 }
+
+
+/* Carteira: prévia de preço, extrato e fórmula administrativa */
+.wallet-statement{
+  margin:18px 0;
+  padding:14px 16px;
+  border:1px solid var(--border);
+  border-radius:14px;
+}
+.wallet-statement summary{cursor:pointer;font-weight:700}
+.wallet-statement-list{display:grid;gap:8px;margin-top:12px}
+.wallet-statement-row{
+  display:grid;
+  grid-template-columns:minmax(140px,1fr) minmax(150px,auto) auto auto;
+  gap:10px;
+  align-items:center;
+  padding:10px 0;
+  border-top:1px solid var(--border);
+}
+.wallet-statement-row:first-child{border-top:0}
+.wallet-statement-row span:first-child{text-transform:capitalize}
+.wallet-statement-row small{opacity:.8}
+.wallet-formula-note{
+  margin:10px 0 16px;
+  padding:12px 14px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  line-height:1.5;
+}
+.piece-price-card{margin:12px 0}
+@media (max-width:720px){
+  .wallet-statement-row{grid-template-columns:1fr auto}
+  .wallet-statement-row span:nth-child(2),
+  .wallet-statement-row small{grid-column:1/-1}
+}
