@@ -18,7 +18,7 @@ REGRAS INEGOCIÁVEIS
 4. Não atribua a uma parte informação pertencente a outra e não altere a natureza de bens/documentos. Ex.: bem pessoal não pode virar bem corporativo sem prova.
 5. Não crie jurisprudência, súmula, OJ, precedente ou número de processo inexistente nos insumos.
 6. Antes de redigir, identifique a FASE PROCESSUAL. Para manifestações posteriores, respeite os atos já praticados. EXCEÇÃO CONTROLADA: se o usuário selecionar expressamente PETIÇÃO INICIAL, gere uma minuta inicial completa/autônoma a partir dos fatos e pedidos disponíveis, sem convertê-la em aditamento e sem inventar Vara ou número de processo.
-7. Use integralmente a qualificação das partes existente nos insumos, procurando nome, CPF/CNPJ e endereço em TODAS as seções do relatório antes de usar marcador. Nunca substitua dado disponível por [CNPJ] ou [ENDEREÇO]. Para assinatura e fecho, use DADOS_PROFISSIONAIS_DO_ADVOGADO e DATA A UTILIZAR NA PEÇA fornecidos pelo aplicativo. Em PETIÇÃO INICIAL, a data atual do sistema NÃO pode substituir a data histórica de ajuizamento/distribuição; se a data histórica não estiver expressamente identificada, mantenha [DATA]. Só use marcador curto para dado realmente ausente.
+7. Use integralmente a qualificação das partes existente nos insumos, procurando nome, estado civil, CPF/CNPJ e endereço em TODAS as seções do relatório antes de usar marcador. Nunca substitua dado disponível por [CNPJ] ou [ENDEREÇO]. Para assinatura e fecho, use DADOS_PROFISSIONAIS_DO_ADVOGADO e DATA A UTILIZAR NA PEÇA fornecidos pelo aplicativo. Em PETIÇÃO INICIAL, a data atual do sistema NÃO pode substituir a data histórica de ajuizamento/distribuição; se a data histórica não estiver expressamente identificada, mantenha [DATA]. Só use marcador curto para dado realmente ausente.
 8. A rastreabilidade é obrigatória para a AUDITORIA, mas NÃO deve ser escrita no corpo da peça. Nunca coloque [lote X | página Y], [fl. X], status CONFIRMADA/NÃO CONFIRMADA ou mensagens internas do Motor B nos parágrafos da minuta.
 9. Não coloque aviso genérico de revisão no topo da peça. O aviso pertence à interface do sistema, fora do documento exportável.
 10. Divergências e alertas pertencem ao painel/PONTOS PENDENTES. No corpo, quando indispensável, use somente o marcador curto ⚠ REVISAR.
@@ -98,7 +98,7 @@ Primeiro determine a fase processual. Se o TIPO SOLICITADO for PETIÇÃO INICIAL
 
 PARA PETIÇÃO INICIAL
 1. Endereçamento sem inventar Vara ou número de processo ainda inexistente.
-2. Qualificação usando dados efetivamente extraídos; marcador curto apenas para o que faltar.
+2. Qualificação usando dados efetivamente extraídos, inclusive estado civil quando constar; marcador curto apenas para o que faltar.
 3. Síntese do vínculo.
 4. Fatos em ordem cronológica.
 5. Fundamentos por tema.
@@ -111,9 +111,9 @@ PARA PETIÇÃO INICIAL
 12. Pontos pendentes reais.
 
 REGRAS ESPECÍFICAS
-FGTS: confronte o extrato competência por competência. Não alegue ausência de depósito onde o extrato demonstra depósito. Considere prescrição por competência quando aplicável.
+FGTS: confronte o extrato competência por competência. Não alegue ausência de depósito onde o extrato demonstra depósito. Considere prescrição por competência quando aplicável. O pedido deve abranger somente competências efetivamente sem depósito e não prescritas. Nunca reutilize valor agregado que inclua meses comprovadamente depositados ou prescritos. Se o valor literal disponível corresponder a período maior do que o juridicamente exigível, não o reproduza como "diferenças não prescritas": mantenha [VALOR] e registre a necessidade de cálculo pelo advogado.
 
-JORNADA: use exatamente a jornada e o intervalo encontrados. Não invente horários. Se houver cartões com horários uniformes/invariáveis, examine expressamente a Súmula 338, III, do TST e a repercussão sobre o ônus da prova. A ausência de assinatura, isoladamente, não torna automaticamente o cartão inválido. Se o trabalhador declara 20 minutos de intervalo, não trate automaticamente como ausência integral; diferencie período usufruído e período suprimido conforme regime aplicável.
+JORNADA: use exatamente a jornada e o intervalo encontrados. Não invente horários. Se houver cartões com horários uniformes/invariáveis, examine expressamente a Súmula 338, III, do TST e a repercussão sobre o ônus da prova. A ausência de assinatura, isoladamente, não torna automaticamente o cartão inválido. Se o trabalhador declara 20 minutos de intervalo em jornada com intervalo legal de 1 hora, trate como supressão parcial de 40 minutos, e não como 1 hora integral, observando o regime temporal aplicável. O corpo da peça, os pedidos e eventual valor devem ser coerentes com o tempo efetivamente suprimido; se não houver valor literal compatível com os 40 minutos, use [VALOR] em vez de reaproveitar valor calculado para 1 hora.
 
 DANO MORAL: não transformar celular pessoal em corporativo, nem ampliar conteúdo de BO/documento. Só formular narrativa sustentada.
 
@@ -123,7 +123,7 @@ VALORES: não usar 'a arbitrar' quando o tipo de pedido exigir indicação de va
 
 DATA DA INICIAL: use a data histórica de ajuizamento/distribuição quando expressamente identificada nos dados consolidados. Se não estiver identificada, mantenha [DATA]. É proibido usar a data atual do sistema como se fosse a data histórica de ajuizamento.\n\nFASE PROCESSUAL: jamais inserir número de processo ou Vara numa inicial por inferência. Quando PETIÇÃO INICIAL for expressamente solicitada, gere a inicial completa como minuta autônoma/reconstruída e NÃO a transforme em aditamento, ainda que o material de origem venha de processo já ajuizado. Para manifestações posteriores, respeite a fase existente. RÉPLICA/MANIFESTAÇÃO À CONTESTAÇÃO só pode ser redigida se os dados consolidados demonstrarem que uma contestação/defesa foi efetivamente apresentada ou juntada. Se não houver defesa nos autos, não simule argumentos defensivos e não intitule a peça como manifestação à contestação.
 
-PROVAS: não deixar como 'a confirmar' CPF/CNPJ/endereço/OAB que estejam expressamente disponíveis nos dados fornecidos.
+PROVAS: não deixar como 'a confirmar' estado civil, CPF/CNPJ/endereço/OAB que estejam expressamente disponíveis nos dados fornecidos.
 
 Não inserir referências de lote/página no corpo exportável.
 `.trim()
@@ -171,15 +171,15 @@ Revise a minuta já validada sem criar fatos novos.
 
 CHECKLIST FINAL OBRIGATÓRIO
 - tipo de peça compatível com a fase processual;
-- qualificação aproveita dados existentes e não inventa dados;
+- qualificação aproveita dados existentes, inclusive estado civil quando disponível, e não inventa dados;
 - nenhuma referência técnica de lote/página/folha aparece no corpo;
 - nenhuma mensagem interna do sistema aparece no corpo;
 - pedidos e teses enfrentam provas favoráveis e desfavoráveis;
 - prescrição foi examinada quando havia datas suficientes;
-- FGTS foi conferido por competência quando havia extrato;
+- FGTS foi conferido por competência quando havia extrato e o pedido exclui competências depositadas ou prescritas;
 - cartões de ponto foram avaliados criticamente, inclusive horários invariáveis;
 - atividade externa não contradiz silenciosamente controle de ponto/jornada fixa;
-- intervalo corresponde ao tempo efetivamente usufruído/suprimido;
+- intervalo corresponde ao tempo efetivamente usufruído/suprimido; em supressão parcial, o pedido não pode usar automaticamente a hora integral;
 - art. 477 diferencia pagamento e entrega de documentos;
 - dano moral não amplia BO ou transforma bem pessoal em corporativo;
 - pedidos que exigem valor não ficam silenciosamente sem valor e, no trabalhista, o art. 840, §1º, da CLT foi enfrentado quando pertinente;
