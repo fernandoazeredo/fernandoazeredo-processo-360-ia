@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, signOut, User } from 'firebase/auth'
-import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore'
+import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
 import { AlertTriangle, BrainCircuit, CheckCircle2, ChevronRight, CreditCard, Download, FilePenLine, FileText, LockKeyhole, Moon, Pencil, Plus, Save, Search, ShieldCheck, Sun, Trash2, UploadCloud, Users, X } from 'lucide-react'
 import { auth, db, firebaseConfigured, functions } from './firebase'
 import { httpsCallable } from 'firebase/functions'
@@ -8,7 +8,7 @@ import { analyzeUploadedProcess } from './ai'
 import type { AnalysisReport } from './ai'
 import { confirmClaimInOriginal, generateLegalPiece, pieceTypeOptions, suggestPieceType } from './pieces'
 import type { LegalPieceDraft, PieceClaim, ProfessionalProfile } from './pieces'
-import { chargeAnalysis, chargePiece, formatBRL, quoteAnalysis } from './wallet'
+import { chargeAnalysis, chargePiece, formatBRL, quoteAnalysis, quotePiece } from './wallet'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import type { WalletRecord, WalletStatus } from './wallet'
 
@@ -29,6 +29,18 @@ type WalletConfig = {
   package3Cents: number
   package3Url: string
   paymentInstructions?: string
+}
+
+type WalletLedgerEntry = {
+  id: string
+  uid: string
+  operation: string
+  direction: 'credit' | 'debit' | 'neutral'
+  amountCents: number
+  balanceBeforeCents?: number
+  balanceAfterCents?: number
+  createdAt?: any
+  reason?: string | null
 }
 
 
@@ -205,6 +217,7 @@ function App() {
   const [quote, setQuote] = useState<{pageCount:number;priceCents:number}|null>(null)
   const [quoteBusy, setQuoteBusy] = useState(false)
   const [quoteError, setQuoteError] = useState('')
+  const [walletLedger, setWalletLedger] = useState<WalletLedgerEntry[]>([])
   const [walletConfig, setWalletConfig] = useState<WalletConfig>({analysisMinimumCents:0,analysisPerPageCents:0,piecePriceCents:0,package1Cents:4000,package1Url:'https://payment-link-v3.ton.com.br/pl_L4oBjJNOkKyEJLGCrvCjO31nA9pG78db',package2Cents:8000,package2Url:'https://payment-link-v3.ton.com.br/pl_4n9ELgN872OXmzD9cyT1RMvDdBbxzGaj',package3Cents:12000,package3Url:'https://payment-link-v3.ton.com.br/pl_1wy7Jor82XxB8OEULRIqGdGALMQKzY4N',paymentInstructions:''})
 
   useEffect(() => {
@@ -272,6 +285,19 @@ function App() {
   },[appUser?.uid])
 
   useEffect(()=>{
+    if(!db || !appUser || appUser.email===ADMIN_EMAIL){
+      setWalletLedger([])
+      return
+    }
+    const ledgerQuery=query(collection(db,'walletLedger'),where('uid','==',appUser.uid))
+    return onSnapshot(ledgerQuery,snap=>{
+      const rows=snap.docs.map(item=>({id:item.id,...item.data()} as WalletLedgerEntry))
+      rows.sort((a,b)=>Number(b.createdAt?.toMillis?.()||0)-Number(a.createdAt?.toMillis?.()||0))
+      setWalletLedger(rows)
+    },error=>console.error('[Processo 360 IA] Falha ao carregar extrato da carteira.',error))
+  },[appUser?.uid])
+
+  useEffect(()=>{
     let cancelled=false
     setQuote(null)
     setQuoteError('')
@@ -311,21 +337,26 @@ function App() {
     setProcessing(true)
 
     try {
+      let billableQuote = quote
       if (appUser?.email !== ADMIN_EMAIL) {
         if (!wallet || wallet.status !== 'ativo') {
           throw new Error('WALLET_BLOCKED')
         }
-        const currentQuote = quote || await quoteAnalysis(file)
-        if (wallet.balanceCents < currentQuote.priceCents) {
+        billableQuote = quote || await quoteAnalysis(file)
+        if (wallet.balanceCents < billableQuote.priceCents) {
           throw new Error('WALLET_INSUFFICIENT')
         }
-        await chargeAnalysis(currentQuote.pageCount)
       }
 
       const report = await analyzeUploadedProcess(file, area, perspective, (value, stage) => {
         setProgress(value)
         setProcessingStage(stage)
       })
+
+      if (appUser?.email !== ADMIN_EMAIL && billableQuote) {
+        await chargeAnalysis(billableQuote.pageCount)
+      }
+
       setAnalysis(report)
       window.setTimeout(() => {
         document.getElementById('analysis-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -442,8 +473,9 @@ function App() {
               ? <span>Calculando o valor da análise...</span>
               : quote
                 ? <>
-                    <div><small>Valor para analisar este processo</small><strong>{formatBRL(quote.priceCents)}</strong><span>{quote.pageCount} página(s)</span></div>
-                    <div><small>Saldo disponível</small><strong>{formatBRL(wallet?.balanceCents || 0)}</strong></div>
+                    <div><small>Preço desta operação</small><strong>{formatBRL(quote.priceCents)}</strong><span>{quote.pageCount} página(s)</span></div>
+                    <div><small>Seu saldo</small><strong>{formatBRL(wallet?.balanceCents || 0)}</strong></div>
+                    <div><small>Saldo após a operação</small><strong>{formatBRL((wallet?.balanceCents || 0) - quote.priceCents)}</strong></div>
                     {(wallet?.balanceCents || 0) < quote.priceCents &&
                       <WalletFundingPanel config={walletConfig} missingCents={quote.priceCents-(wallet?.balanceCents||0)} />}
                   </>
@@ -465,7 +497,19 @@ function App() {
           )}
         </section>
 
-        {analysis && <AnalysisResult report={analysis} originalFile={file} isAdmin={appUser.email===ADMIN_EMAIL} piecePriceCents={walletConfig.piecePriceCents} user={appUser} />}
+        {appUser.email !== ADMIN_EMAIL && walletLedger.length > 0 && <details className="wallet-statement">
+          <summary>Extrato da carteira</summary>
+          <div className="wallet-statement-list">
+            {walletLedger.slice(0,20).map(entry=><div key={entry.id} className="wallet-statement-row">
+              <span>{entry.operation.replace(/_/g,' ')}</span>
+              <span>{entry.createdAt?.toDate?.().toLocaleString('pt-BR') || '—'}</span>
+              <b>{entry.direction==='credit'?'+':entry.direction==='debit'?'-':''}{formatBRL(entry.amountCents||0)}</b>
+              <small>{formatBRL(entry.balanceBeforeCents||0)} → {formatBRL(entry.balanceAfterCents||0)}</small>
+            </div>)}
+          </div>
+        </details>}
+
+        {analysis && <AnalysisResult report={analysis} originalFile={file} isAdmin={appUser.email===ADMIN_EMAIL} piecePriceCents={walletConfig.piecePriceCents} walletBalanceCents={wallet?.balanceCents||0} onRecharge={()=>setWalletTopupOpen(true)} user={appUser} />}
 
       </main>
 
