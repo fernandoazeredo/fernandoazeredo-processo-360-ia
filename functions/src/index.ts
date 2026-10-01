@@ -410,7 +410,7 @@ Analise este lote sem antecipar o diagnóstico final. O resultado deve ser uma e
 
           lotResults[lot.number - 1] = JSON.parse(response.output_text)
         } finally {
-          await client.files.delete(uploaded.id).catch(() => undefined)
+          await client.files.delete(uploaded.id).catch((): void => {})
         }
 
         completedLots += 1
@@ -572,7 +572,7 @@ ${JSON.stringify(lotResults)}`
         stage: 'Falha durante o processamento',
         error: error?.message || 'Falha desconhecida',
         updatedAt: FieldValue.serverTimestamp()
-      }, { merge: true }).catch(() => undefined)
+      }, { merge: true }).catch((): void => {})
       if (error instanceof HttpsError) throw error
 
       const message = String(error?.message || 'Falha ao processar o processo.')
@@ -622,7 +622,7 @@ export const adminDeleteSubscriber = onCall(
       if (error?.code !== 'auth/user-not-found') throw error
     }
 
-    await subscriberRef.delete().catch(() => undefined)
+    await subscriberRef.delete().catch((): void => {})
     await db.collection('subscriberAudit').add({
       action: 'excluir',
       subscriberUid: uid,
@@ -836,7 +836,7 @@ export const adminDeleteWalletUser = onCall(
       if (error?.code !== 'auth/user-not-found') throw error
     }
 
-    await walletRef.delete().catch(() => undefined)
+    await walletRef.delete().catch((): void => {})
     await db.collection('walletLedger').add({
       uid,
       operation: 'exclusao_usuario',
