@@ -848,7 +848,7 @@ function exportPieceAsWord(report: AnalysisReport, piece: LegalPieceDraft) {
   URL.revokeObjectURL(url)
 }
 
-function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, user}:{report:AnalysisReport;originalFile:File|null;isAdmin:boolean;piecePriceCents:number;user:User}) {
+function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletBalanceCents, onRecharge, user}:{report:AnalysisReport;originalFile:File|null;isAdmin:boolean;piecePriceCents:number;walletBalanceCents:number;onRecharge:()=>void;user:User}) {
   const [pieceOpen, setPieceOpen] = useState(false)
   const [pieceType, setPieceType] = useState(() => suggestPieceType(report.area, report.perspective))
   const [piece, setPiece] = useState<LegalPieceDraft | null>(null)
@@ -859,6 +859,8 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, user}:{
   const [confirmation, setConfirmation] = useState<Record<string, string>>({})
   const [professionalProfile, setProfessionalProfile] = useState<ProfessionalProfile>({ name: '', oab: '', address: '', email: '' })
   const [profileStatus, setProfileStatus] = useState('')
+  const [pieceQuoteCents, setPieceQuoteCents] = useState(piecePriceCents)
+  const [pieceQuoteError, setPieceQuoteError] = useState('')
 
   useEffect(() => {
     if (!db || !user.uid) return
@@ -921,6 +923,25 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, user}:{
 
   const options = pieceTypeOptions(report.area, report.perspective)
 
+  useEffect(()=>{
+    if(!pieceOpen || isAdmin) {
+      setPieceQuoteCents(piecePriceCents)
+      setPieceQuoteError('')
+      return
+    }
+    let cancelled=false
+    quotePiece()
+      .then(result=>{if(!cancelled){setPieceQuoteCents(result.priceCents);setPieceQuoteError('')}})
+      .catch((error:any)=>{
+        if(cancelled) return
+        const message=String(error?.message||'')
+        setPieceQuoteError(message.includes('preço') || message.includes('failed-precondition')
+          ? 'O preço da peça ainda não foi configurado.'
+          : 'Não foi possível consultar o preço da peça.')
+      })
+    return ()=>{cancelled=true}
+  },[pieceOpen,isAdmin,piecePriceCents])
+
   async function handleGeneratePiece() {
     setPieceError('')
     setPiece(null)
@@ -928,12 +949,16 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, user}:{
       setPieceError('Cadastre o nome do advogado e a OAB antes de gerar a peça. Assim o sistema não criará assinatura com campos em branco.')
       return
     }
+    if (!isAdmin && pieceQuoteCents > 0 && walletBalanceCents < pieceQuoteCents) {
+      setPieceError('WALLET_INSUFFICIENT: saldo insuficiente para gerar a peça. Recarregue a carteira.')
+      return
+    }
     setPieceBusy(true)
     setPieceStage('Estruturando e redigindo o rascunho')
     try {
-      if (!isAdmin) await chargePiece()
       window.setTimeout(() => setPieceStage('Validando fatos contra o relatório consolidado'), 900)
       const generated = await generateLegalPiece(report, pieceType, professionalProfile)
+      if (!isAdmin) await chargePiece()
       setPiece(generated)
       setPieceStage('Rascunho validado')
       window.setTimeout(() => document.getElementById('piece-review')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
@@ -1077,10 +1102,17 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, user}:{
             {options.map(option => <option key={option}>{option}</option>)}
           </select>
         </label>
-        <button className="primary-button" disabled={pieceBusy} onClick={handleGeneratePiece}>
-          {pieceBusy ? pieceStage || 'Gerando rascunho...' : `Gerar Rascunho${!isAdmin && piecePriceCents>0 ? ` — ${formatBRL(piecePriceCents)}` : ''}`} <ChevronRight size={18}/>
+        {!isAdmin && <div className="analysis-price-card piece-price-card">
+          <div><small>Preço desta operação</small><strong>{formatBRL(pieceQuoteCents||0)}</strong></div>
+          <div><small>Seu saldo</small><strong>{formatBRL(walletBalanceCents||0)}</strong></div>
+          <div><small>Saldo após a operação</small><strong>{formatBRL((walletBalanceCents||0)-(pieceQuoteCents||0))}</strong></div>
+          {pieceQuoteError && <span className="error">{pieceQuoteError}</span>}
+          {walletBalanceCents < pieceQuoteCents && <button type="button" className="secondary-button compact" onClick={onRecharge}>Recarregar</button>}
+        </div>}
+        <button className="primary-button" disabled={pieceBusy || (!isAdmin && (pieceQuoteCents<=0 || walletBalanceCents<pieceQuoteCents))} onClick={handleGeneratePiece}>
+          {pieceBusy ? pieceStage || 'Gerando rascunho...' : `Gerar Rascunho${!isAdmin && pieceQuoteCents>0 ? ` — ${formatBRL(pieceQuoteCents)}` : ''}`} <ChevronRight size={18}/>
         </button>
-        {pieceError && <p className="analysis-error">{pieceError}</p>}
+        {pieceError && <p className="analysis-error">{pieceError}</p>
       </div>
 
       {piece && <div className="piece-review" id="piece-review">
