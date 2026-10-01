@@ -5,8 +5,8 @@ import { aiClient, db } from './firebase'
 
 export const CONSOLIDATION_MODEL = 'gemini-3.8-flash'
 export const EXTRACTION_MODEL = 'gemini-3.8-flash'
-const EXTRACTION_MODELS = [EXTRACTION_MODEL] as const
-const CONSOLIDATION_MODELS = [CONSOLIDATION_MODEL] as const
+const EXTRACTION_MODELS = [EXTRACTION_MODEL, EXTRACTION_MODEL] as const
+const CONSOLIDATION_MODELS = [CONSOLIDATION_MODEL, CONSOLIDATION_MODEL] as const
 const ARCHITECTURE_VERSION = 'blaze-browser-lots-v8-timeout-model-errors-values'
 const MAX_LOT_PAGES = 60
 const MAX_LOT_BYTES = 8 * 1024 * 1024
@@ -265,7 +265,7 @@ function classifyGeminiError(error: any) {
     )
   }
 
-  if (/500|503|high demand|temporarily unavailable|service unavailable|internal error/i.test(message)) {
+  if (/500|503|high demand|temporarily unavailable|service unavailable|internal(?: error|\s*\[\d+\])/i.test(message)) {
     return new Error(
       'GEMINI_TEMPORARILY_BUSY: o serviço Gemini está temporariamente sobrecarregado. A análise pode ser retomada sem perder os lotes já concluídos.'
     )
@@ -344,7 +344,7 @@ async function generateContentWithFallback(
       }
 
       const retryable =
-        /500|503|high demand|temporarily unavailable|service unavailable|internal error|GEMINI_REQUEST_TIMEOUT|404|model.*not.*(found|available)|unsupported model/i.test(message)
+        /500|503|high demand|temporarily unavailable|service unavailable|internal(?: error|\s*\[\d+\])|GEMINI_REQUEST_TIMEOUT|404|model.*not.*(found|available)|unsupported model/i.test(message)
 
       if (!retryable || index >= models.length - 1) {
         throw classifyGeminiError(error)
