@@ -1112,7 +1112,7 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
         <button className="primary-button" disabled={pieceBusy || (!isAdmin && (pieceQuoteCents<=0 || walletBalanceCents<pieceQuoteCents))} onClick={handleGeneratePiece}>
           {pieceBusy ? pieceStage || 'Gerando rascunho...' : `Gerar Rascunho${!isAdmin && pieceQuoteCents>0 ? ` — ${formatBRL(pieceQuoteCents)}` : ''}`} <ChevronRight size={18}/>
         </button>
-        {pieceError && <p className="analysis-error">{pieceError}</p>
+        {pieceError && <p className="analysis-error">{pieceError}</p>}
       </div>
 
       {piece && <div className="piece-review" id="piece-review">
