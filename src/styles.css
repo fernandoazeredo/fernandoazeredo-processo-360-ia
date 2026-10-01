@@ -3008,3 +3008,8 @@ select:focus,input:focus,textarea:focus{
     padding:24px 18px;
   }
 }
+
+/* Ajuste pontual — cadastro profissional */
+.professional-profile .secondary-button.compact{
+  margin-top:16px!important;
+}

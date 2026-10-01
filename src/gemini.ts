@@ -16,7 +16,7 @@ const RETRY_DELAYS_MS = [3000, 7000]
 export type GeminiAnalysisReport = {
   processNumber: string
   processNumberWarning?: string
-  parties: Array<{ role: string; name: string; cpfCnpj: string; address: string; lawyerName: string; lawyerOab: string }>
+  parties: Array<{ role: string; name: string; civilStatus: string; cpfCnpj: string; address: string; lawyerName: string; lawyerOab: string }>
   executiveSummary: string
   timeline: Array<{ date: string; event: string; reference: string }>
   claimsEvidenceDecisions: string
@@ -53,7 +53,7 @@ type LotExtraction = {
   evidence: string[]
   decisions: string[]
   monetaryValues: string[]
-  qualifications: Array<{ role: string; name: string; cpfCnpj: string; address: string; lawyerName: string; lawyerOab: string }>
+  qualifications: Array<{ role: string; name: string; civilStatus: string; cpfCnpj: string; address: string; lawyerName: string; lawyerOab: string }>
   proceduralIssues: string[]
   favorablePoints: string[]
   adversePoints: string[]
@@ -111,7 +111,7 @@ const extractionSchema = Schema.object({
     decisions: Schema.array({ items: Schema.string() }),
     monetaryValues: Schema.array({ items: Schema.string() }),
     qualifications: Schema.array({ items: Schema.object({ properties: {
-      role: Schema.string(), name: Schema.string(), cpfCnpj: Schema.string(), address: Schema.string(), lawyerName: Schema.string(), lawyerOab: Schema.string()
+      role: Schema.string(), name: Schema.string(), civilStatus: Schema.string(), cpfCnpj: Schema.string(), address: Schema.string(), lawyerName: Schema.string(), lawyerOab: Schema.string()
     } }) }),
     proceduralIssues: Schema.array({ items: Schema.string() }),
     favorablePoints: Schema.array({ items: Schema.string() }),
@@ -124,7 +124,7 @@ const reportSchema = Schema.object({
   properties: {
     processNumber: Schema.string(),
     parties: Schema.array({ items: Schema.object({ properties: {
-      role: Schema.string(), name: Schema.string(), cpfCnpj: Schema.string(), address: Schema.string(), lawyerName: Schema.string(), lawyerOab: Schema.string()
+      role: Schema.string(), name: Schema.string(), civilStatus: Schema.string(), cpfCnpj: Schema.string(), address: Schema.string(), lawyerName: Schema.string(), lawyerOab: Schema.string()
     } }) }),
     executiveSummary: Schema.string(),
     timeline: Schema.array({
@@ -556,7 +556,7 @@ Mantenha referências de página/peça sempre que identificáveis.
 - Em processNumber, extraia o número do processo (padrão CNJ, ex: 0000000-00.0000.0.00.0000) exatamente como consta neste lote. Se não constar neste lote, use exatamente: "Informação não constante nos dados fornecidos".
 - Em timeline, use data exata apenas quando ela estiver expressamente identificada. Se a data exata não constar, use em date exatamente "Informação não constante nos dados fornecidos". Quando o contexto permitir estabelecer com segurança uma posição relativa, registre no event ou reference "Inferência cronológica: ..." e indique o evento/data que sustenta essa ordenação.
 - Em monetaryValues, TRANSCREVA literalmente todos os valores expressamente identificados, especialmente TRCT/verbas rescisórias, valor da causa e valor de cada pedido. Confira dígito por dígito antes de responder. Para cada valor, informe natureza e referência. NÃO some, subtraia, estime, arredonde, complete nem crie 'diferença' entre dois valores. Uma diferença monetária só pode entrar em claims se estiver expressamente formulada como pedido/alegação no documento. Se a leitura de um algarismo estiver duvidosa, registre a dúvida em unresolvedQuestions em vez de escolher um valor.
-- Em qualifications, extraia e preserve separadamente a qualificação encontrada de cada parte e advogado: papel processual, nome, CPF/CNPJ, endereço, nome do advogado e OAB. Não descarte esses dados por não serem necessários ao resumo do lote.
+- Em qualifications, extraia e preserve separadamente a qualificação encontrada de cada parte e advogado: papel processual, nome, estado civil, CPF/CNPJ, endereço, nome do advogado e OAB. Se o estado civil constar literalmente (por exemplo, solteiro/solteira, casado/casada, divorciado/divorciada, viúvo/viúva), preencha civilStatus exatamente com esse dado; se não constar, use "Informação não constante nos dados fornecidos". Não descarte esses dados por não serem necessários ao resumo do lote.
 - Em claims, catalogue cada pedido ou pretensão separadamente quando isso for possível, preservando o vínculo com os respectivos valores, fundamentos, provas e decisões encontrados no lote.
 - Se houver súmula, OJ, precedente ou entendimento jurisprudencial expressamente citado no lote ou nos prompts jurídicos fornecidos, preserve a referência com exatidão. Não crie nem complete referência jurisprudencial ausente.
 O JSON deve respeitar exatamente o schema solicitado.
@@ -771,7 +771,7 @@ REGRAS OBRIGATÓRIAS:
 - Em risks.basis, justifique cada risco com elementos concretos dos lotes: prova existente ou ausente, distribuição do ônus probatório, decisão já proferida, contradição, documento faltante e exposição monetária expressamente identificada. Não crie percentual numérico de êxito ou condenação.
 - Na linha do tempo final, não invente datas. Quando um evento não tiver data exata, mantenha em date exatamente "Informação não constante nos dados fornecidos" e utilize relações temporais inferidas apenas quando sustentadas pelos lotes, identificando-as expressamente como "Inferência cronológica".
 - Em claimsEvidenceDecisions, consolide separadamente o valor da causa e o valor de cada pedido quando constarem dos lotes, eliminando duplicidades e preservando a referência documental. Não estime quantias ausentes. NUNCA crie pedido de diferença monetária por comparação aritmética entre TRCT, inicial ou outro documento: o pedido deve existir expressamente em claims.
-- Em parties, consolide TODAS as qualifications extraídas dos lotes, preservando nome, CPF/CNPJ, endereço e advogado/OAB. Não troque dado encontrado por 'Informação não constante'.
+- Em parties, consolide TODAS as qualifications extraídas dos lotes, preservando nome, estado civil, CPF/CNPJ, endereço e advogado/OAB. Não troque dado encontrado por 'Informação não constante'.
 - VALORES DO TRCT: trate o valor impresso no documento como transcrição documental, não como resultado de cálculo. Se lotes trouxerem valores conflitantes para o mesmo campo, exponha a divergência e não invente um terceiro valor nem uma diferença.\n- VALORES DERIVADOS: é proibido criar qualquer novo valor em R$ por cálculo, percentual, soma, subtração, projeção ou estimativa. Em especial, se os lotes trouxerem apenas percentual de honorários, preserve o percentual sem convertê-lo em R$. Todo valor monetário em R$ exibido no relatório final deve estar literalmente presente nos lotes extraídos.
 - Ao mencionar legislação, súmulas, OJs ou jurisprudência, utilize somente referências específicas presentes nos lotes ou nos prompts jurídicos publicados. Não invente número, tribunal, enunciado ou precedente. Se a referência específica não estiver disponível, exponha a questão jurídica sem fabricar citação.
 - Em conclusionStrategy, além da conclusão jurídica, apresente de 2 a 3 próximos passos práticos e objetivos coerentes com a perspectiva informada, vinculando cada ação a uma lacuna, prova, pedido ou risco identificado nos lotes (por exemplo: juntar documento já mencionado, requerer prova/perícia pertinente ou impugnar ponto documentalmente identificado). Não recomende medida sem suporte nos dados processados.

@@ -7,7 +7,7 @@ export type AnalysisReport = {
   perspective: string
   processNumber: string
   processNumberWarning?: string
-  parties: Array<{ role: string; name: string; cpfCnpj: string; address: string; lawyerName: string; lawyerOab: string }>
+  parties: Array<{ role: string; name: string; civilStatus: string; cpfCnpj: string; address: string; lawyerName: string; lawyerOab: string }>
   executiveSummary: string
   timeline: Array<{ date: string; event: string; reference: string }>
   claimsEvidenceDecisions: string
