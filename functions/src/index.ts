@@ -839,6 +839,58 @@ export const walletRefundCharge = onCall(
 )
 
 
+export const adminSetWalletStatus = onCall(
+  { region: 'us-central1', cors: true },
+  async request => {
+    const callerEmail = String(request.auth?.token?.email || '').toLowerCase()
+    if (!request.auth || callerEmail !== 'fernandoazeredo64@gmail.com') {
+      throw new HttpsError('permission-denied', 'Apenas o administrador pode alterar o status da carteira.')
+    }
+
+    const uid = String(request.data?.uid || '').trim()
+    const status = String(request.data?.status || '').trim()
+    if (!uid || !['ativo','inativo','bloqueado'].includes(status)) {
+      throw new HttpsError('invalid-argument', 'Usuário ou status inválido.')
+    }
+
+    const walletRef = db.collection('wallets').doc(uid)
+    const auditRef = db.collection('walletStatusAudit').doc()
+
+    return db.runTransaction(async tx => {
+      const snap = await tx.get(walletRef)
+      if (!snap.exists) throw new HttpsError('not-found', 'Carteira não encontrada.')
+
+      const wallet = snap.data() || {}
+      const previousStatus = String(wallet.status || 'inativo')
+      if (previousStatus === status) {
+        return { success: true, changed: false, status }
+      }
+
+      tx.update(walletRef, {
+        status,
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: callerEmail,
+        lastStatusChangedAt: FieldValue.serverTimestamp(),
+        lastStatusChangedBy: callerEmail,
+        lastStatusFrom: previousStatus,
+        lastStatusTo: status
+      })
+
+      tx.set(auditRef, {
+        uid,
+        email: String(wallet.email || ''),
+        fromStatus: previousStatus,
+        toStatus: status,
+        changedByUid: request.auth.uid,
+        changedByEmail: callerEmail,
+        createdAt: FieldValue.serverTimestamp()
+      })
+
+      return { success: true, changed: true, previousStatus, status }
+    })
+  }
+)
+
 export const adminAdjustWallet = onCall(
   { region: 'us-central1', cors: true },
   async request => {
