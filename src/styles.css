@@ -3261,3 +3261,216 @@ select:focus,input:focus,textarea:focus{
     gap:8px;
   }
 }
+
+
+/* CLIENTE — interface compacta de créditos e extrato */
+.wallet-compact-card{
+  max-width:1180px;
+  margin:18px auto 22px;
+  padding:16px 18px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:14px 20px;
+  align-items:center;
+  border:1px solid var(--border);
+  border-radius:16px;
+  background:var(--surface);
+  box-shadow:var(--shadow);
+}
+.wallet-compact-copy{min-width:0}
+.wallet-compact-title-row{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  margin-bottom:5px;
+}
+.wallet-compact-title-row h2{margin:0;font-size:1.08rem}
+.wallet-compact-copy p{
+  margin:0;
+  color:var(--muted);
+  line-height:1.45;
+  font-size:.86rem;
+}
+.wallet-info-button{
+  width:25px;
+  height:25px;
+  border-radius:999px;
+  border:1px solid var(--border);
+  background:var(--surface-2);
+  color:var(--text);
+  font-weight:900;
+  cursor:pointer;
+}
+.wallet-compact-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:12px;
+  white-space:nowrap;
+}
+.wallet-compact-actions>span{
+  font-size:.9rem;
+  color:var(--muted);
+}
+.wallet-compact-actions>span b{
+  color:var(--text);
+  font-size:1.08rem;
+}
+.wallet-low-warning.compact{
+  grid-column:1/-1;
+  margin:0;
+  padding:7px 10px;
+  font-size:.82rem;
+  line-height:1.25;
+}
+
+.analysis-price-card{
+  display:flex!important;
+  align-items:center!important;
+  gap:12px!important;
+  flex-wrap:wrap!important;
+  padding:12px 14px!important;
+}
+.price-summary-line{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.price-summary-line b{font-size:1.02rem}
+.price-summary-line span,.price-summary-line small{color:var(--muted)}
+.price-missing-line{font-size:.9rem}
+.analysis-price-card .buy-credits-button.compact{margin-left:auto}
+
+.wallet-statement{
+  max-width:1180px;
+  margin:16px auto 22px;
+}
+.wallet-statement summary{
+  cursor:pointer;
+  font-weight:800;
+  padding:8px 0;
+}
+.compact-ledger{
+  display:grid;
+  gap:0!important;
+  margin-top:8px!important;
+  border:1px solid var(--border);
+  border-radius:12px;
+  overflow:hidden;
+  background:var(--surface);
+}
+.ledger-head,
+.compact-ledger .wallet-statement-row{
+  display:grid!important;
+  grid-template-columns:125px minmax(0,1fr) 120px 120px!important;
+  gap:12px!important;
+  align-items:center!important;
+}
+.ledger-head{
+  padding:8px 12px;
+  background:var(--surface-2);
+  color:var(--muted);
+  font-size:.74rem;
+  font-weight:800;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
+.compact-ledger .wallet-statement-row{
+  padding:9px 12px!important;
+  border:0!important;
+  border-top:1px solid var(--border)!important;
+  border-radius:0!important;
+  background:transparent!important;
+  font-size:.84rem;
+}
+.compact-ledger .wallet-statement-row b,
+.compact-ledger .wallet-statement-row strong{text-align:right}
+.wallet-entry-description{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.wallet-entry-credit b{color:#16854e}
+.wallet-entry-debit b{color:#c53b3b}
+.refund-row{
+  background:color-mix(in srgb,#25a963 7%,var(--surface))!important;
+}
+.refund-row .wallet-entry-description{padding-left:14px}
+.ledger-more-button{
+  justify-self:center;
+  margin:10px;
+  border:1px solid var(--border);
+  border-radius:9px;
+  padding:8px 12px;
+  background:var(--surface-2);
+  color:var(--text);
+  font-weight:800;
+  cursor:pointer;
+}
+.professional-profile.collapsed-profile{
+  padding:12px 14px!important;
+}
+.professional-profile-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+}
+.professional-profile-head h3{margin:0 0 3px}
+.professional-profile-head small{color:var(--muted)}
+.status-audit-note{
+  display:block;
+  margin-top:5px;
+  color:var(--muted);
+  font-size:.68rem;
+  line-height:1.25;
+}
+.wallet-info-modal{max-width:520px}
+
+@media(max-width:720px){
+  .wallet-compact-card{
+    grid-template-columns:1fr;
+    padding:14px;
+  }
+  .wallet-compact-actions{
+    justify-content:space-between;
+    white-space:normal;
+  }
+  .wallet-compact-copy p{font-size:.82rem}
+  .ledger-head{display:none!important}
+  .compact-ledger .wallet-statement-row{
+    grid-template-columns:1fr auto!important;
+    gap:4px 10px!important;
+    padding:10px 12px!important;
+  }
+  .compact-ledger .wallet-statement-row>span:first-child{
+    grid-column:1;
+    grid-row:1;
+    font-size:.72rem;
+    color:var(--muted);
+  }
+  .compact-ledger .wallet-entry-description{
+    grid-column:1;
+    grid-row:2;
+    white-space:normal;
+  }
+  .compact-ledger .wallet-statement-row>b{
+    grid-column:2;
+    grid-row:1;
+  }
+  .compact-ledger .wallet-statement-row>strong{
+    grid-column:2;
+    grid-row:2;
+  }
+  .analysis-price-card{
+    align-items:flex-start!important;
+  }
+  .price-summary-line{
+    width:100%;
+  }
+  .analysis-price-card .buy-credits-button.compact{
+    margin-left:0;
+  }
+}

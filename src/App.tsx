@@ -46,6 +46,7 @@ type WalletLedgerEntry = {
   reason?: string | null
   metadata?: { pageCount?: number; fileName?: string | null; pieceType?: string | null; processNumber?: string | null }
   relatedOperation?: string | null
+  relatedChargeId?: string | null
 }
 
 
@@ -251,6 +252,8 @@ function App() {
   const [adminOpen, setAdminOpen] = useState(false)
   const [adminClientView, setAdminClientView] = useState(false)
   const [walletTopupOpen, setWalletTopupOpen] = useState(false)
+  const [walletInfoOpen, setWalletInfoOpen] = useState(false)
+  const [ledgerExpanded, setLedgerExpanded] = useState(false)
   const [adminUser, setAdminUser] = useState<User | null>(null)
   const [appUser, setAppUser] = useState<User | null>(null)
   const [authReady, setAuthReady] = useState(false)
@@ -508,24 +511,7 @@ function App() {
         </div>
         <div className="topbar-actions">
           <span className="signed-user">{appUser.displayName || appUser.email || 'Usuário'}</span>
-          {(appUser.email !== ADMIN_EMAIL || adminClientView) && <>
-            {adminClientView && <span className="client-preview-badge">Visualização do cliente</span>}
-            <span className="wallet-balance">Saldo: <b>{formatBRL(wallet?.balanceCents || 0)}</b></span>
-            {(() => {
-              const margin=Number(walletConfig.marginMultiplier||3)
-              const minimum=Math.ceil(Number(walletConfig.analysisMinimumCostCents||0)*margin)
-              const perPage=Math.ceil(Number(walletConfig.analysisCostPerPageCents||0)*margin)
-              const piece=Math.ceil(Number(walletConfig.pieceCostCents||0)*margin)
-              const includedPages=perPage>0 ? Math.max(1,Math.floor(minimum/perPage)) : 0
-              return minimum>0 && perPage>0 && piece>0
-                ? <span className="topbar-consumption">
-                    Análise {formatBRL(minimum)}{includedPages>0 ? ` até ${includedPages} pág.; depois ${formatBRL(perPage)}/pág.` : ''}
-                    <small>Peça {formatBRL(piece)} · valor antes de confirmar · falha = estorno</small>
-                  </span>
-                : null
-            })()}
-            <button className="buy-credits-button" type="button" onClick={()=>setWalletTopupOpen(true)}><CreditCard size={17}/> Comprar créditos</button>
-          </>}
+          {(appUser.email !== ADMIN_EMAIL || adminClientView) && adminClientView && <span className="client-preview-badge">Visualização do cliente</span>}
           <button className="icon-button" onClick={() => setDark(!dark)} aria-label="Alternar tema">
             {dark ? <Sun size={19} /> : <Moon size={19} />}
           </button>
@@ -534,16 +520,24 @@ function App() {
       </header>
 
       <main>
-        {(appUser.email !== ADMIN_EMAIL || adminClientView) && <section className="wallet-info-card">
-          <div className="wallet-info-heading">
-            <h2>Créditos disponíveis</h2>
+        {(appUser.email !== ADMIN_EMAIL || adminClientView) && <section className="wallet-compact-card">
+          <div className="wallet-compact-copy">
+            <div className="wallet-compact-title-row">
+              <h2>Créditos disponíveis</h2>
+              <button className="wallet-info-button" type="button" aria-label="Informações sobre créditos" onClick={()=>setWalletInfoOpen(true)}>i</button>
+            </div>
             <p>Seus créditos são usados para pagar pelos serviços da API Gemini antes do uso deles. Os créditos não são reembolsáveis e não expiram mensalmente. O saldo pode levar alguns minutos para refletir uma recarga, um uso ou um ajuste administrativo.</p>
           </div>
-          {(wallet?.balanceCents||0) < Number(walletConfig.lowBalanceWarningCents||1000) &&
-            <div className="wallet-low-warning">Saldo baixo: {formatBRL(wallet?.balanceCents||0)}. Considere comprar créditos.</div>}
-          <h3>Como funcionam seus créditos</h3>
-          <p>Após o pagamento, a recarga é lançada manualmente e pode levar até 24 horas para aparecer. Todo ajuste administrativo fica identificado no extrato.</p>
-          <p>O valor de cada operação aparece antes de você confirmar. Em caso de falha na análise ou na peça, o valor cobrado é estornado automaticamente.</p>
+          <div className="wallet-compact-actions">
+            <span>Saldo <b>{formatBRL(wallet?.balanceCents||0)}</b></span>
+            <button className="buy-credits-button" type="button" onClick={()=>setWalletTopupOpen(true)}><CreditCard size={17}/> Comprar créditos</button>
+          </div>
+          {(() => {
+            const minimum=Math.ceil(Number(walletConfig.analysisMinimumCostCents||0)*Number(walletConfig.marginMultiplier||3))
+            return minimum>0 && (wallet?.balanceCents||0)<minimum
+              ? <div className="wallet-low-warning compact">Saldo abaixo do valor mínimo de uma análise: {formatBRL(wallet?.balanceCents||0)}.</div>
+              : null
+          })()}
         </section>}
         <section className="hero">
           <span className="eyebrow"><BrainCircuit size={16} /> Inteligência jurídica especializada</span>
@@ -579,11 +573,11 @@ function App() {
               ? <span>Calculando o valor da análise...</span>
               : quote
                 ? <>
-                    <div><small>Esta operação custa</small><strong>{formatBRL(quote.priceCents)}</strong><span>{quote.pageCount} página(s)</span></div>
-                    <div><small>Seu saldo</small><strong>{formatBRL(wallet?.balanceCents || 0)}</strong></div>
-                    <div><small>{(wallet?.balanceCents || 0) >= quote.priceCents ? 'Saldo após a operação' : 'Saldo insuficiente'}</small><strong>{(wallet?.balanceCents || 0) >= quote.priceCents ? formatBRL((wallet?.balanceCents || 0) - quote.priceCents) : `Faltam ${formatBRL(quote.priceCents-(wallet?.balanceCents||0))}`}</strong></div>
-                    {(wallet?.balanceCents || 0) < quote.priceCents &&
-                      <WalletFundingPanel config={walletConfig} missingCents={quote.priceCents-(wallet?.balanceCents||0)} />}
+                    <div className="price-summary-line"><b>Custa {formatBRL(quote.priceCents)}</b><span>· Seu saldo {formatBRL(wallet?.balanceCents || 0)}</span><small>{quote.pageCount} página(s)</small></div>
+                    {(wallet?.balanceCents || 0) < quote.priceCents && <>
+                      <div className="price-missing-line">Faltam <b>{formatBRL(quote.priceCents-(wallet?.balanceCents||0))}</b></div>
+                      <button className="buy-credits-button compact" type="button" onClick={()=>setWalletTopupOpen(true)}>Comprar créditos</button>
+                    </>}
                   </>
                 : quoteError
                   ? <span className="error">{quoteError}</span>
@@ -605,18 +599,39 @@ function App() {
 
         {appUser.email !== ADMIN_EMAIL && walletLedger.length > 0 && <details className="wallet-statement">
           <summary>Extrato da carteira</summary>
-          <div className="wallet-statement-list">
-            {walletLedger.slice(0,30).map(entry=><div key={entry.id} className={`wallet-statement-row ${entry.direction==='credit'?'wallet-entry-credit':entry.direction==='debit'?'wallet-entry-debit':''}`}>
-              <span className="wallet-entry-type">{walletOperationLabel(entry.operation)}</span>
-              <span>{entry.createdAt?.toDate?.().toLocaleString('pt-BR') || '—'}</span>
-              <b>{entry.direction==='credit'?'+':entry.direction==='debit'?'-':''}{formatBRL(entry.amountCents||0)}</b>
-              <small>{formatBRL(entry.balanceBeforeCents||0)} → {formatBRL(entry.balanceAfterCents||0)}</small>
-              {(entry.metadata?.fileName || entry.metadata?.pieceType || entry.reason) && <em>
-                {entry.metadata?.fileName ? `${entry.metadata.fileName}${entry.metadata.pageCount ? ` · ${entry.metadata.pageCount} página(s)` : ''}` : ''}
-                {entry.metadata?.pieceType ? `${entry.metadata?.fileName ? ' · ' : ''}${entry.metadata.pieceType}` : ''}
-                {entry.reason ? `${entry.metadata?.fileName || entry.metadata?.pieceType ? ' · ' : ''}${entry.reason}` : ''}
-              </em>}
-            </div>)}
+          <div className="wallet-statement-list compact-ledger">
+            {(() => {
+              const refunds=new Map<string,WalletLedgerEntry>()
+              walletLedger.filter(item=>item.operation==='estorno' && item.relatedChargeId).forEach(item=>refunds.set(String(item.relatedChargeId),item))
+              const ordered:WalletLedgerEntry[]=[]
+              const used=new Set<string>()
+              walletLedger.forEach(item=>{
+                if(used.has(item.id) || item.operation==='estorno') return
+                ordered.push(item); used.add(item.id)
+                const refund=refunds.get(item.id)
+                if(refund){ordered.push(refund);used.add(refund.id)}
+              })
+              walletLedger.filter(item=>!used.has(item.id)).forEach(item=>ordered.push(item))
+              const visibleEntries=ledgerExpanded?ordered:ordered.slice(0,10)
+              const description=(entry:WalletLedgerEntry)=>{
+                if(entry.operation==='analise_processo') return `Análise — ${entry.metadata?.fileName||'arquivo'}${entry.metadata?.pageCount ? ` (${entry.metadata.pageCount} págs)` : ''}`
+                if(entry.operation==='geracao_peca') return `Peça — ${entry.metadata?.pieceType||'Peça jurídica'}`
+                if(entry.operation==='estorno') return entry.relatedOperation==='geracao_peca' ? 'Estorno — peça não concluída' : 'Estorno — análise não concluída'
+                if(entry.operation==='recarga' || entry.operation==='recarga_admin') return 'Recarga'
+                if(entry.operation.startsWith('ajuste_')) return `Ajuste administrativo${entry.reason ? ` — ${entry.reason}` : ''}`
+                return walletOperationLabel(entry.operation)
+              }
+              return <>
+                <div className="ledger-head"><span>Data</span><span>Descrição</span><span>Valor</span><span>Saldo</span></div>
+                {visibleEntries.map(entry=><div key={entry.id} className={`wallet-statement-row ${entry.direction==='credit'?'wallet-entry-credit':entry.direction==='debit'?'wallet-entry-debit':''} ${entry.operation==='estorno'?'refund-row':''}`}>
+                  <span>{(entry.createdAt?.toDate?.().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) || '—').replace(',','')}</span>
+                  <span className="wallet-entry-description">{description(entry)}</span>
+                  <b>{entry.direction==='credit'?'+':entry.direction==='debit'?'-':''}{formatBRL(entry.amountCents||0)}</b>
+                  <strong>{formatBRL(entry.balanceAfterCents||0)}</strong>
+                </div>)}
+                {ordered.length>10 && <button type="button" className="ledger-more-button" onClick={()=>setLedgerExpanded(v=>!v)}>{ledgerExpanded?'Mostrar menos':'Ver mais'}</button>}
+              </>
+            })()}
           </div>
         </details>}
 
@@ -649,6 +664,16 @@ function App() {
             <small>Processos extensos podem levar vários minutos. Não feche esta janela.</small>
           </div>
         </div>
+      </div>}
+
+      {walletInfoOpen && <div className="wallet-modal-backdrop" role="dialog" aria-modal="true" aria-label="Informações sobre créditos">
+        <section className="wallet-modal wallet-info-modal">
+          <button className="wallet-modal-close" type="button" onClick={()=>setWalletInfoOpen(false)} aria-label="Fechar"><X size={20}/></button>
+          <h2>Como funcionam os créditos</h2>
+          <p>O valor de cada operação aparece antes de você confirmar. Em caso de falha na análise ou na peça, o valor cobrado é estornado automaticamente.</p>
+          <p>A recarga continua manual: após o pagamento, envie o comprovante para {walletConfig.supportContact?.trim() || '[contato]'}. O crédito é lançado em até 24 horas.</p>
+          <p>Os créditos não expiram mensalmente e o saldo não é zerado.</p>
+        </section>
       </div>}
 
       {(appUser.email !== ADMIN_EMAIL || adminClientView) && walletTopupOpen &&
@@ -1001,6 +1026,7 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
   const [confirmation, setConfirmation] = useState<Record<string, string>>({})
   const [professionalProfile, setProfessionalProfile] = useState<ProfessionalProfile>({ name: '', oab: '', address: '', email: '' })
   const [profileStatus, setProfileStatus] = useState('')
+  const [profileEditing, setProfileEditing] = useState(false)
   const [pieceQuoteCents, setPieceQuoteCents] = useState(piecePriceCents)
   const [pieceQuoteError, setPieceQuoteError] = useState('')
 
@@ -1065,6 +1091,7 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
         updatedAt: serverTimestamp()
       }, { merge: true })
       setProfileStatus('Dados salvos.')
+      setProfileEditing(false)
     } catch (error) {
       console.error('[Processo 360 IA] Falha ao salvar dados profissionais', error)
       setProfileStatus('Não foi possível salvar os dados.')
@@ -1265,15 +1292,23 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
           <span><b>Área:</b> {report.area}</span>
           <span><b>Perspectiva:</b> {report.perspective}</span>
         </div>
-        <div className="professional-profile">
-          <h3>Dados do advogado</h3>
-          <div className="form-grid">
-            <label>Nome profissional<input value={professionalProfile.name} onChange={event => setProfessionalProfile(current => ({ ...current, name: event.target.value }))} placeholder="Nome do advogado" /></label>
-            <label>OAB/UF<input value={professionalProfile.oab} onChange={event => setProfessionalProfile(current => ({ ...current, oab: event.target.value }))} placeholder="OAB/RJ 00.000" /></label>
-            <label>Endereço profissional<input value={professionalProfile.address} onChange={event => setProfessionalProfile(current => ({ ...current, address: event.target.value }))} placeholder="Endereço do escritório" /></label>
-            <label>E-mail<input type="email" value={professionalProfile.email} onChange={event => setProfessionalProfile(current => ({ ...current, email: event.target.value }))} placeholder="E-mail profissional" /></label>
+        <div className="professional-profile collapsed-profile">
+          <div className="professional-profile-head">
+            <div>
+              <h3>Dados do advogado</h3>
+              {!profileEditing && <small>{professionalProfile.name || 'Nome não informado'}{professionalProfile.oab ? ` · ${professionalProfile.oab}` : ''}</small>}
+            </div>
+            <button type="button" className="secondary-button compact" onClick={()=>setProfileEditing(v=>!v)}>{profileEditing?'Fechar':'Editar'}</button>
           </div>
-          <button type="button" className="secondary-button compact" onClick={saveProfessionalProfile}><Save size={16}/> Salvar dados do advogado</button>
+          {profileEditing && <>
+            <div className="form-grid">
+              <label>Nome profissional<input value={professionalProfile.name} onChange={event => setProfessionalProfile(current => ({ ...current, name: event.target.value }))} placeholder="Nome do advogado" /></label>
+              <label>OAB/UF<input value={professionalProfile.oab} onChange={event => setProfessionalProfile(current => ({ ...current, oab: event.target.value }))} placeholder="OAB/RJ 00.000" /></label>
+              <label>Endereço profissional<input value={professionalProfile.address} onChange={event => setProfessionalProfile(current => ({ ...current, address: event.target.value }))} placeholder="Endereço do escritório" /></label>
+              <label>E-mail<input type="email" value={professionalProfile.email} onChange={event => setProfessionalProfile(current => ({ ...current, email: event.target.value }))} placeholder="E-mail profissional" /></label>
+            </div>
+            <button type="button" className="secondary-button compact" onClick={saveProfessionalProfile}><Save size={16}/> Salvar dados do advogado</button>
+          </>}
           {profileStatus && <small>{profileStatus}</small>}
         </div>
         <label>Tipo de peça
@@ -1282,12 +1317,10 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
           </select>
         </label>
         {!isAdmin && <div className="analysis-price-card piece-price-card">
-          <div><small>Preço desta operação</small><strong>{formatBRL(pieceQuoteCents||0)}</strong></div>
-          <div><small>Seu saldo</small><strong>{formatBRL(walletBalanceCents||0)}</strong></div>
-          <div><small>{walletBalanceCents >= pieceQuoteCents ? 'Saldo após a operação' : 'Saldo insuficiente'}</small><strong>{walletBalanceCents >= pieceQuoteCents ? formatBRL(walletBalanceCents-pieceQuoteCents) : `Faltam ${formatBRL(pieceQuoteCents-walletBalanceCents)}`}</strong></div>
+          <div className="price-summary-line"><b>Custa {formatBRL(pieceQuoteCents||0)}</b><span>· Seu saldo {formatBRL(walletBalanceCents||0)}</span></div>
           {pieceQuoteError && <span className="error">{pieceQuoteError}</span>}
           {pieceQuoteCents>0 && walletBalanceCents < pieceQuoteCents && <div className="piece-insufficient-warning">
-            <b>Saldo insuficiente ({formatBRL(pieceQuoteCents)}) — Comprar créditos</b>
+            <b>Faltam {formatBRL(pieceQuoteCents-walletBalanceCents)}</b>
             <button type="button" className="secondary-button compact" onClick={onRecharge}>Comprar créditos</button>
           </div>}
         </div>}
@@ -1611,14 +1644,11 @@ function WalletManager({user,onLogout,serviceDb,serviceFunctions}:{user:User;onL
   },[])
 
   async function changeStatus(item:WalletRecord,status:WalletStatus){
-    if(!serviceDb) return
+    if(!serviceFunctions) return
     setError('')
     try{
-      await updateDoc(doc(serviceDb,'wallets',item.id),{
-        status,
-        updatedAt:serverTimestamp(),
-        updatedBy:user.email
-      })
+      const call=httpsCallable(serviceFunctions,'adminSetWalletStatus')
+      await call({uid:item.uid,status})
     }catch{
       setError('Não foi possível alterar o status do usuário.')
     }
@@ -1826,7 +1856,12 @@ function WalletManager({user,onLogout,serviceDb,serviceFunctions}:{user:User;onL
           {visible.map(item=><tr key={item.id}>
             <td><strong>{item.displayName||'—'}</strong><small>{item.email}</small></td>
             <td><strong>{formatBRL(item.balanceCents||0)}</strong></td>
-            <td><span className={`subscriber-status-badge ${item.status}`}>{item.status}</span></td>
+            <td>
+              <span className={`subscriber-status-badge ${item.status}`}>{item.status}</span>
+              {item.lastStatusChangedAt && <small className="status-audit-note">
+                {item.lastStatusChangedBy || 'admin'} · {item.lastStatusChangedAt?.toDate?.().toLocaleString('pt-BR') || '—'}
+              </small>}
+            </td>
             <td>
               <div className="subscriber-actions">
                 <button className="sub-action activate" onClick={()=>changeStatus(item,'ativo')}>Ativar</button>
@@ -1917,7 +1952,7 @@ function AdminModal({user,onUser,onClose,onViewAsClient}:{user:User|null;onUser:
 
   async function logout(){
     if(adminAuth?.currentUser?.email===ADMIN_EMAIL) await signOut(adminAuth)
-    if(auth?.currentUser?.email!==ADMIN_EMAIL) onUser(null)
+    onUser(null)
   }
 
   const usingPrimaryAdminSession = Boolean(auth?.currentUser?.email===ADMIN_EMAIL && user?.uid===auth.currentUser.uid)
