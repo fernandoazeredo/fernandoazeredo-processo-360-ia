@@ -19,7 +19,8 @@ const RECAPTCHA_ENTERPRISE_SITE_KEY =
   '6Lc6ScstAAAAAIqfnEgXBICtkJtSbh6Wj7Cofwiz'
 
 export const firebaseConfigured = Boolean(firebaseConfig.apiKey && firebaseConfig.appId)
-const app = firebaseConfigured ? (getApps()[0] ?? initializeApp(firebaseConfig)) : null
+const app = firebaseConfigured ? (getApps().find(item=>item.name==='[DEFAULT]') ?? initializeApp(firebaseConfig)) : null
+const adminApp = firebaseConfigured ? (getApps().find(item=>item.name==='admin-session') ?? initializeApp(firebaseConfig, 'admin-session')) : null
 
 if (app && typeof window !== 'undefined') {
   const hostname = window.location.hostname
@@ -48,3 +49,8 @@ export const auth = app ? getAuth(app) : null
 export const db = app ? getFirestore(app) : null
 export const functions = app ? getFunctions(app, 'us-central1') : null
 export const aiClient = app ? getAI(app, { backend: new GoogleAIBackend() }) : null
+
+// Sessão isolada da Área ADM: autenticar aqui nunca substitui o usuário/cliente da aplicação principal.
+export const adminAuth = adminApp ? getAuth(adminApp) : null
+export const adminDb = adminApp ? getFirestore(adminApp) : null
+export const adminFunctions = adminApp ? getFunctions(adminApp, 'us-central1') : null
