@@ -1,4 +1,8 @@
 import { PDFDocument } from 'pdf-lib'
+import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist'
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
+
+GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 import { httpsCallable } from 'firebase/functions'
 import { functions } from './firebase'
 
@@ -22,25 +26,34 @@ export type WalletQuote = {
 
 async function validatePdfBeforeCharge(file: File): Promise<number> {
   try {
-    const bytes = await file.arrayBuffer()
-    const pdf = await PDFDocument.load(bytes, { ignoreEncryption: true })
-    const pages = pdf.getPages()
-    if (!pages.length) throw new Error('PDF_NO_READABLE_CONTENT')
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    const loadingTask = getDocument({ data: bytes })
+    const pdf = await loadingTask.promise
+    const pageCount = pdf.numPages
+    if (pageCount < 1) throw new Error('PDF_NO_READABLE_CONTENT')
 
-    const hasRenderableContent = pages.some(page => {
-      const node:any = (page as any).node
-      const contents = node?.Contents?.()
-      if (contents && String(contents).replace(/\s/g,'') !== '[]') return true
-      const resources = node?.Resources?.()
-      if (resources) {
-        const value = String(resources).replace(/\s/g,'')
-        if (value && value !== '<<>>') return true
+    const maxChecks = Math.min(pageCount, 12)
+    const pageNumbers = Array.from({length:maxChecks},(_,i)=>
+      maxChecks===1 ? 1 : Math.max(1,Math.min(pageCount,Math.round(1 + (i*(pageCount-1))/(maxChecks-1))))
+    )
+    const uniquePages = [...new Set(pageNumbers)]
+
+    for (const pageNumber of uniquePages) {
+      const page = await pdf.getPage(pageNumber)
+      const text = await page.getTextContent()
+      const readable = text.items
+        .map((item:any)=>String(item?.str||'').trim())
+        .join(' ')
+        .replace(/\s+/g,' ')
+        .trim()
+      if (readable.length >= 3) {
+        await pdf.destroy()
+        return pageCount
       }
-      return false
-    })
+    }
 
-    if (!hasRenderableContent) throw new Error('PDF_NO_READABLE_CONTENT')
-    return pages.length
+    await pdf.destroy()
+    throw new Error('PDF_NO_READABLE_CONTENT')
   } catch (error:any) {
     if (String(error?.message || '').includes('PDF_NO_READABLE_CONTENT')) throw error
     throw new Error('PDF_INVALID_OR_UNREADABLE')
