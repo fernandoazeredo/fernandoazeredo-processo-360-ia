@@ -11,7 +11,7 @@ const REQUEST_TIMEOUT_MS = 90_000
 const PLACEHOLDER = '[DADO A CONFIRMAR]'
 const MOTOR_B_LOCAL_VERSION = 5
 
-export type ClaimStatus = 'CONFIRMADA' | 'PARCIALMENTE CONFIRMADA' | 'NÃO CONFIRMADA' | 'CONFLITANTE'
+export type ClaimStatus = 'CONFIRMADA' | 'PARCIALMENTE CONFIRMADA' | 'NÃO CONFIRMADA' | 'CORRIGIDA' | 'CONFLITANTE'
 export type PieceSection = { title: string; content: string }
 export type PieceClaim = {
   id: string
@@ -26,7 +26,7 @@ export type LegalPieceDraft = {
   title: string
   sections: PieceSection[]
   claims: PieceClaim[]
-  validation: { confirmed: number; partiallyConfirmed: number; unconfirmed: number; conflicting: number }
+  validation: { confirmed: number; partiallyConfirmed: number; unconfirmed: number; corrected: number; conflicting: number }
   model: string
   promptVersion: string
 }
@@ -99,7 +99,7 @@ const draftSchema = Schema.object({ properties: {
 const validationSchema = Schema.object({ properties: {
   claims: Schema.array({ items: Schema.object({ properties: {
     id: Schema.string(), text: Schema.string(), type: Schema.string(),
-    status: Schema.enumString({ enum: ['CONFIRMADA', 'PARCIALMENTE CONFIRMADA', 'NÃO CONFIRMADA', 'CONFLITANTE'] }),
+    status: Schema.enumString({ enum: ['CONFIRMADA', 'PARCIALMENTE CONFIRMADA', 'NÃO CONFIRMADA', 'CORRIGIDA', 'CONFLITANTE'] }),
     sourceReference: Schema.string(), treatment: Schema.string()
   } }) }),
   correctedSections: Schema.array({ items: Schema.object({ properties: { title: Schema.string(), content: Schema.string() } }) })
@@ -237,6 +237,7 @@ function countValidation(claims: PieceClaim[]) {
     confirmed: claims.filter(item => item.status === 'CONFIRMADA').length,
     partiallyConfirmed: claims.filter(item => item.status === 'PARCIALMENTE CONFIRMADA').length,
     unconfirmed: claims.filter(item => item.status === 'NÃO CONFIRMADA').length,
+    corrected: claims.filter(item => item.status === 'CORRIGIDA').length,
     conflicting: claims.filter(item => item.status === 'CONFLITANTE').length
   }
 }

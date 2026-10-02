@@ -3116,3 +3116,22 @@ select:focus,input:focus,textarea:focus{
 @media (max-width:720px){
   .wallet-adjust-preview{grid-template-columns:1fr}
 }
+
+
+/* Validador e visualização do cliente */
+.client-preview-badge{
+  display:inline-flex;
+  align-items:center;
+  padding:5px 9px;
+  border:1px solid var(--border);
+  border-radius:999px;
+  font-size:.75rem;
+  font-weight:800;
+}
+.analysis-example-price{
+  display:block;
+  margin-top:8px;
+}
+.status-corrigida{
+  border-left:3px solid currentColor;
+}

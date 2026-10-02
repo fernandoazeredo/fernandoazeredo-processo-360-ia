@@ -235,6 +235,7 @@ function App() {
   const [analysis, setAnalysis] = useState<AnalysisReport | null>(null)
   const [analysisError, setAnalysisError] = useState('')
   const [adminOpen, setAdminOpen] = useState(false)
+  const [adminClientView, setAdminClientView] = useState(false)
   const [walletTopupOpen, setWalletTopupOpen] = useState(false)
   const [adminUser, setAdminUser] = useState<User | null>(null)
   const [appUser, setAppUser] = useState<User | null>(null)
@@ -328,7 +329,7 @@ function App() {
     let cancelled=false
     setQuote(null)
     setQuoteError('')
-    if(!file || !appUser || appUser.email===ADMIN_EMAIL) return
+    if(!file || !appUser || (appUser.email===ADMIN_EMAIL && !adminClientView)) return
 
     setQuoteBusy(true)
     quoteAnalysis(file)
@@ -350,7 +351,7 @@ function App() {
       .finally(()=>{if(!cancelled) setQuoteBusy(false)})
 
     return ()=>{cancelled=true}
-  },[file,appUser?.uid])
+  },[file,appUser?.uid,adminClientView])
 
 
 
@@ -467,7 +468,8 @@ function App() {
         </div>
         <div className="topbar-actions">
           <span className="signed-user">{appUser.displayName || appUser.email || 'Usuário'}</span>
-          {appUser.email !== ADMIN_EMAIL && <>
+          {(appUser.email !== ADMIN_EMAIL || adminClientView) && <>
+            {adminClientView && <span className="client-preview-badge">Visualização do cliente</span>}
             <span className="wallet-balance">Saldo: <b>{formatBRL(wallet?.balanceCents || 0)}</b></span>
             <button className="buy-credits-button" type="button" onClick={()=>setWalletTopupOpen(true)}><CreditCard size={17}/> Comprar créditos</button>
           </>}
@@ -479,7 +481,7 @@ function App() {
       </header>
 
       <main>
-        {appUser.email !== ADMIN_EMAIL && <section className="wallet-info-card">
+        {(appUser.email !== ADMIN_EMAIL || adminClientView) && <section className="wallet-info-card">
           <h2>Créditos disponíveis</h2>
           {(wallet?.balanceCents||0) < Number(walletConfig.lowBalanceWarningCents||1000) &&
             <div className="wallet-low-warning">Saldo baixo: {formatBRL(wallet?.balanceCents||0)}. Considere comprar créditos.</div>}
@@ -517,7 +519,7 @@ function App() {
             </label>
           </div>
 
-          {file && appUser.email !== ADMIN_EMAIL && <div className="analysis-price-card">
+          {file && (appUser.email !== ADMIN_EMAIL || adminClientView) && <div className="analysis-price-card">
             {quoteBusy
               ? <span>Calculando o valor da análise...</span>
               : quote
@@ -533,8 +535,8 @@ function App() {
                   : null}
           </div>}
 
-          <button className="primary-button" disabled={!file || processing || (appUser.email !== ADMIN_EMAIL && (!quote || (wallet?.balanceCents||0) < quote.priceCents))} onClick={startAnalysis}>
-            {processing ? 'Analisando processo...' : 'Iniciar análise completa'} <ChevronRight size={18}/>
+          <button className="primary-button" disabled={!file || processing || adminClientView || (appUser.email !== ADMIN_EMAIL && (!quote || (wallet?.balanceCents||0) < quote.priceCents))} onClick={startAnalysis}>
+            {adminClientView ? 'Visualização do cliente — análise desativada' : processing ? 'Analisando processo...' : 'Iniciar análise completa'} <ChevronRight size={18}/>
           </button>
           {analysisError && (
             <div className="analysis-error-actions">
@@ -567,7 +569,11 @@ function App() {
 
       </main>
 
-      <footer><span>© 2026 Processo 360 IA</span>{adminUser && <button onClick={() => setAdminOpen(true)}>Área ADM</button>}</footer>
+      <footer>
+        <span>© 2026 Processo 360 IA</span>
+        {adminUser && !adminClientView && <button onClick={() => setAdminOpen(true)}>Área ADM</button>}
+        {adminUser && adminClientView && <button onClick={() => setAdminClientView(false)}>Sair da visualização do cliente</button>}
+      </footer>
 
       {processing && <div className="processing-overlay" role="dialog" aria-modal="true" aria-label="Análise em andamento">
         <div className="processing-inner">
@@ -581,9 +587,9 @@ function App() {
         </div>
       </div>}
 
-      {appUser.email !== ADMIN_EMAIL && walletTopupOpen &&
+      {(appUser.email !== ADMIN_EMAIL || adminClientView) && walletTopupOpen &&
         <BuyCreditsModal config={walletConfig} balanceCents={wallet?.balanceCents || 0} onClose={()=>setWalletTopupOpen(false)} />}
-      {adminOpen && <AdminModal user={adminUser} onUser={setAdminUser} onClose={() => setAdminOpen(false)} />}
+      {adminOpen && <AdminModal user={adminUser} onUser={setAdminUser} onClose={() => setAdminOpen(false)} onViewAsClient={()=>{setAdminOpen(false);setAdminClientView(true)}} />}
     </div>
   )
 }
@@ -1208,10 +1214,11 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
             <span><CheckCircle2 size={16}/> {piece.validation.confirmed} confirmadas</span>
             <span>{piece.validation.partiallyConfirmed} parcialmente confirmadas</span>
             <span>{piece.validation.unconfirmed} não confirmadas</span>
+            <span>{piece.validation.corrected || 0} corrigidas</span>
             <span>{piece.validation.conflicting} conflitantes</span>
           </div>
-          {(piece.validation.unconfirmed > 0 || piece.validation.conflicting > 0) &&
-            <p>Nenhum item não confirmado ou conflitante permanece silenciosamente como fato certo: o texto foi removido, reformulado ou marcado para confirmação.</p>}
+          {(piece.validation.unconfirmed > 0 || piece.validation.conflicting > 0 || (piece.validation.corrected||0) > 0) &&
+            <p>Itens “Corrigidos” representam alegações anteriores ajustadas pela peça para coincidir com o relatório/prova prevalente. “Conflitante” fica reservado para divergência que ainda permanece na peça final.</p>}
         </div>
 
         <div className="piece-document">
@@ -1619,7 +1626,8 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
       <div className="wallet-formula-note">
         <b>Fórmula da análise:</b> preço final = maior valor entre (custo mínimo × margem) e (número de páginas × custo por página × margem).
         <br/>
-        <span>Margem aplicada automaticamente: <b>{config.marginMultiplier||3}×</b>. Exemplo com 60 páginas: 60 × {formatBRL(config.analysisCostPerPageCents||0)} × {config.marginMultiplier||3} = {formatBRL(60*(config.analysisCostPerPageCents||0)*(config.marginMultiplier||3))}; mínimo de venda = {formatBRL((config.analysisMinimumCostCents||0)*(config.marginMultiplier||3))}; preço final = {formatBRL(Math.max((config.analysisMinimumCostCents||0)*(config.marginMultiplier||3),60*(config.analysisCostPerPageCents||0)*(config.marginMultiplier||3)))}.</span>
+        <span>Margem aplicada automaticamente: <b>{config.marginMultiplier||3}×</b>. Exemplo com 60 páginas: 60 × {formatBRL(config.analysisCostPerPageCents||0)} × {config.marginMultiplier||3} = {formatBRL(60*(config.analysisCostPerPageCents||0)*(config.marginMultiplier||3))}; mínimo de venda = {formatBRL((config.analysisMinimumCostCents||0)*(config.marginMultiplier||3))}.</span>
+        <strong className="analysis-example-price">Preço atual do exemplo (60 páginas): {formatBRL(Math.max((config.analysisMinimumCostCents||0)*(config.marginMultiplier||3),60*(config.analysisCostPerPageCents||0)*(config.marginMultiplier||3)))}</strong>
       </div>
       <div className="admin-form-grid">
         <label>Custo mínimo da análise (centavos)
@@ -1729,7 +1737,7 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
   </>
 }
 
-function AdminModal({user,onUser,onClose}:{user:User|null;onUser:(u:User|null)=>void;onClose:()=>void}) {
+function AdminModal({user,onUser,onClose,onViewAsClient}:{user:User|null;onUser:(u:User|null)=>void;onClose:()=>void;onViewAsClient:()=>void}) {
   const [section,setSection]=useState<'carteira'|'prompts'>('carteira')
   const [password,setPassword]=useState('')
   const [error,setError]=useState('')
@@ -1770,6 +1778,7 @@ function AdminModal({user,onUser,onClose}:{user:User|null;onUser:(u:User|null)=>
             <div className="admin-section-tabs">
               <button className={section==='carteira'?'active':''} onClick={()=>setSection('carteira')}><Users size={17}/> Carteira</button>
               <button className={section==='prompts'?'active':''} onClick={()=>setSection('prompts')}><BrainCircuit size={17}/> Prompts</button>
+              <button onClick={onViewAsClient}><Search size={17}/> Ver como cliente</button>
             </div>
             {section === 'carteira'
               ? <WalletManager user={user} onLogout={logout}/>
