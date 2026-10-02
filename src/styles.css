@@ -3243,3 +3243,21 @@ select:focus,input:focus,textarea:focus{
   white-space:normal;
   word-break:break-word;
 }
+
+.wallet-info-heading{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr);
+  gap:18px;
+  align-items:start;
+}
+.wallet-info-heading h2{margin:0}
+.wallet-info-heading p{
+  margin:0!important;
+  line-height:1.5!important;
+}
+@media(max-width:720px){
+  .wallet-info-heading{
+    grid-template-columns:1fr;
+    gap:8px;
+  }
+}
