@@ -119,7 +119,7 @@ DANO MORAL: não transformar celular pessoal em corporativo, nem ampliar conteú
 
 ART. 477: diferencie pagamento das verbas, entrega de guias/documentos e demais obrigações. Não sustente atraso no pagamento se a data comprovada estiver no prazo.
 
-VALORES: não usar 'a arbitrar' quando o tipo de pedido exigir indicação de valor. Se o PDF ou o relatório trouxer valor literal do pedido, reproduza-o exatamente. Para FGTS e intervalo intrajornada, quando não houver valor literal mas houver base objetiva suficiente no relatório, mostre o memorial de cálculo em vez de deixar somente [VALOR]. Para dano moral sem quantum documental, mantenha pendência profissional claramente identificada. Nunca invente premissa ausente.
+VALORES: não usar 'a arbitrar' quando o tipo de pedido exigir indicação de valor. Se o PDF ou o relatório trouxer valor literal do pedido, reproduza-o exatamente. Para FGTS e intervalo intrajornada, quando não houver valor literal mas houver base objetiva suficiente no relatório, mostre o memorial de cálculo completo e verificável. É PROIBIDO criar, estimar ou escolher quantum sem base expressa nos autos ou no relatório. Qualquer valor monetário que não tenha fonte ou memória de cálculo suficiente deve sair como [VALOR] ⚠ REVISAR. Para dano moral sem quantum documental, use [VALOR] ⚠ REVISAR e registre que a definição depende do advogado. Enquanto existir qualquer [VALOR] ou verba pendente, o VALOR DA CAUSA deve ser identificado como PARCIAL/PROVISÓRIO e não pode somar valores inventados. Nunca invente premissa ausente.
 
 DATA DA INICIAL: use a data histórica de ajuizamento/distribuição quando expressamente identificada nos dados consolidados. Se não estiver identificada, mantenha [DATA]. É proibido usar a data atual do sistema como se fosse a data histórica de ajuizamento.\n\nFASE PROCESSUAL: jamais inserir número de processo ou Vara numa inicial por inferência. Quando PETIÇÃO INICIAL for expressamente solicitada, gere a inicial completa como minuta autônoma/reconstruída e NÃO a transforme em aditamento, ainda que o material de origem venha de processo já ajuizado. Para manifestações posteriores, respeite a fase existente. RÉPLICA/MANIFESTAÇÃO À CONTESTAÇÃO só pode ser redigida se os dados consolidados demonstrarem que uma contestação/defesa foi efetivamente apresentada ou juntada. Se não houver defesa nos autos, não simule argumentos defensivos e não intitule a peça como manifestação à contestação.
 
@@ -161,6 +161,8 @@ REGRAS
 9. Para NÃO CONFIRMADA/CONFLITANTE, remova ou reduza o fato. Para CORRIGIDA, preserve a versão final já coerente com a prova prevalente e registre no treatment qual alegação anterior foi corrigida. Quando necessário, use marcador curto específico: [RG], [CPF], [CNPJ], [ENDEREÇO], [OAB/UF], [VALOR], [DATA] ou [DADO A CONFIRMAR]. Ausência de quantum de dano moral escolhido pelo advogado não é, por si só, conflito factual.
 10. Não use a expressão longa [INFORMAÇÃO A SER CONFIRMADA PELO ADVOGADO] se um marcador curto puder identificar o dado.
 11. correctedSections deve ser uma peça limpa: sem [lote...], [fl....], CONFIRMADA, NÃO CONFIRMADA, mensagens do Motor B ou aviso genérico de revisão.
+12. Audite TODOS os valores monetários da minuta. Se um quantum não constar literalmente nos dados e não houver memória de cálculo suficiente e verificável nos insumos, substitua-o por [VALOR] ⚠ REVISAR. Não valide valores criados pelo próprio Motor B.
+13. Se houver qualquer [VALOR] ou verba sem quantum confirmado, o valor da causa deve ser descrito como PARCIAL/PROVISÓRIO e não pode incluir a verba pendente como se tivesse valor certo.
 
 A rastreabilidade completa permanece em claims/sourceReference.
 `.trim()
@@ -185,6 +187,8 @@ CHECKLIST FINAL OBRIGATÓRIO
 - art. 467 só é formulado quando houver verba rescisória incontroversa com base suficiente; não presumir incontroverso o que esteja efetivamente controvertido nos autos;
 - dano moral não amplia BO ou transforma bem pessoal em corporativo;
 - pedidos que exigem valor não ficam silenciosamente sem valor e, no trabalhista, o art. 840, §1º, da CLT foi enfrentado quando pertinente;
+- nenhum quantum monetário foi criado pelo Motor B sem valor literal ou memória de cálculo verificável; quando faltar base, consta [VALOR] ⚠ REVISAR;
+- se houver verba pendente de quantificação, o valor da causa está identificado como parcial/provisório e exclui quantias inventadas;
 - em contestação trabalhista com cartões uniformes/invariáveis, o TEXTO DA PEÇA cita expressamente a Súmula 338, III, do TST e apresenta a defesa probatória possível;
 - se os dados sustentarem hipersuficiência/aditivo, a contestação enfrenta expressamente o art. 444, parágrafo único, da CLT e preserva eventual vantagem remuneratória literal relevante;
 - se houver pedido subsidiário de limitação do dano moral nos dados, a contestação o reproduz com o valor literal, sem inventar quantum;
