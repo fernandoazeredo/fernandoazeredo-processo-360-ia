@@ -388,6 +388,7 @@ function App() {
     setProcessing(true)
 
     let chargeId = ''
+    let chargedPriceCents = 0
     try {
       let billableQuote = quote
       if (appUser?.email !== ADMIN_EMAIL) {
@@ -400,6 +401,7 @@ function App() {
         }
         const charge = await chargeAnalysis(billableQuote.pageCount, file.name, billableQuote.priceCents)
         chargeId = charge.chargeId
+        chargedPriceCents = billableQuote.priceCents
         if (await consumeForcedAnalysisFailure()) {
           throw new Error('TEST_FORCED_ANALYSIS_FAILURE')
         }
@@ -424,7 +426,7 @@ function App() {
         try {
           const refund = await refundCharge(chargeId, 'Análise não concluída — valor devolvido.')
           refundConfirmed = Boolean(refund.refunded || refund.alreadyRefunded)
-          refundedCents = Number(billableQuote?.priceCents || 0)
+          refundedCents = Number(chargedPriceCents || 0)
         } catch (refundError) {
           console.error('[Processo 360 IA] Falha ao estornar cobrança da análise.', refundError)
         }
