@@ -638,9 +638,10 @@ export const adminDeleteSubscriber = onCall(
 
 
 type WalletPricing = {
-  analysisMinimumCents: number
-  analysisPerPageCents: number
-  piecePriceCents: number
+  analysisMinimumCostCents: number
+  analysisCostPerPageCents: number
+  pieceCostCents: number
+  marginMultiplier: number
 }
 
 async function readWalletPricing(): Promise<WalletPricing> {
@@ -648,9 +649,10 @@ async function readWalletPricing(): Promise<WalletPricing> {
   const data = snap.exists ? snap.data() || {} : {}
 
   return {
-    analysisMinimumCents: Math.max(0, Number(data.analysisMinimumCents || 0)),
-    analysisPerPageCents: Math.max(0, Number(data.analysisPerPageCents || 0)),
-    piecePriceCents: Math.max(0, Number(data.piecePriceCents || 0))
+    analysisMinimumCostCents: Math.max(0, Number(data.analysisMinimumCostCents || 0)),
+    analysisCostPerPageCents: Math.max(0, Number(data.analysisCostPerPageCents || 0)),
+    pieceCostCents: Math.max(0, Number(data.pieceCostCents || 0)),
+    marginMultiplier: Math.max(1, Number(data.marginMultiplier || 3))
   }
 }
 
@@ -658,13 +660,12 @@ function analysisPriceFromPages(pageCount: number, pricing: WalletPricing) {
   if (!Number.isFinite(pageCount) || pageCount < 1) {
     throw new HttpsError('invalid-argument', 'Quantidade de páginas inválida.')
   }
-  if (pricing.analysisMinimumCents <= 0 || pricing.analysisPerPageCents <= 0) {
-    throw new HttpsError('failed-precondition', 'A tabela de preços ainda não foi configurada.')
+  if (pricing.analysisMinimumCostCents <= 0 || pricing.analysisCostPerPageCents <= 0) {
+    throw new HttpsError('failed-precondition', 'A tabela de custos ainda não foi configurada.')
   }
-  return Math.max(
-    pricing.analysisMinimumCents,
-    Math.ceil(pageCount * pricing.analysisPerPageCents)
-  )
+  const minimumPriceCents = Math.ceil(pricing.analysisMinimumCostCents * pricing.marginMultiplier)
+  const pagePriceCents = Math.ceil(pageCount * pricing.analysisCostPerPageCents * pricing.marginMultiplier)
+  return Math.max(minimumPriceCents, pagePriceCents)
 }
 
 async function chargeWallet(
@@ -737,10 +738,14 @@ export const walletChargeAnalysis = onCall(
     if (!request.auth) throw new HttpsError('unauthenticated', 'É necessário estar autenticado.')
 
     const pageCount = Number(request.data?.pageCount || 0)
+    const expectedPriceCents = Math.trunc(Number(request.data?.expectedPriceCents || 0))
     const pricing = await readWalletPricing()
     const priceCents = analysisPriceFromPages(pageCount, pricing)
+    if (expectedPriceCents > 0 && expectedPriceCents !== priceCents) {
+      throw new HttpsError('failed-precondition', 'WALLET_PRICE_CHANGED: o preço foi atualizado. Consulte novamente antes de confirmar.')
+    }
 
-    return chargeWallet(request.auth.uid, priceCents, 'analise_processo', { pageCount })
+    return chargeWallet(request.auth.uid, priceCents, 'analise_processo', { pageCount, fileName: String(request.data?.fileName || '').trim() || null })
   }
 )
 
@@ -750,11 +755,11 @@ export const walletQuotePiece = onCall(
     if (!request.auth) throw new HttpsError('unauthenticated', 'É necessário estar autenticado.')
 
     const pricing = await readWalletPricing()
-    if (pricing.piecePriceCents <= 0) {
-      throw new HttpsError('failed-precondition', 'O preço para geração de peça ainda não foi configurado.')
+    if (pricing.pieceCostCents <= 0) {
+      throw new HttpsError('failed-precondition', 'O custo da peça ainda não foi configurado.')
     }
 
-    return { priceCents: pricing.piecePriceCents }
+    return { priceCents: Math.ceil(pricing.pieceCostCents * pricing.marginMultiplier) }
   }
 )
 
@@ -764,13 +769,72 @@ export const walletChargePiece = onCall(
     if (!request.auth) throw new HttpsError('unauthenticated', 'É necessário estar autenticado.')
 
     const pricing = await readWalletPricing()
-    if (pricing.piecePriceCents <= 0) {
-      throw new HttpsError('failed-precondition', 'O preço para geração de peça ainda não foi configurado.')
+    if (pricing.pieceCostCents <= 0) {
+      throw new HttpsError('failed-precondition', 'O custo da peça ainda não foi configurado.')
+    }
+    const priceCents = Math.ceil(pricing.pieceCostCents * pricing.marginMultiplier)
+    const expectedPriceCents = Math.trunc(Number(request.data?.expectedPriceCents || 0))
+    if (expectedPriceCents > 0 && expectedPriceCents !== priceCents) {
+      throw new HttpsError('failed-precondition', 'WALLET_PRICE_CHANGED: o preço foi atualizado. Consulte novamente antes de confirmar.')
     }
 
-    return chargeWallet(request.auth.uid, pricing.piecePriceCents, 'geracao_peca')
+    return chargeWallet(request.auth.uid, priceCents, 'geracao_peca', { pieceType: String(request.data?.pieceType || '').trim() || null, processNumber: String(request.data?.processNumber || '').trim() || null })
   }
 )
+
+export const walletRefundCharge = onCall(
+  { region: 'us-central1', cors: true },
+  async request => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'É necessário estar autenticado.')
+
+    const chargeId = String(request.data?.chargeId || '').trim()
+    const reason = String(request.data?.reason || '').trim()
+    if (!chargeId) throw new HttpsError('invalid-argument', 'Cobrança não informada para estorno.')
+
+    const chargeRef = db.collection('walletLedger').doc(chargeId)
+    const walletRef = db.collection('wallets').doc(request.auth.uid)
+    const refundRef = db.collection('walletLedger').doc()
+
+    return db.runTransaction(async tx => {
+      const [chargeSnap, walletSnap] = await Promise.all([tx.get(chargeRef), tx.get(walletRef)])
+      if (!chargeSnap.exists) throw new HttpsError('not-found', 'Cobrança não encontrada.')
+      if (!walletSnap.exists) throw new HttpsError('failed-precondition', 'Carteira não encontrada.')
+
+      const charge = chargeSnap.data() || {}
+      if (charge.uid !== request.auth.uid || charge.direction !== 'debit') {
+        throw new HttpsError('permission-denied', 'Cobrança inválida para esta carteira.')
+      }
+      if (charge.refundEntryId) {
+        const wallet = walletSnap.data() || {}
+        return { refunded: false, alreadyRefunded: true, balanceCents: Math.max(0, Number(wallet.balanceCents || 0)), refundId: String(charge.refundEntryId) }
+      }
+
+      const amountCents = Math.max(0, Number(charge.amountCents || 0))
+      const wallet = walletSnap.data() || {}
+      const before = Math.max(0, Number(wallet.balanceCents || 0))
+      const after = before + amountCents
+
+      tx.update(walletRef, { balanceCents: after, updatedAt: FieldValue.serverTimestamp() })
+      tx.update(chargeRef, { refundEntryId: refundRef.id, refundedAt: FieldValue.serverTimestamp() })
+      tx.set(refundRef, {
+        uid: request.auth.uid,
+        operation: 'estorno',
+        direction: 'credit',
+        amountCents,
+        balanceBeforeCents: before,
+        balanceAfterCents: after,
+        relatedChargeId: chargeId,
+        relatedOperation: charge.operation || null,
+        metadata: charge.metadata || {},
+        reason: reason || 'Falha na operação após cobrança.',
+        createdAt: FieldValue.serverTimestamp()
+      })
+
+      return { refunded: true, alreadyRefunded: false, balanceCents: after, refundId: refundRef.id }
+    })
+  }
+)
+
 
 export const adminAdjustWallet = onCall(
   { region: 'us-central1', cors: true },
@@ -783,11 +847,16 @@ export const adminAdjustWallet = onCall(
     const uid = String(request.data?.uid || '').trim()
     const deltaCents = Math.trunc(Number(request.data?.deltaCents || 0))
     const reason = String(request.data?.reason || '').trim()
+    const adjustmentType = String(request.data?.adjustmentType || '').trim()
 
     if (!uid || !Number.isFinite(deltaCents) || deltaCents === 0) {
       throw new HttpsError('invalid-argument', 'Informe usuário e valor do ajuste.')
     }
-    if (deltaCents > 0) {
+    if (!['recarga', 'ajuste_admin'].includes(adjustmentType)) {
+      throw new HttpsError('invalid-argument', 'Selecione o tipo: Recarga ou Ajuste ADM.')
+    }
+    if (adjustmentType === 'recarga') {
+      if (deltaCents < 0) throw new HttpsError('invalid-argument', 'Recarga não pode ser negativa.')
       const configSnap = await db.collection('walletConfig').doc('main').get()
       const config = configSnap.exists ? configSnap.data() || {} : {}
       const allowedTopups = [
@@ -800,10 +869,7 @@ export const adminAdjustWallet = onCall(
         const labels = allowedTopups
           .map(value => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100))
           .join(', ')
-        throw new HttpsError(
-          'invalid-argument',
-          `RECARGA_VALOR_INVALIDO: use exatamente um dos valores dos links de compra: ${labels}.`
-        )
+        throw new HttpsError('invalid-argument', `RECARGA_VALOR_INVALIDO: use exatamente um dos pacotes configurados: ${labels}.`)
       }
     }
 
@@ -829,12 +895,13 @@ export const adminAdjustWallet = onCall(
 
       tx.set(ledgerRef, {
         uid,
-        operation: deltaCents > 0 ? 'recarga_admin' : 'ajuste_admin',
+        operation: adjustmentType === 'recarga' ? 'recarga' : 'ajuste_saldo',
         direction: deltaCents > 0 ? 'credit' : 'debit',
         amountCents: Math.abs(deltaCents),
         balanceBeforeCents: before,
         balanceAfterCents: after,
         reason: reason || null,
+        adjustmentType,
         performedByUid: request.auth.uid,
         performedByEmail: callerEmail,
         createdAt: FieldValue.serverTimestamp()

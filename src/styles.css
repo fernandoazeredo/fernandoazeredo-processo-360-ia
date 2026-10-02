@@ -3048,3 +3048,71 @@ select:focus,input:focus,textarea:focus{
   .wallet-statement-row span:nth-child(2),
   .wallet-statement-row small{grid-column:1/-1}
 }
+
+
+/* Carteira v2 */
+.wallet-info-card{
+  margin:18px auto 22px;
+  max-width:1100px;
+  padding:18px 20px;
+  border:1px solid var(--border);
+  border-radius:16px;
+  background:var(--card);
+}
+.wallet-info-card h2{margin:0 0 10px}
+.wallet-info-card h3{margin:12px 0 8px}
+.wallet-info-card p{margin:7px 0;line-height:1.55}
+.wallet-low-warning,
+.admin-price-warning{
+  margin:10px 0;
+  padding:10px 12px;
+  border-radius:10px;
+  border:1px solid #d6a700;
+  background:rgba(214,167,0,.12);
+}
+.wallet-entry-credit b{color:#16803a}
+.wallet-entry-debit b{color:#b42318}
+.wallet-statement-row em{
+  grid-column:1/-1;
+  font-style:normal;
+  opacity:.78;
+  font-size:.9rem;
+}
+.wallet-entry-type{
+  font-weight:700;
+}
+.wallet-adjust-backdrop{
+  position:fixed;
+  inset:0;
+  z-index:1200;
+  display:grid;
+  place-items:center;
+  padding:20px;
+  background:rgba(0,0,0,.58);
+}
+.wallet-adjust-panel{
+  width:min(520px,100%);
+  max-height:90vh;
+  overflow:auto;
+  padding:20px;
+  border:1px solid var(--border);
+  border-radius:16px;
+  background:var(--card);
+  box-shadow:0 24px 70px rgba(0,0,0,.35);
+}
+.wallet-adjust-panel h3{margin-top:0}
+.wallet-adjust-panel label{display:grid;gap:7px;margin:12px 0}
+.wallet-adjust-panel input,
+.wallet-adjust-panel select{width:100%}
+.wallet-adjust-preview{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  margin:12px 0;
+  padding:12px;
+  border:1px solid var(--border);
+  border-radius:12px;
+}
+@media (max-width:720px){
+  .wallet-adjust-preview{grid-template-columns:1fr}
+}

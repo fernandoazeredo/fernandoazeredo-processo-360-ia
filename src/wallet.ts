@@ -50,9 +50,9 @@ export async function quotePiece(): Promise<{ priceCents: number }> {
   }
 }
 
-export async function chargeAnalysis(pageCount: number): Promise<{ chargeId: string; priceCents: number; balanceCents: number }> {
+export async function chargeAnalysis(pageCount: number, fileName?: string, expectedPriceCents?: number): Promise<{ chargeId: string; priceCents: number; balanceCents: number }> {
   const call = httpsCallable(requireFunctions(), 'walletChargeAnalysis')
-  const result = await call({ pageCount })
+  const result = await call({ pageCount, fileName: fileName || '', expectedPriceCents: Number(expectedPriceCents || 0) })
   const data = result.data as any
 
   return {
@@ -62,15 +62,27 @@ export async function chargeAnalysis(pageCount: number): Promise<{ chargeId: str
   }
 }
 
-export async function chargePiece(): Promise<{ chargeId: string; priceCents: number; balanceCents: number }> {
+export async function chargePiece(pieceType?: string, processNumber?: string, expectedPriceCents?: number): Promise<{ chargeId: string; priceCents: number; balanceCents: number }> {
   const call = httpsCallable(requireFunctions(), 'walletChargePiece')
-  const result = await call({})
+  const result = await call({ pieceType: pieceType || '', processNumber: processNumber || '', expectedPriceCents: Number(expectedPriceCents || 0) })
   const data = result.data as any
 
   return {
     chargeId: String(data?.chargeId || ''),
     priceCents: Number(data?.priceCents || 0),
     balanceCents: Number(data?.balanceCents || 0)
+  }
+}
+
+export async function refundCharge(chargeId: string, reason: string): Promise<{ refunded: boolean; alreadyRefunded: boolean; balanceCents: number; refundId: string }> {
+  const call = httpsCallable(requireFunctions(), 'walletRefundCharge')
+  const result = await call({ chargeId, reason })
+  const data = result.data as any
+  return {
+    refunded: Boolean(data?.refunded),
+    alreadyRefunded: Boolean(data?.alreadyRefunded),
+    balanceCents: Number(data?.balanceCents || 0),
+    refundId: String(data?.refundId || '')
   }
 }
 
