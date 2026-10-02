@@ -982,7 +982,7 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
         if(cancelled) return
         const message=String(error?.message||'')
         setPieceQuoteError(message.includes('preço') || message.includes('failed-precondition')
-          ? 'O preço da peça ainda não foi configurado.'
+          ? 'Serviço temporariamente indisponível.'
           : 'Não foi possível consultar o preço da peça.')
       })
     return ()=>{cancelled=true}
@@ -1001,14 +1001,25 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
     }
     setPieceBusy(true)
     setPieceStage('Estruturando e redigindo o rascunho')
+    let chargeId = ''
     try {
+      if (!isAdmin) {
+        const charge = await chargePiece(pieceType, report.processNumber)
+        chargeId = charge.chargeId
+      }
       window.setTimeout(() => setPieceStage('Validando fatos contra o relatório consolidado'), 900)
       const generated = await generateLegalPiece(report, pieceType, professionalProfile)
-      if (!isAdmin) await chargePiece()
       setPiece(generated)
       setPieceStage('Rascunho validado')
       window.setTimeout(() => document.getElementById('piece-review')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
     } catch (error: any) {
+      if (chargeId) {
+        try {
+          await refundCharge(chargeId, 'Falha na geração da peça antes da conclusão.')
+        } catch (refundError) {
+          console.error('[Processo 360 IA][Motor B] Falha ao estornar cobrança da peça.', refundError)
+        }
+      }
       console.error('[Processo 360 IA][Motor B] Falha', error)
       const message=String(error?.message||'')
       setPieceError(message.includes('Saldo insuficiente')
@@ -1431,6 +1442,10 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
   const [error,setError]=useState('')
   const [savingConfig,setSavingConfig]=useState(false)
   const [adjustingUid,setAdjustingUid]=useState<string|null>(null)
+  const [adjustingItem,setAdjustingItem]=useState<WalletRecord|null>(null)
+  const [adjustmentType,setAdjustmentType]=useState<'recarga'|'ajuste_admin'>('recarga')
+  const [adjustmentValue,setAdjustmentValue]=useState('')
+  const [adjustmentReason,setAdjustmentReason]=useState('')
   const [config,setConfig]=useState<WalletConfig>({
     analysisMinimumCents:0,
     analysisPerPageCents:0,
@@ -1438,7 +1453,9 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
     package1Cents:4000,package1Url:'https://payment-link-v3.ton.com.br/pl_L4oBjJNOkKyEJLGCrvCjO31nA9pG78db',
     package2Cents:8000,package2Url:'https://payment-link-v3.ton.com.br/pl_4n9ELgN872OXmzD9cyT1RMvDdBbxzGaj',
     package3Cents:12000,package3Url:'https://payment-link-v3.ton.com.br/pl_1wy7Jor82XxB8OEULRIqGdGALMQKzY4N',
-    paymentInstructions:''
+    paymentInstructions:'',
+    lowBalanceWarningCents:1000,
+    supportContact:''
   })
 
   useEffect(()=>{
@@ -1470,38 +1487,51 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
     }
   }
 
-  async function adjustBalance(item:WalletRecord){
-    if(!functions) return
-    const allowedTopups=[config.package1Cents,config.package2Cents,config.package3Cents]
-      .map(value=>Number(value||0))
-      .filter(value=>value>0)
-    const labels=allowedTopups.map(value=>formatBRL(value)).join(', ')
-    const raw=window.prompt(`Ajuste de saldo de ${item.email}.\nPara crédito/recarga, use exatamente um dos valores dos links de compra: ${labels}.\nPara retirada administrativa, use número negativo.\nSaldo atual: ${formatBRL(item.balanceCents||0)}`)
-    if(raw===null) return
-    const trimmed=raw.trim()
-    const normalized=trimmed.includes(',')
-      ? trimmed.replace(/\./g,'').replace(',','.')
-      : trimmed
-    const value=Number(normalized)
+  function openAdjustBalance(item:WalletRecord){
+    setAdjustmentType('recarga')
+    setAdjustmentValue('')
+    setAdjustmentReason('')
+    setAdjustingItem(item)
+  }
+
+  async function confirmAdjustBalance(){
+    if(!functions || !adjustingItem) return
+    const value=parseCurrencyInput(adjustmentValue)
     if(!Number.isFinite(value) || value===0){
-      window.alert('Informe um valor válido diferente de zero. Exemplos aceitos: 40, 40.00, 80,00 ou -10,50.')
+      setError('Informe um valor válido diferente de zero. Use vírgula ou ponto como separador decimal.')
       return
     }
     const cents=Math.round(value*100)
-    if(cents>0 && !allowedTopups.includes(cents)){
-      window.alert(`Para adicionar crédito, use exatamente um dos valores dos links de compra: ${labels}.`)
+    const packages=[config.package1Cents,config.package2Cents,config.package3Cents]
+      .map(item=>Number(item||0))
+      .filter(item=>item>0)
+    if(adjustmentType==='recarga' && !packages.includes(cents)){
+      setError(`Recarga inválida. Escolha exatamente um dos pacotes: ${packages.map(formatBRL).join(', ')}.`)
       return
     }
-    const reason=window.prompt('Motivo do ajuste (opcional):') || ''
-    setAdjustingUid(item.uid)
+    const after=(adjustingItem.balanceCents||0)+cents
+    if(after<0){
+      setError('O ajuste deixaria o saldo negativo.')
+      return
+    }
+    setAdjustingUid(adjustingItem.uid)
+    setError('')
     try{
       const call=httpsCallable(functions,'adminAdjustWallet')
-      await call({uid:item.uid,deltaCents:cents,reason})
+      await call({
+        uid:adjustingItem.uid,
+        deltaCents:cents,
+        reason:adjustmentReason.trim(),
+        adjustmentType
+      })
+      setAdjustingItem(null)
+      setAdjustmentValue('')
+      setAdjustmentReason('')
     }catch(err:any){
       console.error(err)
       const message=String(err?.message||'')
       setError(message.includes('RECARGA_VALOR_INVALIDO')
-        ? `Valor de crédito inválido. Use exatamente: ${labels}.`
+        ? 'O valor da recarga precisa ser exatamente um dos pacotes configurados.'
         : 'Não foi possível ajustar o saldo.')
     }finally{
       setAdjustingUid(null)
@@ -1551,7 +1581,7 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
       <div>
         <span className="admin-badge"><Users/> Usuários e saldo</span>
         <h2>Carteira pré-paga</h2>
-        <p className="muted">Todo usuário começa com saldo zero. O preço é mostrado antes do uso e o débito só ocorre após a operação concluir com sucesso.</p>
+        <p className="muted">Todo usuário começa com saldo zero. O preço é mostrado antes do uso; o débito ocorre ao iniciar e é estornado automaticamente se a operação falhar.</p>
       </div>
       <button className="secondary-button compact" onClick={onLogout}>Sair</button>
     </div>
@@ -1566,6 +1596,8 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
     <form className="subscription-config-form" onSubmit={saveConfig}>
       <div className="form-title"><CreditCard size={18}/><b>Preços e recargas</b></div>
       <p className="muted">Estes valores são administrativos. O usuário verá somente o preço final da operação.</p>
+      {(config.analysisMinimumCents<=0 || config.analysisPerPageCents<=0 || config.piecePriceCents<=0) &&
+        <div className="admin-price-warning">Atenção: há preço zerado. Enquanto isso, o cliente verá “Serviço temporariamente indisponível”.</div>}
       <div className="wallet-formula-note">
         <b>Fórmula da análise:</b> preço final = maior valor entre o preço mínimo e (número de páginas × preço por página).
         <br/>
@@ -1595,7 +1627,15 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
           </label>
         </div>
       })}
-      <label>Orientação ao usuário
+      <div className="admin-form-grid">
+        <label>Aviso de saldo baixo (centavos)
+          <input type="number" min="0" value={config.lowBalanceWarningCents||1000} onChange={e=>setConfig({...config,lowBalanceWarningCents:Number(e.target.value)||0})}/>
+        </label>
+        <label>Contato para envio do comprovante
+          <input value={config.supportContact||''} onChange={e=>setConfig({...config,supportContact:e.target.value})} placeholder="WhatsApp ou e-mail"/>
+        </label>
+      </div>
+            <label>Orientação ao usuário
         <input value={config.paymentInstructions||''} onChange={e=>setConfig({...config,paymentInstructions:e.target.value})} placeholder="Ex.: Após o pagamento, o saldo será liberado."/>
       </label>
       <button className="primary-button compact" disabled={savingConfig}><Save size={17}/>{savingConfig?'Salvando...':'Salvar configuração'}</button>
@@ -1621,7 +1661,7 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
                 <button className="sub-action activate" onClick={()=>changeStatus(item,'ativo')}>Ativar</button>
                 <button className="sub-action deactivate" onClick={()=>changeStatus(item,'inativo')}>Desativar</button>
                 <button className="sub-action block" onClick={()=>changeStatus(item,'bloqueado')}>Bloquear</button>
-                <button className="sub-action" disabled={adjustingUid===item.uid} onClick={()=>adjustBalance(item)}>{adjustingUid===item.uid?'Ajustando...':'Ajustar saldo'}</button>
+                <button className="sub-action" disabled={adjustingUid===item.uid} onClick={()=>openAdjustBalance(item)}>{adjustingUid===item.uid?'Ajustando...':'Ajustar saldo'}</button>
                 <button className="sub-action delete" onClick={()=>removeWalletUser(item)}><Trash2 size={14}/> Apagar</button>
               </div>
             </td>
@@ -1630,6 +1670,40 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
         </tbody>
       </table>
     </div>
+
+    {adjustingItem && <div className="wallet-adjust-backdrop">
+      <section className="wallet-adjust-panel" role="dialog" aria-modal="true">
+        <h3>Ajustar saldo</h3>
+        <p><b>{adjustingItem.email}</b></p>
+        <label>Tipo
+          <select value={adjustmentType} onChange={e=>{setAdjustmentType(e.target.value as 'recarga'|'ajuste_admin');setAdjustmentValue('')}}>
+            <option value="recarga">Recarga</option>
+            <option value="ajuste_admin">Ajuste ADM</option>
+          </select>
+        </label>
+        {adjustmentType==='recarga'
+          ? <label>Valor da recarga
+              <select value={adjustmentValue} onChange={e=>setAdjustmentValue(e.target.value)}>
+                <option value="">Selecione</option>
+                {[config.package1Cents,config.package2Cents,config.package3Cents].filter(v=>Number(v)>0).map(v=><option key={v} value={(Number(v)/100).toFixed(2)}>{formatBRL(Number(v))}</option>)}
+              </select>
+            </label>
+          : <label>Valor do ajuste (+ ou −)
+              <input value={adjustmentValue} onChange={e=>setAdjustmentValue(e.target.value)} placeholder="Ex.: 10,50 ou -5.00"/>
+            </label>}
+        <div className="wallet-adjust-preview">
+          <span>Saldo atual: <b>{formatBRL(adjustingItem.balanceCents||0)}</b></span>
+          <span>Saldo novo: <b>{formatBRL((adjustingItem.balanceCents||0)+(Number.isFinite(parseCurrencyInput(adjustmentValue))?Math.round(parseCurrencyInput(adjustmentValue)*100):0))}</b></span>
+        </div>
+        <label>Observação
+          <input value={adjustmentReason} onChange={e=>setAdjustmentReason(e.target.value)} placeholder="Opcional"/>
+        </label>
+        <div className="form-actions">
+          <button type="button" className="secondary-button compact" onClick={()=>setAdjustingItem(null)}>Cancelar</button>
+          <button type="button" className="primary-button compact" disabled={adjustingUid===adjustingItem.uid} onClick={confirmAdjustBalance}>Confirmar</button>
+        </div>
+      </section>
+    </div>}
   </>
 }
 
