@@ -930,6 +930,48 @@ export const adminAdjustWallet = onCall(
   }
 )
 
+export const adminArmTestFailure = onCall(
+  { region: 'us-central1', cors: true },
+  async request => {
+    const callerEmail = String(request.auth?.token?.email || '').toLowerCase()
+    if (!request.auth || callerEmail !== 'fernandoazeredo64@gmail.com') {
+      throw new HttpsError('permission-denied', 'Apenas o administrador pode ativar o modo de teste.')
+    }
+    const uid = String(request.data?.uid || '').trim()
+    if (!uid) throw new HttpsError('invalid-argument', 'UID não informado.')
+    const walletRef = db.collection('wallets').doc(uid)
+    const snap = await walletRef.get()
+    if (!snap.exists) throw new HttpsError('not-found', 'Carteira não encontrada.')
+    await walletRef.set({
+      forceNextAnalysisFailure: true,
+      forceNextAnalysisFailureSetAt: FieldValue.serverTimestamp(),
+      forceNextAnalysisFailureSetBy: callerEmail
+    }, { merge: true })
+    return { success: true }
+  }
+)
+
+export const walletConsumeTestFailure = onCall(
+  { region: 'us-central1', cors: true },
+  async request => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'É necessário estar autenticado.')
+    const walletRef = db.collection('wallets').doc(request.auth.uid)
+    return db.runTransaction(async tx => {
+      const snap = await tx.get(walletRef)
+      if (!snap.exists) throw new HttpsError('failed-precondition', 'Carteira não encontrada.')
+      const wallet = snap.data() || {}
+      const forceFailure = wallet.forceNextAnalysisFailure === true
+      if (forceFailure) {
+        tx.update(walletRef, {
+          forceNextAnalysisFailure: false,
+          forceNextAnalysisFailureConsumedAt: FieldValue.serverTimestamp()
+        })
+      }
+      return { forceFailure }
+    })
+  }
+)
+
 export const adminDeleteWalletUser = onCall(
   { region: 'us-central1', cors: true },
   async request => {
