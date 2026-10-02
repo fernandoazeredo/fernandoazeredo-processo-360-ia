@@ -249,6 +249,14 @@ function App() {
   const [processingStage, setProcessingStage] = useState(stages[0])
   const [analysis, setAnalysis] = useState<AnalysisReport | null>(null)
   const [analysisError, setAnalysisError] = useState('')
+
+  useEffect(() => {
+    if (!analysisError) return
+    const timer = window.setTimeout(() => {
+      document.getElementById('analysis-error-box')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 120)
+    return () => window.clearTimeout(timer)
+  }, [analysisError])
   const [adminOpen, setAdminOpen] = useState(false)
   const [adminClientView, setAdminClientView] = useState(false)
   const [walletTopupOpen, setWalletTopupOpen] = useState(false)
@@ -594,7 +602,7 @@ function App() {
               </button>}
 
           {analysisError && (
-            <div className="analysis-error-actions">
+            <div className="analysis-error-actions" id="analysis-error-box">
               <p className="analysis-error">{analysisError}</p>
               <button type="button" className="retry-analysis-button" disabled={!file || processing} onClick={startAnalysis}>
                 Tentar novamente
@@ -1032,6 +1040,14 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
   const [pieceBusy, setPieceBusy] = useState(false)
   const [pieceStage, setPieceStage] = useState('')
   const [pieceError, setPieceError] = useState('')
+
+  useEffect(() => {
+    if (!pieceError) return
+    const timer = window.setTimeout(() => {
+      document.getElementById('piece-error-box')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 120)
+    return () => window.clearTimeout(timer)
+  }, [pieceError])
   const [confirmingClaim, setConfirmingClaim] = useState<string | null>(null)
   const [confirmation, setConfirmation] = useState<Record<string, string>>({})
   const [professionalProfile, setProfessionalProfile] = useState<ProfessionalProfile>({ name: '', oab: '', address: '', email: '' })
@@ -1342,7 +1358,7 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
           : <button className="primary-button" disabled={pieceBusy || (!isAdmin && pieceQuoteCents<=0)} onClick={handleGeneratePiece}>
               {pieceBusy ? pieceStage || 'Gerando rascunho...' : 'Gerar Rascunho'} <ChevronRight size={18}/>
             </button>}
-        {pieceError && <p className="analysis-error">{pieceError}</p>}
+        {pieceError && <p className="analysis-error" id="piece-error-box">{pieceError}</p>}
       </div>
 
       {piece && <div className="piece-review" id="piece-review">

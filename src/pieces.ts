@@ -68,7 +68,7 @@ type MotorBPromptDoc = {
 type LoadedPrompt = { content: string; version: number; source: 'firestore' | 'local-v8' }
 
 const pieceMapping: Record<string, Record<string, string>> = {
-  Trabalhista: { Reclamante: 'Petição / Manifestação', Reclamada: 'Contestação / Defesa' },
+  Trabalhista: { Reclamante: 'Petição Inicial', Reclamada: 'Contestação' },
   Cível: { Autor: 'Petição Inicial', Réu: 'Contestação' },
   Criminal: { Acusação: 'Denúncia', Defesa: 'Defesa Prévia / Resposta à Acusação' },
   Ambiental: { 'Autuado / Réu': 'Defesa / Impugnação', 'Órgão Ambiental / MP': 'Auto de Infração / Petição' },
@@ -88,8 +88,8 @@ export function pieceTypeOptions(area: string, perspective: string) {
   const suggested = suggestPieceType(area, perspective)
   const byArea: Record<string, Record<string, string[]>> = {
     Trabalhista: {
-      Reclamante: ['Petição / Manifestação', 'Réplica / Manifestação', 'Petição Inicial'],
-      Reclamada: ['Contestação / Defesa', 'Petição / Manifestação']
+      Reclamante: ['Petição Inicial', 'Réplica / Manifestação', 'Petição / Manifestação'],
+      Reclamada: ['Contestação', 'Contestação / Defesa', 'Petição / Manifestação']
     },
     Cível: { Autor: ['Petição Inicial', 'Petição / Manifestação'], Réu: ['Contestação', 'Petição / Manifestação'] },
     Criminal: {
