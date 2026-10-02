@@ -163,6 +163,7 @@ REGRAS
 11. correctedSections deve ser uma peça limpa: sem [lote...], [fl....], CONFIRMADA, NÃO CONFIRMADA, mensagens do Motor B ou aviso genérico de revisão.
 12. Audite TODOS os valores monetários da minuta. Se um quantum não constar literalmente nos dados e não houver memória de cálculo suficiente e verificável nos insumos, substitua-o por [VALOR] ⚠ REVISAR. Não valide valores criados pelo próprio Motor B.
 13. Se houver qualquer [VALOR] ou verba sem quantum confirmado, o valor da causa deve ser descrito como PARCIAL/PROVISÓRIO e não pode incluir a verba pendente como se tivesse valor certo.
+14. ART. 477: se o fato documental do pagamento estiver confirmado, não classifique como CONFLITANTE apenas porque existe discussão jurídica sobre a incidência ou não da multa do §8º. Separe fato e consequência jurídica. Se a peça corrigiu a premissa factual para refletir o comprovante de pagamento, use CORRIGIDA; se apenas há tese jurídica controvertida sobre a multa, registre isso no treatment sem criar conflito factual.
 
 A rastreabilidade completa permanece em claims/sourceReference.
 `.trim()
@@ -183,7 +184,7 @@ CHECKLIST FINAL OBRIGATÓRIO
 - cartões de ponto foram avaliados criticamente, inclusive horários invariáveis;
 - atividade externa não contradiz silenciosamente controle de ponto/jornada fixa;
 - intervalo corresponde ao tempo efetivamente usufruído/suprimido; quando houver 20 minutos usufruídos em intervalo legal de 1 hora, o texto e o pedido explicitam 40 minutos suprimidos e, se não houver valor literal, apresentam memorial de cálculo quando houver base suficiente;
-- art. 477 diferencia pagamento e entrega de documentos e não afirma multa se a base temporal/documental não sustentar atraso;
+- art. 477 diferencia pagamento e entrega de documentos e não afirma multa se a base temporal/documental não sustentar atraso; divergência sobre a consequência jurídica do §8º, por si só, não é conflito factual quando a data do pagamento está documentalmente confirmada;
 - art. 467 só é formulado quando houver verba rescisória incontroversa com base suficiente; não presumir incontroverso o que esteja efetivamente controvertido nos autos;
 - dano moral não amplia BO ou transforma bem pessoal em corporativo;
 - pedidos que exigem valor não ficam silenciosamente sem valor e, no trabalhista, o art. 840, §1º, da CLT foi enfrentado quando pertinente;

@@ -17,6 +17,7 @@ export type WalletRecord = {
   balanceCents: number
   createdAt?: any
   updatedAt?: any
+  forceNextAnalysisFailure?: boolean
 }
 
 export type WalletQuote = {
