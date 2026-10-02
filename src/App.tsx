@@ -2,13 +2,13 @@ import { FormEvent, useEffect, useState } from 'react'
 import { createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, signOut, User } from 'firebase/auth'
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
 import { AlertTriangle, BrainCircuit, CheckCircle2, ChevronRight, CreditCard, Download, FilePenLine, FileText, LockKeyhole, Moon, Pencil, Plus, Save, Search, ShieldCheck, Sun, Trash2, UploadCloud, Users, X } from 'lucide-react'
-import { auth, db, firebaseConfigured, functions } from './firebase'
+import { adminAuth, adminDb, adminFunctions, auth, db, firebaseConfigured, functions } from './firebase'
 import { httpsCallable } from 'firebase/functions'
 import { analyzeUploadedProcess } from './ai'
 import type { AnalysisReport } from './ai'
 import { confirmClaimInOriginal, generateLegalPiece, pieceTypeOptions, suggestPieceType } from './pieces'
 import type { LegalPieceDraft, PieceClaim, ProfessionalProfile } from './pieces'
-import { chargeAnalysis, chargePiece, formatBRL, quoteAnalysis, quotePiece, refundCharge } from './wallet'
+import { chargeAnalysis, chargePiece, consumeForcedAnalysisFailure, formatBRL, quoteAnalysis, quotePiece, refundCharge } from './wallet'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import type { WalletRecord, WalletStatus } from './wallet'
 
@@ -344,7 +344,9 @@ function App() {
           message,
           details: error?.details || null
         })
-        if(message.includes('WALLET_PRICING_NOT_CONFIGURED') || message.includes('tabela de custos') || message.includes('failed-precondition')) {
+        if(message.includes('PDF_NO_READABLE_CONTENT') || message.includes('PDF_INVALID_OR_UNREADABLE')) {
+          setQuoteError('Arquivo sem conteúdo legível, nada foi cobrado.')
+        } else if(message.includes('WALLET_PRICING_NOT_CONFIGURED') || message.includes('tabela de custos') || message.includes('failed-precondition')) {
           setQuoteError('Preço não configurado. Serviço temporariamente indisponível.')
         } else {
           setQuoteError('Não foi possível calcular o valor desta análise.')
@@ -364,6 +366,8 @@ function App() {
 
   async function startAnalysis() {
     if (!file) return
+    const selectedArea = area
+    const selectedPerspective = perspective
     setAnalysisError('')
     setAnalysis(null)
 
@@ -384,13 +388,19 @@ function App() {
         }
         const charge = await chargeAnalysis(billableQuote.pageCount, file.name, billableQuote.priceCents)
         chargeId = charge.chargeId
+        if (await consumeForcedAnalysisFailure()) {
+          throw new Error('TEST_FORCED_ANALYSIS_FAILURE')
+        }
       }
 
-      const report = await analyzeUploadedProcess(file, area, perspective, (value, stage) => {
+      const report = await analyzeUploadedProcess(file, selectedArea, selectedPerspective, (value, stage) => {
         setProgress(value)
         setProcessingStage(stage)
       })
 
+      if (report.area !== selectedArea || report.perspective !== selectedPerspective) {
+        throw new Error(`ANALYSIS_PERSPECTIVE_MISMATCH: solicitado ${selectedArea}/${selectedPerspective}, recebido ${report.area}/${report.perspective}`)
+      }
       setAnalysis(report)
       window.setTimeout(() => {
         document.getElementById('analysis-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -411,7 +421,13 @@ function App() {
         catch { message = String(rawMessage || '') }
       }
       console.error('[Processo 360 IA] Falha na análise', message, error)
-      if (message.includes('WALLET_INSUFFICIENT') || message.includes('Saldo insuficiente')) {
+      if (message.includes('TEST_FORCED_ANALYSIS_FAILURE')) {
+        setAnalysisError('Falha de teste executada após a cobrança. O valor foi estornado automaticamente e deve aparecer no extrato.')
+      } else if (message.includes('PDF_NO_READABLE_CONTENT') || message.includes('PDF_INVALID_OR_UNREADABLE')) {
+        setAnalysisError('Arquivo sem conteúdo legível, nada foi cobrado.')
+      } else if (message.includes('ANALYSIS_PERSPECTIVE_MISMATCH')) {
+        setAnalysisError('A perspectiva retornada não corresponde à seleção feita. Nenhum resultado divergente foi apresentado.')
+      } else if (message.includes('WALLET_INSUFFICIENT') || message.includes('Saldo insuficiente')) {
         setAnalysisError('Saldo insuficiente para realizar esta análise. Adicione saldo à sua carteira e tente novamente.')
       } else if (message.includes('WALLET_PRICE_CHANGED')) {
         setAnalysisError('O preço desta análise foi atualizado. Recarregue a cotação e confirme novamente.')
@@ -475,8 +491,7 @@ function App() {
             <span className="wallet-balance">Saldo: <b>{formatBRL(wallet?.balanceCents || 0)}</b></span>
             <button className="buy-credits-button" type="button" onClick={()=>setWalletTopupOpen(true)}><CreditCard size={17}/> Comprar créditos</button>
           </>}
-          {appUser.email===ADMIN_EMAIL && !adminClientView && <button className="secondary-button compact admin-top-link" onClick={()=>setAdminOpen(true)}>Área ADM</button>}
-                    <button className="icon-button" onClick={() => setDark(!dark)} aria-label="Alternar tema">
+          <button className="icon-button" onClick={() => setDark(!dark)} aria-label="Alternar tema">
             {dark ? <Sun size={19} /> : <Moon size={19} />}
           </button>
           <button className="secondary-button compact" onClick={() => auth && signOut(auth)}>Sair</button>
@@ -486,6 +501,19 @@ function App() {
       <main>
         {(appUser.email !== ADMIN_EMAIL || adminClientView) && <section className="wallet-info-card">
           <h2>Créditos disponíveis</h2>
+          {(() => {
+            const margin=Number(walletConfig.marginMultiplier||3)
+            const minimum=Math.ceil(Number(walletConfig.analysisMinimumCostCents||0)*margin)
+            const perPage=Math.ceil(Number(walletConfig.analysisCostPerPageCents||0)*margin)
+            const piece=Math.ceil(Number(walletConfig.pieceCostCents||0)*margin)
+            const includedPages=perPage>0 ? Math.max(1,Math.floor(minimum/perPage)) : 0
+            return minimum>0 && perPage>0 && piece>0
+              ? <p className="wallet-consumption-line">
+                  Análise a partir de <b>{formatBRL(minimum)}</b>{includedPages>0 ? <> (até {includedPages} páginas; depois <b>{formatBRL(perPage)}</b> por página)</> : null}
+                  <span> · Peça jurídica <b>{formatBRL(piece)}</b> · O valor aparece antes de confirmar · Falha na análise = estorno automático.</span>
+                </p>
+              : null
+          })()}
           {(wallet?.balanceCents||0) < Number(walletConfig.lowBalanceWarningCents||1000) &&
             <div className="wallet-low-warning">Saldo baixo: {formatBRL(wallet?.balanceCents||0)}. Considere comprar créditos.</div>}
           <h3>Como funcionam seus créditos</h3>
@@ -529,7 +557,7 @@ function App() {
                 ? <>
                     <div><small>Esta operação custa</small><strong>{formatBRL(quote.priceCents)}</strong><span>{quote.pageCount} página(s)</span></div>
                     <div><small>Seu saldo</small><strong>{formatBRL(wallet?.balanceCents || 0)}</strong></div>
-                    <div><small>Saldo após a operação</small><strong>{formatBRL((wallet?.balanceCents || 0) - quote.priceCents)}</strong></div>
+                    <div><small>{(wallet?.balanceCents || 0) >= quote.priceCents ? 'Saldo após a operação' : 'Saldo insuficiente'}</small><strong>{(wallet?.balanceCents || 0) >= quote.priceCents ? formatBRL((wallet?.balanceCents || 0) - quote.priceCents) : `Faltam ${formatBRL(quote.priceCents-(wallet?.balanceCents||0))}`}</strong></div>
                     {(wallet?.balanceCents || 0) < quote.priceCents &&
                       <WalletFundingPanel config={walletConfig} missingCents={quote.priceCents-(wallet?.balanceCents||0)} />}
                   </>
@@ -574,7 +602,16 @@ function App() {
 
       <footer>
         <span>© 2026 Processo 360 IA</span>
-        {adminUser && !adminClientView && <button onClick={() => setAdminOpen(true)}>Área ADM</button>}
+        <button
+          className="footer-admin-link"
+          onClick={() => {
+            if (appUser.email === ADMIN_EMAIL) setAdminUser(appUser)
+            else if (adminAuth?.currentUser?.email === ADMIN_EMAIL) setAdminUser(adminAuth.currentUser)
+            setAdminOpen(true)
+          }}
+        >
+          Área ADM
+        </button>
         {adminUser && adminClientView && <button onClick={() => setAdminClientView(false)}>Sair da visualização do cliente</button>}
       </footer>
 
@@ -1204,9 +1241,12 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
         {!isAdmin && <div className="analysis-price-card piece-price-card">
           <div><small>Preço desta operação</small><strong>{formatBRL(pieceQuoteCents||0)}</strong></div>
           <div><small>Seu saldo</small><strong>{formatBRL(walletBalanceCents||0)}</strong></div>
-          <div><small>Saldo após a operação</small><strong>{formatBRL((walletBalanceCents||0)-(pieceQuoteCents||0))}</strong></div>
+          <div><small>{walletBalanceCents >= pieceQuoteCents ? 'Saldo após a operação' : 'Saldo insuficiente'}</small><strong>{walletBalanceCents >= pieceQuoteCents ? formatBRL(walletBalanceCents-pieceQuoteCents) : `Faltam ${formatBRL(pieceQuoteCents-walletBalanceCents)}`}</strong></div>
           {pieceQuoteError && <span className="error">{pieceQuoteError}</span>}
-          {walletBalanceCents < pieceQuoteCents && <button type="button" className="secondary-button compact" onClick={onRecharge}>Recarregar</button>}
+          {pieceQuoteCents>0 && walletBalanceCents < pieceQuoteCents && <div className="piece-insufficient-warning">
+            <b>Saldo insuficiente ({formatBRL(pieceQuoteCents)}) — Comprar créditos</b>
+            <button type="button" className="secondary-button compact" onClick={onRecharge}>Comprar créditos</button>
+          </div>}
         </div>}
         <button className="primary-button" disabled={pieceBusy || (!isAdmin && (pieceQuoteCents<=0 || walletBalanceCents<pieceQuoteCents))} onClick={handleGeneratePiece}>
           {pieceBusy ? pieceStage || 'Gerando rascunho...' : `Gerar Rascunho${!isAdmin && pieceQuoteCents>0 ? ` — ${formatBRL(pieceQuoteCents)}` : ''}`} <ChevronRight size={18}/>
@@ -1486,12 +1526,14 @@ function WalletBlockedPage({user,wallet}:{user:User;wallet:WalletRecord|null}) {
   </div>
 }
 
-function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
+function WalletManager({user,onLogout,serviceDb,serviceFunctions}:{user:User;onLogout:()=>void;serviceDb:any;serviceFunctions:any}) {
   const [items,setItems]=useState<WalletRecord[]>([])
   const [filter,setFilter]=useState('')
   const [error,setError]=useState('')
   const [savingConfig,setSavingConfig]=useState(false)
   const [adjustingUid,setAdjustingUid]=useState<string|null>(null)
+  const [testArmingUid,setTestArmingUid]=useState<string|null>(null)
+  const [testMessage,setTestMessage]=useState('')
   const [adjustingItem,setAdjustingItem]=useState<WalletRecord|null>(null)
   const [adjustmentType,setAdjustmentType]=useState<'recarga'|'ajuste_admin'>('recarga')
   const [adjustmentDirection,setAdjustmentDirection]=useState<'credit'|'debit'>('credit')
@@ -1511,14 +1553,14 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
   })
 
   useEffect(()=>{
-    if(!db) return
-    const unsubscribeWallets = onSnapshot(collection(db,'wallets'), snap=>{
+    if(!serviceDb) return
+    const unsubscribeWallets = onSnapshot(collection(serviceDb,'wallets'), snap=>{
       const rows=snap.docs.map(d=>({id:d.id,...d.data()} as WalletRecord))
       rows.sort((a,b)=>String(a.email||'').localeCompare(String(b.email||'')))
       setItems(rows)
     },()=>setError('Não foi possível carregar os usuários.'))
 
-    const unsubscribeConfig = onSnapshot(doc(db,'walletConfig','main'), snap=>{
+    const unsubscribeConfig = onSnapshot(doc(serviceDb,'walletConfig','main'), snap=>{
       if(snap.exists()) setConfig(prev=>({...prev,...snap.data()} as WalletConfig))
     })
 
@@ -1526,10 +1568,10 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
   },[])
 
   async function changeStatus(item:WalletRecord,status:WalletStatus){
-    if(!db) return
+    if(!serviceDb) return
     setError('')
     try{
-      await updateDoc(doc(db,'wallets',item.id),{
+      await updateDoc(doc(serviceDb,'wallets',item.id),{
         status,
         updatedAt:serverTimestamp(),
         updatedBy:user.email
@@ -1548,7 +1590,7 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
   }
 
   async function confirmAdjustBalance(){
-    if(!functions || !adjustingItem) return
+    if(!serviceFunctions || !adjustingItem) return
     const value=parseCurrencyInput(adjustmentValue)
     if(!Number.isFinite(value) || value===0){
       setError('Informe um valor válido diferente de zero. Use vírgula ou ponto como separador decimal.')
@@ -1577,7 +1619,7 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
     setAdjustingUid(adjustingItem.uid)
     setError('')
     try{
-      const call=httpsCallable(functions,'adminAdjustWallet')
+      const call=httpsCallable(serviceFunctions,'adminAdjustWallet')
       await call({
         uid:adjustingItem.uid,
         deltaCents:cents,
@@ -1599,11 +1641,28 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
     }
   }
 
+  async function armTestFailure(item:WalletRecord){
+    if(!serviceFunctions) return
+    setTestArmingUid(item.uid)
+    setError('')
+    setTestMessage('')
+    try{
+      const call=httpsCallable(serviceFunctions,'adminArmTestFailure')
+      await call({uid:item.uid})
+      setTestMessage(`Modo de teste armado para ${item.email}: a próxima análise será cobrada e falhará imediatamente, acionando o estorno automático.`)
+    }catch(err){
+      console.error(err)
+      setError('Não foi possível ativar o teste de estorno.')
+    }finally{
+      setTestArmingUid(null)
+    }
+  }
+
   async function removeWalletUser(item:WalletRecord){
-    if(!functions) return
+    if(!serviceFunctions) return
     if(!window.confirm(`Excluir definitivamente o usuário ${item.email}? A conta de autenticação também será removida.`)) return
     try{
-      const call=httpsCallable(functions,'adminDeleteWalletUser')
+      const call=httpsCallable(serviceFunctions,'adminDeleteWalletUser')
       await call({uid:item.uid})
     }catch(err:any){
       console.error(err)
@@ -1613,11 +1672,11 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
 
   async function saveConfig(e:FormEvent){
     e.preventDefault()
-    if(!db) return
+    if(!serviceDb) return
     setSavingConfig(true)
     setError('')
     try{
-      await setDoc(doc(db,'walletConfig','main'),{
+      await setDoc(doc(serviceDb,'walletConfig','main'),{
         ...config,
         updatedAt:serverTimestamp(),
         updatedBy:user.email
@@ -1715,6 +1774,7 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
     </div>
 
     {error&&<p className="error">{error}</p>}
+    {testMessage&&<p className="admin-test-message">{testMessage}</p>}
 
     <div className="subscriber-table-wrap">
       <table className="subscriber-table">
@@ -1730,6 +1790,7 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
                 <button className="sub-action deactivate" onClick={()=>changeStatus(item,'inativo')}>Desativar</button>
                 <button className="sub-action block" onClick={()=>changeStatus(item,'bloqueado')}>Bloquear</button>
                 <button className="sub-action" disabled={adjustingUid===item.uid} onClick={()=>openAdjustBalance(item)}>{adjustingUid===item.uid?'Ajustando...':'Ajustar saldo'}</button>
+                <button className="sub-action" disabled={testArmingUid===item.uid} onClick={()=>armTestFailure(item)}>{testArmingUid===item.uid?'Armando teste...':'Testar estorno'}</button>
                 <button className="sub-action delete" onClick={()=>removeWalletUser(item)}><Trash2 size={14}/> Apagar</button>
               </div>
             </td>
@@ -1790,15 +1851,15 @@ function AdminModal({user,onUser,onClose,onViewAsClient}:{user:User|null;onUser:
   async function login(e:FormEvent) {
     e.preventDefault()
     setError('')
-    if (!auth) {
+    if (!adminAuth) {
       setError('Configure as credenciais do Firebase para ativar o login.')
       return
     }
     setLoading(true)
     try {
-      const credential=await signInWithEmailAndPassword(auth,ADMIN_EMAIL,password)
+      const credential=await signInWithEmailAndPassword(adminAuth,ADMIN_EMAIL,password)
       if (credential.user.email !== ADMIN_EMAIL) {
-        await signOut(auth)
+        await signOut(adminAuth)
         throw new Error('unauthorized')
       }
       onUser(credential.user)
@@ -1810,9 +1871,13 @@ function AdminModal({user,onUser,onClose,onViewAsClient}:{user:User|null;onUser:
   }
 
   async function logout(){
-    if(auth) await signOut(auth)
-    onUser(null)
+    if(adminAuth?.currentUser?.email===ADMIN_EMAIL) await signOut(adminAuth)
+    if(auth?.currentUser?.email!==ADMIN_EMAIL) onUser(null)
   }
+
+  const usingPrimaryAdminSession = Boolean(auth?.currentUser?.email===ADMIN_EMAIL && user?.uid===auth.currentUser.uid)
+  const serviceDb = usingPrimaryAdminSession ? db : adminDb
+  const serviceFunctions = usingPrimaryAdminSession ? functions : adminFunctions
 
   return <div className="modal-backdrop">
     <div className={`admin-modal ${user ? 'admin-modal-large' : ''}`}>
@@ -1825,8 +1890,8 @@ function AdminModal({user,onUser,onClose,onViewAsClient}:{user:User|null;onUser:
               <button onClick={onViewAsClient}><Search size={17}/> Ver como cliente</button>
             </div>
             {section === 'carteira'
-              ? <WalletManager user={user} onLogout={logout}/>
-              : <PromptManager user={user} onLogout={logout}/>}
+              ? <WalletManager user={user} onLogout={logout} serviceDb={serviceDb} serviceFunctions={serviceFunctions}/>
+              : <PromptManager user={user} onLogout={logout} serviceDb={serviceDb}/>}
           </>
         : <form onSubmit={login}>
             <span className="admin-badge"><LockKeyhole/> Acesso restrito</span>
@@ -1842,7 +1907,7 @@ function AdminModal({user,onUser,onClose,onViewAsClient}:{user:User|null;onUser:
   </div>
 }
 
-function PromptManager({user,onLogout}:{user:User;onLogout:()=>void}) {
+function PromptManager({user,onLogout,serviceDb}:{user:User;onLogout:()=>void;serviceDb:any}) {
   const [items,setItems]=useState<PromptItem[]>([])
   const [loading,setLoading]=useState(true)
   const [error,setError]=useState('')
@@ -1856,12 +1921,12 @@ function PromptManager({user,onLogout}:{user:User;onLogout:()=>void}) {
   const [status,setStatus]=useState<PromptStatus>('rascunho')
 
   useEffect(()=>{
-    if(!db){
+    if(!serviceDb){
       setLoading(false)
       setError('Firestore não configurado.')
       return
     }
-    const q=query(collection(db,'prompts'),orderBy('updatedAt','desc'))
+    const q=query(collection(serviceDb,'prompts'),orderBy('updatedAt','desc'))
     return onSnapshot(q,snap=>{
       setItems(snap.docs.map(d=>({id:d.id,...d.data()} as PromptItem)))
       setLoading(false)
@@ -1901,7 +1966,7 @@ function PromptManager({user,onLogout}:{user:User;onLogout:()=>void}) {
   async function save(e:FormEvent){
     e.preventDefault()
     setError('')
-    if(!db) return
+    if(!serviceDb) return
 
     const payload={
       title:title.trim(),
@@ -1916,8 +1981,8 @@ function PromptManager({user,onLogout}:{user:User;onLogout:()=>void}) {
     }
 
     try{
-      if(editingId) await updateDoc(doc(db,'prompts',editingId),payload)
-      else await addDoc(collection(db,'prompts'),{...payload,createdAt:serverTimestamp(),createdBy:user.email})
+      if(editingId) await updateDoc(doc(serviceDb,'prompts',editingId),payload)
+      else await addDoc(collection(serviceDb,'prompts'),{...payload,createdAt:serverTimestamp(),createdBy:user.email})
       reset()
     }catch{
       setError('Não foi possível salvar. Confirme se o Firestore está criado e com as regras publicadas.')
@@ -1925,9 +1990,9 @@ function PromptManager({user,onLogout}:{user:User;onLogout:()=>void}) {
   }
 
   async function remove(id:string){
-    if(!db || !window.confirm('Excluir este prompt?')) return
+    if(!serviceDb || !window.confirm('Excluir este prompt?')) return
     try{
-      await deleteDoc(doc(db,'prompts',id))
+      await deleteDoc(doc(serviceDb,'prompts',id))
       if(editingId===id) reset()
     }catch{
       setError('Não foi possível excluir o prompt.')

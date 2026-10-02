@@ -7,7 +7,7 @@ export const MOTOR_B_PURPOSES = {
 } as const
 
 export const MOTOR_B_BASE_GLOBAL = `
-PROCESSO 360 IA — MOTOR B V5 — BASE GLOBAL
+PROCESSO 360 IA — MOTOR B V6 — BASE GLOBAL
 
 Você redige MINUTA DE PEÇA PROCESSUAL para revisão por advogado. Use exclusivamente os dados fornecidos pelo sistema e mantenha separadas três camadas: (1) texto jurídico limpo da peça; (2) auditoria/rastreabilidade interna; (3) pendências para revisão humana.
 
@@ -33,7 +33,7 @@ Texto jurídico limpo, profissional e exportável. Referências técnicas ficam 
 `.trim()
 
 export const MOTOR_B_TRABALHISTA_RECLAMADA = `
-PROCESSO 360 IA — MOTOR B V5 — TRABALHISTA / RECLAMADA / CONTESTAÇÃO
+PROCESSO 360 IA — MOTOR B V6 — TRABALHISTA / RECLAMADA / CONTESTAÇÃO
 
 PERSPECTIVA: RECLAMADA.
 Produza contestação trabalhista específica, defensiva e coerente com os documentos efetivamente existentes.
@@ -91,7 +91,7 @@ Não inventar pagamento, jornada, banco de horas, norma coletiva, função, sal�
 `.trim()
 
 export const MOTOR_B_TRABALHISTA_RECLAMANTE = `
-PROCESSO 360 IA — MOTOR B V5 — TRABALHISTA / RECLAMANTE
+PROCESSO 360 IA — MOTOR B V6 — TRABALHISTA / RECLAMANTE
 
 PERSPECTIVA: RECLAMANTE.
 Primeiro determine a fase processual. Se o TIPO SOLICITADO for PETIÇÃO INICIAL, produza uma PETIÇÃO INICIAL COMPLETA com fatos, fundamentos, pedidos individualizados, provas e requerimentos a partir dos dados fornecidos. Mesmo que o PDF seja de processo já ajuizado, não converta a petição inicial solicitada em aditamento: trate-a como minuta autônoma/reconstruída para edição, sem inventar número de processo ou Vara. Se o tipo solicitado for manifestação posterior, respeite a fase e os atos existentes.
@@ -129,7 +129,7 @@ Não inserir referências de lote/página no corpo exportável.
 `.trim()
 
 export const MOTOR_B_VALIDATOR = `
-PROCESSO 360 IA — MOTOR B V5 — VALIDADOR FACTUAL
+PROCESSO 360 IA — MOTOR B V6 — VALIDADOR FACTUAL
 
 Audite TODAS as afirmações factuais da minuta contra os dados consolidados, diagnóstico e referências disponíveis.
 
@@ -168,7 +168,7 @@ A rastreabilidade completa permanece em claims/sourceReference.
 `.trim()
 
 export const MOTOR_B_REVIEWER = `
-PROCESSO 360 IA — MOTOR B V5 — REVISOR JURÍDICO FINAL
+PROCESSO 360 IA — MOTOR B V6 — REVISOR JURÍDICO FINAL
 
 Revise a minuta já validada sem criar fatos novos.
 

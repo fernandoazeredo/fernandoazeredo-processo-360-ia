@@ -562,7 +562,8 @@ async function analyzeLot(
 Você está analisando um lote de um processo jurídico muito maior.
 
 ÁREA: ${area}
-PERSPECTIVA: ${perspective}
+PERSPECTIVA OBRIGATÓRIA: ${perspective}
+REGRA DE POLO: analise este lote exclusivamente sob a perspectiva "${perspective}". É proibido inverter o polo, escrever como se a perspectiva fosse a parte contrária ou reaproveitar conclusão de outra perspectiva.
 LOTE: ${lot.number} de ${lotCount}
 PÁGINAS DO PDF ORIGINAL: ${lot.start}-${lot.end}
 
@@ -774,7 +775,8 @@ Produza o RELATÓRIO JURÍDICO FINAL do Processo 360 IA somente após considerar
 
 ARQUIVO: ${file.name}
 ÁREA: ${area}
-PERSPECTIVA: ${perspective}
+PERSPECTIVA OBRIGATÓRIA: ${perspective}
+REGRA DE POLO: todo o resumo, análise jurídica, riscos, conclusão e próximos passos devem ser redigidos exclusivamente sob a perspectiva "${perspective}". É proibido inverter o polo processual ou redigir a estratégia como se a perspectiva fosse a parte contrária.
 TOTAL DE PÁGINAS: ${pageCount}
 TOTAL DE LOTES: ${lots.length}
 
