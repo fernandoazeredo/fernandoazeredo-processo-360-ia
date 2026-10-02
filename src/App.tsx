@@ -8,7 +8,7 @@ import { analyzeUploadedProcess } from './ai'
 import type { AnalysisReport } from './ai'
 import { confirmClaimInOriginal, generateLegalPiece, pieceTypeOptions, suggestPieceType } from './pieces'
 import type { LegalPieceDraft, PieceClaim, ProfessionalProfile } from './pieces'
-import { chargeAnalysis, chargePiece, formatBRL, quoteAnalysis, quotePiece, refundCharge } from './wallet'
+import { chargeAnalysis, chargePiece, consumeForcedAnalysisFailure, formatBRL, quoteAnalysis, quotePiece, refundCharge } from './wallet'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import type { WalletRecord, WalletStatus } from './wallet'
 
@@ -344,7 +344,9 @@ function App() {
           message,
           details: error?.details || null
         })
-        if(message.includes('WALLET_PRICING_NOT_CONFIGURED') || message.includes('tabela de custos') || message.includes('failed-precondition')) {
+        if(message.includes('PDF_NO_READABLE_CONTENT') || message.includes('PDF_INVALID_OR_UNREADABLE')) {
+          setQuoteError('Arquivo sem conteúdo legível, nada foi cobrado.')
+        } else if(message.includes('WALLET_PRICING_NOT_CONFIGURED') || message.includes('tabela de custos') || message.includes('failed-precondition')) {
           setQuoteError('Preço não configurado. Serviço temporariamente indisponível.')
         } else {
           setQuoteError('Não foi possível calcular o valor desta análise.')
@@ -364,6 +366,8 @@ function App() {
 
   async function startAnalysis() {
     if (!file) return
+    const selectedArea = area
+    const selectedPerspective = perspective
     setAnalysisError('')
     setAnalysis(null)
 
@@ -384,13 +388,19 @@ function App() {
         }
         const charge = await chargeAnalysis(billableQuote.pageCount, file.name, billableQuote.priceCents)
         chargeId = charge.chargeId
+        if (await consumeForcedAnalysisFailure()) {
+          throw new Error('TEST_FORCED_ANALYSIS_FAILURE')
+        }
       }
 
-      const report = await analyzeUploadedProcess(file, area, perspective, (value, stage) => {
+      const report = await analyzeUploadedProcess(file, selectedArea, selectedPerspective, (value, stage) => {
         setProgress(value)
         setProcessingStage(stage)
       })
 
+      if (report.area !== selectedArea || report.perspective !== selectedPerspective) {
+        throw new Error(`ANALYSIS_PERSPECTIVE_MISMATCH: solicitado ${selectedArea}/${selectedPerspective}, recebido ${report.area}/${report.perspective}`)
+      }
       setAnalysis(report)
       window.setTimeout(() => {
         document.getElementById('analysis-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -411,7 +421,13 @@ function App() {
         catch { message = String(rawMessage || '') }
       }
       console.error('[Processo 360 IA] Falha na análise', message, error)
-      if (message.includes('WALLET_INSUFFICIENT') || message.includes('Saldo insuficiente')) {
+      if (message.includes('TEST_FORCED_ANALYSIS_FAILURE')) {
+        setAnalysisError('Falha de teste executada após a cobrança. O valor foi estornado automaticamente e deve aparecer no extrato.')
+      } else if (message.includes('PDF_NO_READABLE_CONTENT') || message.includes('PDF_INVALID_OR_UNREADABLE')) {
+        setAnalysisError('Arquivo sem conteúdo legível, nada foi cobrado.')
+      } else if (message.includes('ANALYSIS_PERSPECTIVE_MISMATCH')) {
+        setAnalysisError('A perspectiva retornada não corresponde à seleção feita. Nenhum resultado divergente foi apresentado.')
+      } else if (message.includes('WALLET_INSUFFICIENT') || message.includes('Saldo insuficiente')) {
         setAnalysisError('Saldo insuficiente para realizar esta análise. Adicione saldo à sua carteira e tente novamente.')
       } else if (message.includes('WALLET_PRICE_CHANGED')) {
         setAnalysisError('O preço desta análise foi atualizado. Recarregue a cotação e confirme novamente.')
@@ -485,6 +501,19 @@ function App() {
       <main>
         {(appUser.email !== ADMIN_EMAIL || adminClientView) && <section className="wallet-info-card">
           <h2>Créditos disponíveis</h2>
+          {(() => {
+            const margin=Number(walletConfig.marginMultiplier||3)
+            const minimum=Math.ceil(Number(walletConfig.analysisMinimumCostCents||0)*margin)
+            const perPage=Math.ceil(Number(walletConfig.analysisCostPerPageCents||0)*margin)
+            const piece=Math.ceil(Number(walletConfig.pieceCostCents||0)*margin)
+            const includedPages=perPage>0 ? Math.max(1,Math.floor(minimum/perPage)) : 0
+            return minimum>0 && perPage>0 && piece>0
+              ? <p className="wallet-consumption-line">
+                  Análise a partir de <b>{formatBRL(minimum)}</b>{includedPages>0 ? <> (até {includedPages} páginas; depois <b>{formatBRL(perPage)}</b> por página)</> : null}
+                  <span> · Peça jurídica <b>{formatBRL(piece)}</b> · O valor aparece antes de confirmar · Falha na análise = estorno automático.</span>
+                </p>
+              : null
+          })()}
           {(wallet?.balanceCents||0) < Number(walletConfig.lowBalanceWarningCents||1000) &&
             <div className="wallet-low-warning">Saldo baixo: {formatBRL(wallet?.balanceCents||0)}. Considere comprar créditos.</div>}
           <h3>Como funcionam seus créditos</h3>
@@ -528,7 +557,7 @@ function App() {
                 ? <>
                     <div><small>Esta operação custa</small><strong>{formatBRL(quote.priceCents)}</strong><span>{quote.pageCount} página(s)</span></div>
                     <div><small>Seu saldo</small><strong>{formatBRL(wallet?.balanceCents || 0)}</strong></div>
-                    <div><small>Saldo após a operação</small><strong>{formatBRL((wallet?.balanceCents || 0) - quote.priceCents)}</strong></div>
+                    <div><small>{(wallet?.balanceCents || 0) >= quote.priceCents ? 'Saldo após a operação' : 'Saldo insuficiente'}</small><strong>{(wallet?.balanceCents || 0) >= quote.priceCents ? formatBRL((wallet?.balanceCents || 0) - quote.priceCents) : `Faltam ${formatBRL(quote.priceCents-(wallet?.balanceCents||0))}`}</strong></div>
                     {(wallet?.balanceCents || 0) < quote.priceCents &&
                       <WalletFundingPanel config={walletConfig} missingCents={quote.priceCents-(wallet?.balanceCents||0)} />}
                   </>
@@ -577,6 +606,7 @@ function App() {
           className="footer-admin-link"
           onClick={() => {
             if (appUser.email === ADMIN_EMAIL) setAdminUser(appUser)
+            else if (adminAuth?.currentUser?.email === ADMIN_EMAIL) setAdminUser(adminAuth.currentUser)
             setAdminOpen(true)
           }}
         >
@@ -1211,9 +1241,12 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
         {!isAdmin && <div className="analysis-price-card piece-price-card">
           <div><small>Preço desta operação</small><strong>{formatBRL(pieceQuoteCents||0)}</strong></div>
           <div><small>Seu saldo</small><strong>{formatBRL(walletBalanceCents||0)}</strong></div>
-          <div><small>Saldo após a operação</small><strong>{formatBRL((walletBalanceCents||0)-(pieceQuoteCents||0))}</strong></div>
+          <div><small>{walletBalanceCents >= pieceQuoteCents ? 'Saldo após a operação' : 'Saldo insuficiente'}</small><strong>{walletBalanceCents >= pieceQuoteCents ? formatBRL(walletBalanceCents-pieceQuoteCents) : `Faltam ${formatBRL(pieceQuoteCents-walletBalanceCents)}`}</strong></div>
           {pieceQuoteError && <span className="error">{pieceQuoteError}</span>}
-          {walletBalanceCents < pieceQuoteCents && <button type="button" className="secondary-button compact" onClick={onRecharge}>Recarregar</button>}
+          {pieceQuoteCents>0 && walletBalanceCents < pieceQuoteCents && <div className="piece-insufficient-warning">
+            <b>Saldo insuficiente ({formatBRL(pieceQuoteCents)}) — Comprar créditos</b>
+            <button type="button" className="secondary-button compact" onClick={onRecharge}>Comprar créditos</button>
+          </div>}
         </div>}
         <button className="primary-button" disabled={pieceBusy || (!isAdmin && (pieceQuoteCents<=0 || walletBalanceCents<pieceQuoteCents))} onClick={handleGeneratePiece}>
           {pieceBusy ? pieceStage || 'Gerando rascunho...' : `Gerar Rascunho${!isAdmin && pieceQuoteCents>0 ? ` — ${formatBRL(pieceQuoteCents)}` : ''}`} <ChevronRight size={18}/>
@@ -1499,6 +1532,8 @@ function WalletManager({user,onLogout,serviceDb,serviceFunctions}:{user:User;onL
   const [error,setError]=useState('')
   const [savingConfig,setSavingConfig]=useState(false)
   const [adjustingUid,setAdjustingUid]=useState<string|null>(null)
+  const [testArmingUid,setTestArmingUid]=useState<string|null>(null)
+  const [testMessage,setTestMessage]=useState('')
   const [adjustingItem,setAdjustingItem]=useState<WalletRecord|null>(null)
   const [adjustmentType,setAdjustmentType]=useState<'recarga'|'ajuste_admin'>('recarga')
   const [adjustmentDirection,setAdjustmentDirection]=useState<'credit'|'debit'>('credit')
@@ -1603,6 +1638,23 @@ function WalletManager({user,onLogout,serviceDb,serviceFunctions}:{user:User;onL
         : 'Não foi possível ajustar o saldo.')
     }finally{
       setAdjustingUid(null)
+    }
+  }
+
+  async function armTestFailure(item:WalletRecord){
+    if(!serviceFunctions) return
+    setTestArmingUid(item.uid)
+    setError('')
+    setTestMessage('')
+    try{
+      const call=httpsCallable(serviceFunctions,'adminArmTestFailure')
+      await call({uid:item.uid})
+      setTestMessage(`Modo de teste armado para ${item.email}: a próxima análise será cobrada e falhará imediatamente, acionando o estorno automático.`)
+    }catch(err){
+      console.error(err)
+      setError('Não foi possível ativar o teste de estorno.')
+    }finally{
+      setTestArmingUid(null)
     }
   }
 
@@ -1722,6 +1774,7 @@ function WalletManager({user,onLogout,serviceDb,serviceFunctions}:{user:User;onL
     </div>
 
     {error&&<p className="error">{error}</p>}
+    {testMessage&&<p className="admin-test-message">{testMessage}</p>}
 
     <div className="subscriber-table-wrap">
       <table className="subscriber-table">
@@ -1737,6 +1790,7 @@ function WalletManager({user,onLogout,serviceDb,serviceFunctions}:{user:User;onL
                 <button className="sub-action deactivate" onClick={()=>changeStatus(item,'inativo')}>Desativar</button>
                 <button className="sub-action block" onClick={()=>changeStatus(item,'bloqueado')}>Bloquear</button>
                 <button className="sub-action" disabled={adjustingUid===item.uid} onClick={()=>openAdjustBalance(item)}>{adjustingUid===item.uid?'Ajustando...':'Ajustar saldo'}</button>
+                <button className="sub-action" disabled={testArmingUid===item.uid} onClick={()=>armTestFailure(item)}>{testArmingUid===item.uid?'Armando teste...':'Testar estorno'}</button>
                 <button className="sub-action delete" onClick={()=>removeWalletUser(item)}><Trash2 size={14}/> Apagar</button>
               </div>
             </td>
