@@ -20,15 +20,40 @@ export type WalletQuote = {
   priceCents: number
 }
 
+async function validatePdfBeforeCharge(file: File): Promise<number> {
+  try {
+    const bytes = await file.arrayBuffer()
+    const pdf = await PDFDocument.load(bytes, { ignoreEncryption: true })
+    const pages = pdf.getPages()
+    if (!pages.length) throw new Error('PDF_NO_READABLE_CONTENT')
+
+    const hasRenderableContent = pages.some(page => {
+      const node:any = (page as any).node
+      const contents = node?.Contents?.()
+      if (contents && String(contents).replace(/\s/g,'') !== '[]') return true
+      const resources = node?.Resources?.()
+      if (resources) {
+        const value = String(resources).replace(/\s/g,'')
+        if (value && value !== '<<>>') return true
+      }
+      return false
+    })
+
+    if (!hasRenderableContent) throw new Error('PDF_NO_READABLE_CONTENT')
+    return pages.length
+  } catch (error:any) {
+    if (String(error?.message || '').includes('PDF_NO_READABLE_CONTENT')) throw error
+    throw new Error('PDF_INVALID_OR_UNREADABLE')
+  }
+}
+
 function requireFunctions() {
   if (!functions) throw new Error('FIREBASE_FUNCTIONS_NOT_READY')
   return functions
 }
 
 export async function quoteAnalysis(file: File): Promise<WalletQuote> {
-  const bytes = await file.arrayBuffer()
-  const pdf = await PDFDocument.load(bytes, { ignoreEncryption: true })
-  const pageCount = pdf.getPageCount()
+  const pageCount = await validatePdfBeforeCharge(file)
 
   const call = httpsCallable(requireFunctions(), 'walletQuoteAnalysis')
   const result = await call({ pageCount })
@@ -72,6 +97,12 @@ export async function chargePiece(pieceType?: string, processNumber?: string, ex
     priceCents: Number(data?.priceCents || 0),
     balanceCents: Number(data?.balanceCents || 0)
   }
+}
+
+export async function consumeForcedAnalysisFailure(): Promise<boolean> {
+  const call = httpsCallable(requireFunctions(), 'walletConsumeTestFailure')
+  const result = await call({})
+  return Boolean((result.data as any)?.forceFailure)
 }
 
 export async function refundCharge(chargeId: string, reason: string): Promise<{ refunded: boolean; alreadyRefunded: boolean; balanceCents: number; refundId: string }> {
