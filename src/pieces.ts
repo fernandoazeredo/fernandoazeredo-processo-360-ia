@@ -410,7 +410,7 @@ export async function generateLegalPiece(report: AnalysisReport, pieceType: stri
   const safeSections = applyDeterministicPieceFields(applyDefenseSafeguards(hardenCorrectedSections(reviewed, claims), pieceType), professionalProfile, pieceDate)
 
   const promptVersion = [
-    `motor-b-v5:base-${basePromptDoc.source}-v${basePromptDoc.version}`,
+    `motor-b-v6:base-${basePromptDoc.source}-v${basePromptDoc.version}`,
     `piece-${specificPromptDoc.source}-v${specificPromptDoc.version}`,
     `validator-${validatorPromptDoc.source}-v${validatorPromptDoc.version}`,
     `reviewer-${reviewerPromptDoc.source}-v${reviewerPromptDoc.version}`
