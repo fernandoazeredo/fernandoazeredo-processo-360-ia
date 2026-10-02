@@ -68,6 +68,11 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
         run: node functions/scripts/publish-ambiental-v1.mjs
 
+      - name: Inicializar custos da carteira se ausentes
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
+        run: node functions/scripts/seed-wallet-pricing.mjs
+
       - name: Deploy das funções da carteira pré-paga
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
