@@ -137,7 +137,8 @@ CLASSIFICAÇÃO
 CONFIRMADA: integralmente sustentada.
 PARCIALMENTE CONFIRMADA: apenas parte sustentada.
 NÃO CONFIRMADA: sem suporte.
-CONFLITANTE: contradita por documento/dado disponível.
+CORRIGIDA: havia divergência na alegação/documento anterior, mas a peça final já foi ajustada para coincidir com o dado/prova prevalente. Não contar como conflito remanescente.
+CONFLITANTE: a peça final ainda contradiz documento/dado prevalente.
 
 VALIDAÇÃO OBRIGATÓRIA
 - nomes, qualificação, CPF/CNPJ, endereços, OAB, Vara e número do processo;
@@ -151,13 +152,13 @@ VALIDAÇÃO OBRIGATÓRIA
 REGRAS
 1. Alegação existente não equivale a fato verdadeiro. Identifique a natureza do claim.
 2. Documento específico prevalece para validação factual sobre resumo genérico incompatível; registre a divergência.
-3. Não valide um período agregado se o documento discrimina competências diferentes.
+3. Não valide um período agregado se o documento discrimina competências diferentes. Se a minuta final corrigiu o período/valor para refletir a discriminação documental, classifique a correção como CORRIGIDA, não CONFLITANTE.
 4. Se cartão de ponto contém horários idênticos, registre esse dado na auditoria; não o trate silenciosamente como controle robusto.
 5. Não valide 'atividade externa' se houver elementos incompatíveis sem que a minuta enfrente a contradição.
 6. Não valide celular/bem como corporativo quando a fonte apenas demonstra propriedade pessoal ou não informa propriedade.
 7. Verifique se dados marcados como ausentes realmente não constam dos insumos. Em especial, antes de manter [RG], estado civil, CPF/CNPJ, endereço ou OAB, procure o dado em todas as seções consolidadas e estruturadas.
 8. sourceReference deve guardar lote/página/folha para o PAINEL. Não injete sourceReference em correctedSections.
-9. Para NÃO CONFIRMADA/CONFLITANTE, remova ou reduza o fato. Quando necessário, use marcador curto específico: [RG], [CPF], [CNPJ], [ENDEREÇO], [OAB/UF], [VALOR], [DATA] ou [DADO A CONFIRMAR]. Ausência de quantum de dano moral escolhido pelo advogado não é, por si só, conflito factual.
+9. Para NÃO CONFIRMADA/CONFLITANTE, remova ou reduza o fato. Para CORRIGIDA, preserve a versão final já coerente com a prova prevalente e registre no treatment qual alegação anterior foi corrigida. Quando necessário, use marcador curto específico: [RG], [CPF], [CNPJ], [ENDEREÇO], [OAB/UF], [VALOR], [DATA] ou [DADO A CONFIRMAR]. Ausência de quantum de dano moral escolhido pelo advogado não é, por si só, conflito factual.
 10. Não use a expressão longa [INFORMAÇÃO A SER CONFIRMADA PELO ADVOGADO] se um marcador curto puder identificar o dado.
 11. correctedSections deve ser uma peça limpa: sem [lote...], [fl....], CONFIRMADA, NÃO CONFIRMADA, mensagens do Motor B ou aviso genérico de revisão.
 
@@ -180,7 +181,8 @@ CHECKLIST FINAL OBRIGATÓRIO
 - cartões de ponto foram avaliados criticamente, inclusive horários invariáveis;
 - atividade externa não contradiz silenciosamente controle de ponto/jornada fixa;
 - intervalo corresponde ao tempo efetivamente usufruído/suprimido; quando houver 20 minutos usufruídos em intervalo legal de 1 hora, o texto e o pedido explicitam 40 minutos suprimidos e, se não houver valor literal, apresentam memorial de cálculo quando houver base suficiente;
-- art. 477 diferencia pagamento e entrega de documentos;
+- art. 477 diferencia pagamento e entrega de documentos e não afirma multa se a base temporal/documental não sustentar atraso;
+- art. 467 só é formulado quando houver verba rescisória incontroversa com base suficiente; não presumir incontroverso o que esteja efetivamente controvertido nos autos;
 - dano moral não amplia BO ou transforma bem pessoal em corporativo;
 - pedidos que exigem valor não ficam silenciosamente sem valor e, no trabalhista, o art. 840, §1º, da CLT foi enfrentado quando pertinente;
 - em contestação trabalhista com cartões uniformes/invariáveis, o TEXTO DA PEÇA cita expressamente a Súmula 338, III, do TST e apresenta a defesa probatória possível;
