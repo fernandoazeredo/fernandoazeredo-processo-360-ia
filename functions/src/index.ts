@@ -661,7 +661,10 @@ function analysisPriceFromPages(pageCount: number, pricing: WalletPricing) {
     throw new HttpsError('invalid-argument', 'Quantidade de páginas inválida.')
   }
   if (pricing.analysisMinimumCostCents <= 0 || pricing.analysisCostPerPageCents <= 0) {
-    throw new HttpsError('failed-precondition', 'A tabela de custos ainda não foi configurada.')
+    throw new HttpsError(
+      'failed-precondition',
+      'WALLET_PRICING_NOT_CONFIGURED: configure o custo mínimo e o custo por página na Área ADM.'
+    )
   }
   const minimumPriceCents = Math.ceil(pricing.analysisMinimumCostCents * pricing.marginMultiplier)
   const pagePriceCents = Math.ceil(pageCount * pricing.analysisCostPerPageCents * pricing.marginMultiplier)
@@ -756,7 +759,7 @@ export const walletQuotePiece = onCall(
 
     const pricing = await readWalletPricing()
     if (pricing.pieceCostCents <= 0) {
-      throw new HttpsError('failed-precondition', 'O custo da peça ainda não foi configurado.')
+      throw new HttpsError('failed-precondition', 'WALLET_PRICING_NOT_CONFIGURED: configure o custo da peça na Área ADM.')
     }
 
     return { priceCents: Math.ceil(pricing.pieceCostCents * pricing.marginMultiplier) }
@@ -770,7 +773,7 @@ export const walletChargePiece = onCall(
 
     const pricing = await readWalletPricing()
     if (pricing.pieceCostCents <= 0) {
-      throw new HttpsError('failed-precondition', 'O custo da peça ainda não foi configurado.')
+      throw new HttpsError('failed-precondition', 'WALLET_PRICING_NOT_CONFIGURED: configure o custo da peça na Área ADM.')
     }
     const priceCents = Math.ceil(pricing.pieceCostCents * pricing.marginMultiplier)
     const expectedPriceCents = Math.trunc(Number(request.data?.expectedPriceCents || 0))

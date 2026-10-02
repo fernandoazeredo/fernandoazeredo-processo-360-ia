@@ -336,8 +336,13 @@ function App() {
       .catch((error:any)=>{
         if(cancelled) return
         const message=String(error?.message||'')
-        if(message.includes('tabela de preços') || message.includes('failed-precondition')) {
-          setQuoteError('Serviço temporariamente indisponível.')
+        console.error('[Processo 360 IA][Carteira] Falha ao cotar análise', {
+          code: error?.code || null,
+          message,
+          details: error?.details || null
+        })
+        if(message.includes('WALLET_PRICING_NOT_CONFIGURED') || message.includes('tabela de custos') || message.includes('failed-precondition')) {
+          setQuoteError('Preço não configurado. Serviço temporariamente indisponível.')
         } else {
           setQuoteError('Não foi possível calcular o valor desta análise.')
         }
@@ -984,8 +989,13 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
       .catch((error:any)=>{
         if(cancelled) return
         const message=String(error?.message||'')
-        setPieceQuoteError(message.includes('preço') || message.includes('failed-precondition')
-          ? 'Serviço temporariamente indisponível.'
+        console.error('[Processo 360 IA][Carteira] Falha ao cotar peça', {
+          code: error?.code || null,
+          message,
+          details: error?.details || null
+        })
+        setPieceQuoteError(message.includes('WALLET_PRICING_NOT_CONFIGURED') || message.includes('failed-precondition')
+          ? 'Preço não configurado. Serviço temporariamente indisponível.'
           : 'Não foi possível consultar o preço da peça.')
       })
     return ()=>{cancelled=true}
