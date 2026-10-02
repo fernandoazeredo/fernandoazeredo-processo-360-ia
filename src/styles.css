@@ -3057,7 +3057,7 @@ select:focus,input:focus,textarea:focus{
   padding:18px 20px;
   border:1px solid var(--border);
   border-radius:16px;
-  background:var(--card);
+  background:var(--surface);
 }
 .wallet-info-card h2{margin:0 0 10px}
 .wallet-info-card h3{margin:12px 0 8px}
@@ -3088,7 +3088,8 @@ select:focus,input:focus,textarea:focus{
   display:grid;
   place-items:center;
   padding:20px;
-  background:rgba(0,0,0,.58);
+  background:rgba(2,8,23,.82);
+  backdrop-filter:blur(4px);
 }
 .wallet-adjust-panel{
   width:min(520px,100%);
@@ -3135,3 +3136,20 @@ select:focus,input:focus,textarea:focus{
 .status-corrigida{
   border-left:3px solid currentColor;
 }
+
+.wallet-adjust-panel{
+  opacity:1;
+  isolation:isolate;
+}
+.wallet-adjust-panel .form-actions{
+  display:flex;
+  gap:10px;
+  justify-content:flex-end;
+  margin-top:16px;
+}
+.wallet-adjust-panel .form-actions .primary-button,
+.wallet-adjust-panel .form-actions .secondary-button{
+  width:auto;
+  margin-top:0;
+}
+.admin-top-link{margin-top:0}

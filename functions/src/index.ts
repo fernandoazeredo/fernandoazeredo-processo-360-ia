@@ -851,12 +851,13 @@ export const adminAdjustWallet = onCall(
     const deltaCents = Math.trunc(Number(request.data?.deltaCents || 0))
     const reason = String(request.data?.reason || '').trim()
     const adjustmentType = String(request.data?.adjustmentType || '').trim()
+    const adjustmentDirection = String(request.data?.adjustmentDirection || '').trim()
 
     if (!uid || !Number.isFinite(deltaCents) || deltaCents === 0) {
       throw new HttpsError('invalid-argument', 'Informe usuário e valor do ajuste.')
     }
     if (!['recarga', 'ajuste_admin'].includes(adjustmentType)) {
-      throw new HttpsError('invalid-argument', 'Selecione o tipo: Recarga ou Ajuste ADM.')
+      throw new HttpsError('invalid-argument', 'Selecione o tipo: Recarga ou Ajuste administrativo.')
     }
     if (adjustmentType === 'recarga') {
       if (deltaCents < 0) throw new HttpsError('invalid-argument', 'Recarga não pode ser negativa.')
@@ -873,6 +874,19 @@ export const adminAdjustWallet = onCall(
           .map(value => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100))
           .join(', ')
         throw new HttpsError('invalid-argument', `RECARGA_VALOR_INVALIDO: use exatamente um dos pacotes configurados: ${labels}.`)
+      }
+    } else {
+      if (!['credit', 'debit'].includes(adjustmentDirection)) {
+        throw new HttpsError('invalid-argument', 'No ajuste administrativo, selecione Crédito ou Débito.')
+      }
+      if (!reason) {
+        throw new HttpsError('invalid-argument', 'A observação é obrigatória no ajuste administrativo.')
+      }
+      if (adjustmentDirection === 'credit' && deltaCents < 0) {
+        throw new HttpsError('invalid-argument', 'Crédito administrativo deve usar valor positivo.')
+      }
+      if (adjustmentDirection === 'debit' && deltaCents > 0) {
+        throw new HttpsError('invalid-argument', 'Débito administrativo deve usar valor negativo.')
       }
     }
 
@@ -898,13 +912,14 @@ export const adminAdjustWallet = onCall(
 
       tx.set(ledgerRef, {
         uid,
-        operation: adjustmentType === 'recarga' ? 'recarga' : 'ajuste_saldo',
+        operation: adjustmentType === 'recarga' ? 'recarga' : (deltaCents > 0 ? 'ajuste_saldo_credito' : 'ajuste_saldo_debito'),
         direction: deltaCents > 0 ? 'credit' : 'debit',
         amountCents: Math.abs(deltaCents),
         balanceBeforeCents: before,
         balanceAfterCents: after,
         reason: reason || null,
         adjustmentType,
+        adjustmentDirection: adjustmentType === 'recarga' ? 'credit' : adjustmentDirection,
         performedByUid: request.auth.uid,
         performedByEmail: callerEmail,
         createdAt: FieldValue.serverTimestamp()

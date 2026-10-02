@@ -100,6 +100,8 @@ function walletOperationLabel(operation:string) {
     recarga_admin: 'Recarga',
     ajuste_saldo: 'Ajuste de saldo',
     ajuste_admin: 'Ajuste de saldo',
+    ajuste_saldo_credito: 'Ajuste adm (crédito)',
+    ajuste_saldo_debito: 'Ajuste adm (débito)',
     analise_processo: 'Análise',
     geracao_peca: 'Peça jurídica',
     estorno: 'Estorno'
@@ -473,7 +475,8 @@ function App() {
             <span className="wallet-balance">Saldo: <b>{formatBRL(wallet?.balanceCents || 0)}</b></span>
             <button className="buy-credits-button" type="button" onClick={()=>setWalletTopupOpen(true)}><CreditCard size={17}/> Comprar créditos</button>
           </>}
-          <button className="icon-button" onClick={() => setDark(!dark)} aria-label="Alternar tema">
+          {appUser.email===ADMIN_EMAIL && !adminClientView && <button className="secondary-button compact admin-top-link" onClick={()=>setAdminOpen(true)}>Área ADM</button>}
+                    <button className="icon-button" onClick={() => setDark(!dark)} aria-label="Alternar tema">
             {dark ? <Sun size={19} /> : <Moon size={19} />}
           </button>
           <button className="secondary-button compact" onClick={() => auth && signOut(auth)}>Sair</button>
@@ -487,7 +490,7 @@ function App() {
             <div className="wallet-low-warning">Saldo baixo: {formatBRL(wallet?.balanceCents||0)}. Considere comprar créditos.</div>}
           <h3>Como funcionam seus créditos</h3>
           <p>Seus créditos pré-pagos são usados para pagar o processamento da análise e da peça antes da execução. O valor da operação aparece antes de você confirmar, e o saldo é atualizado após cada uso. Em caso de falha na análise, o valor é estornado.</p>
-          <p>O saldo pode levar alguns minutos para refletir uma nova recarga ou uso. Após o pagamento, o crédito é lançado manualmente e pode levar até 24 horas para aparecer.</p>
+          <p>O saldo pode levar alguns minutos para refletir uma nova recarga, uso ou ajuste administrativo. Após o pagamento, a recarga é lançada manualmente e pode levar até 24 horas para aparecer. Todo ajuste administrativo fica identificado no extrato.</p>
           <p>Os créditos não expiram mensalmente e não são reembolsáveis após o uso. Para dúvidas, consulte o extrato da carteira.</p>
         </section>}
         <section className="hero">
@@ -729,6 +732,19 @@ async function ensureCurrentProductionBuild() {
   return true
 }
 
+function pieceHasPending(piece: LegalPieceDraft) {
+  const text = piece.sections.map(section => `${section.title}\n${section.content}`).join('\n')
+  return /⚠\s*REVISAR|\[(?:VALOR|RG|NÚMERO|NUMERO|CEP|CPF|CNPJ|ENDEREÇO|DATA|DADO A CONFIRMAR)[^\]]*\]/i.test(text)
+    || piece.validation.unconfirmed > 0
+    || piece.validation.conflicting > 0
+}
+
+function normalizeWordSignature(text: string) {
+  return String(text || '')
+    .replace(/\s+(Advogado(?:\(a\))?\s*-?\s*OAB\/[A-Z]{2}\s*[\d.\-]+)/gi, '\n$1')
+    .replace(/(OAB\/[A-Z]{2}\s*[\d.\-]+)(?=[A-ZÁÉÍÓÚÂÊÔÃÕÇ])/g, '$1\n')
+}
+
 function buildPieceFileName(report: AnalysisReport, pieceType: string) {
   const process = report.processNumber && report.processNumber !== 'Informação não constante nos dados fornecidos'
     ? report.processNumber
@@ -840,6 +856,11 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
     }
   }
 
+  if (pieceHasPending(piece)) {
+    drawWrapped('RASCUNHO DE PEÇA PROCESSUAL - Há pendências que exigem revisão jurídica antes do protocolo.', boldFont, 10, 15, { centered: true })
+    y -= 10
+  }
+
   // Título da peça, sem prompt, modelo, build ou qualquer outro dado técnico.
   drawWrapped(piece.title, boldFont, titleSize, 20, { centered: true })
   y -= 14
@@ -883,10 +904,10 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
 }
 
 function exportPieceAsWord(report: AnalysisReport, piece: LegalPieceDraft) {
-  const banner = 'RASCUNHO DE PEÇA PROCESSUAL — Revisão jurídica por advogado é obrigatória antes de qualquer protocolo ou utilização processual.'
+  const banner = 'RASCUNHO DE PEÇA PROCESSUAL — Há pendências que exigem revisão jurídica antes do protocolo.'
   const sections = piece.sections
     .filter(section => section.title.trim() || section.content.trim())
-    .map(section => `<section><h2>${escapeHtml(section.title)}</h2><div>${escapeHtml(section.content).replace(/\n/g, '<br>')}</div></section>`)
+    .map(section => `<section><h2>${escapeHtml(section.title)}</h2><div>${escapeHtml(normalizeWordSignature(section.content)).replace(/\n/g, '<br>')}</div></section>`)
     .join('')
 
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>
@@ -1219,6 +1240,11 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
           </div>
           {(piece.validation.unconfirmed > 0 || piece.validation.conflicting > 0 || (piece.validation.corrected||0) > 0) &&
             <p>Itens “Corrigidos” representam alegações anteriores ajustadas pela peça para coincidir com o relatório/prova prevalente. “Conflitante” fica reservado para divergência que ainda permanece na peça final.</p>}
+          {(() => {
+            const text=piece.sections.map(section=>`${section.title} ${section.content}`).join(' ')
+            const pending=Array.from(new Set((text.match(/\[(?:NÚMERO|NUMERO|CEP|RG|CPF|CNPJ|ENDEREÇO|DATA|VALOR)[^\]]*\]/gi)||[])))
+            return pending.length ? <p><b>Pendências de qualificação/revisão:</b> {pending.join(' · ')}</p> : null
+          })()}
         </div>
 
         <div className="piece-document">
@@ -1468,6 +1494,7 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
   const [adjustingUid,setAdjustingUid]=useState<string|null>(null)
   const [adjustingItem,setAdjustingItem]=useState<WalletRecord|null>(null)
   const [adjustmentType,setAdjustmentType]=useState<'recarga'|'ajuste_admin'>('recarga')
+  const [adjustmentDirection,setAdjustmentDirection]=useState<'credit'|'debit'>('credit')
   const [adjustmentValue,setAdjustmentValue]=useState('')
   const [adjustmentReason,setAdjustmentReason]=useState('')
   const [config,setConfig]=useState<WalletConfig>({
@@ -1514,6 +1541,7 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
 
   function openAdjustBalance(item:WalletRecord){
     setAdjustmentType('recarga')
+    setAdjustmentDirection('credit')
     setAdjustmentValue('')
     setAdjustmentReason('')
     setAdjustingItem(item)
@@ -1526,17 +1554,24 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
       setError('Informe um valor válido diferente de zero. Use vírgula ou ponto como separador decimal.')
       return
     }
-    const cents=Math.round(value*100)
+    const rawCents=Math.round(Math.abs(value)*100)
     const packages=[config.package1Cents,config.package2Cents,config.package3Cents]
       .map(item=>Number(item||0))
       .filter(item=>item>0)
-    if(adjustmentType==='recarga' && !packages.includes(cents)){
+    if(adjustmentType==='recarga' && !packages.includes(rawCents)){
       setError(`Recarga inválida. Escolha exatamente um dos pacotes: ${packages.map(formatBRL).join(', ')}.`)
       return
     }
+    if(adjustmentType==='ajuste_admin' && !adjustmentReason.trim()){
+      setError('A observação é obrigatória no ajuste administrativo.')
+      return
+    }
+    const cents=adjustmentType==='recarga'
+      ? rawCents
+      : adjustmentDirection==='debit' ? -rawCents : rawCents
     const after=(adjustingItem.balanceCents||0)+cents
     if(after<0){
-      setError('O ajuste deixaria o saldo negativo.')
+      setError('Débito não permitido: o ajuste deixaria o saldo abaixo de zero.')
       return
     }
     setAdjustingUid(adjustingItem.uid)
@@ -1547,7 +1582,8 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
         uid:adjustingItem.uid,
         deltaCents:cents,
         reason:adjustmentReason.trim(),
-        adjustmentType
+        adjustmentType,
+        adjustmentDirection: adjustmentType==='recarga' ? 'credit' : adjustmentDirection
       })
       setAdjustingItem(null)
       setAdjustmentValue('')
@@ -1708,7 +1744,7 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
         <h3>Ajustar saldo</h3>
         <p><b>{adjustingItem.email}</b></p>
         <label>Tipo
-          <select value={adjustmentType} onChange={e=>{setAdjustmentType(e.target.value as 'recarga'|'ajuste_admin');setAdjustmentValue('')}}>
+          <select value={adjustmentType} onChange={e=>{setAdjustmentType(e.target.value as 'recarga'|'ajuste_admin');setAdjustmentDirection('credit');setAdjustmentValue('');setAdjustmentReason('')}}>
             <option value="recarga">Recarga</option>
             <option value="ajuste_admin">Ajuste ADM</option>
           </select>
@@ -1718,15 +1754,23 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
               <input value={adjustmentValue} onChange={e=>setAdjustmentValue(e.target.value)} placeholder="Ex.: 40,00 ou 40.00"/>
               <small>Pacotes permitidos: {[config.package1Cents,config.package2Cents,config.package3Cents].filter(v=>Number(v)>0).map(v=>formatBRL(Number(v))).join(' · ')}</small>
             </label>
-          : <label>Valor do ajuste (+ ou −)
-              <input value={adjustmentValue} onChange={e=>setAdjustmentValue(e.target.value)} placeholder="Ex.: 10,50 ou -5.00"/>
-            </label>}
+          : <>
+            <label>Operação
+              <select value={adjustmentDirection} onChange={e=>setAdjustmentDirection(e.target.value as 'credit'|'debit')}>
+                <option value="credit">Crédito</option>
+                <option value="debit">Débito</option>
+              </select>
+            </label>
+            <label>Valor do ajuste
+              <input value={adjustmentValue} onChange={e=>setAdjustmentValue(e.target.value)} placeholder="Ex.: 10,50 ou 10.50"/>
+            </label>
+          </>}
         <div className="wallet-adjust-preview">
           <span>Saldo atual: <b>{formatBRL(adjustingItem.balanceCents||0)}</b></span>
-          <span>Saldo novo: <b>{formatBRL((adjustingItem.balanceCents||0)+(Number.isFinite(parseCurrencyInput(adjustmentValue))?Math.round(parseCurrencyInput(adjustmentValue)*100):0))}</b></span>
+          <span>Saldo novo: <b>{formatBRL((adjustingItem.balanceCents||0)+(Number.isFinite(parseCurrencyInput(adjustmentValue)) ? (adjustmentType==='ajuste_admin' && adjustmentDirection==='debit' ? -Math.round(Math.abs(parseCurrencyInput(adjustmentValue))*100) : Math.round(Math.abs(parseCurrencyInput(adjustmentValue))*100)) : 0))}</b></span>
         </div>
-        <label>Observação
-          <input value={adjustmentReason} onChange={e=>setAdjustmentReason(e.target.value)} placeholder="Opcional"/>
+        <label>Observação {adjustmentType==='ajuste_admin' ? '(obrigatória)' : '(opcional)'}
+          <input value={adjustmentReason} onChange={e=>setAdjustmentReason(e.target.value)} placeholder={adjustmentType==='ajuste_admin' ? 'Informe o motivo do ajuste' : 'Opcional'}/>
         </label>
         <div className="form-actions">
           <button type="button" className="secondary-button compact" onClick={()=>setAdjustingItem(null)}>Cancelar</button>

@@ -42,6 +42,12 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    match /aiUsage/{entryId} {
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow get, list: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow update, delete: if false;
+    }
+
     match /processos/{processoId} {
       allow create: if signedIn()
         && request.resource.data.ownerUid == request.auth.uid;
