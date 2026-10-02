@@ -3204,15 +3204,17 @@ select:focus,input:focus,textarea:focus{
 .topbar-consumption{
   display:flex;
   flex-direction:column;
-  max-width:430px;
-  font-size:.78rem;
-  line-height:1.2;
+  max-width:460px;
+  font-size:.88rem;
+  line-height:1.25;
+  font-weight:650;
   white-space:normal;
 }
 .topbar-consumption small{
   display:block;
-  opacity:.78;
-  font-size:.72rem;
+  opacity:.82;
+  font-size:.79rem;
+  font-weight:600;
 }
 @media(max-width:900px){
   .topbar-consumption{max-width:300px}
@@ -3223,7 +3225,21 @@ select:focus,input:focus,textarea:focus{
     order:3;
     flex-basis:100%;
     max-width:none;
-    font-size:.74rem;
+    font-size:.82rem;
   }
-  .topbar-consumption small{font-size:.69rem}
+  .topbar-consumption small{font-size:.75rem}
+}
+
+.sub-action.test-armed{
+  border-color:#2aa866;
+  background:rgba(42,168,102,.12);
+  color:#16854e;
+  cursor:default;
+}
+.ai-usage-admin{display:grid;gap:14px}
+.ai-usage-table{min-width:980px}
+.ai-usage-table td:last-child{
+  max-width:360px;
+  white-space:normal;
+  word-break:break-word;
 }
