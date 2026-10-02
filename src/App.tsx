@@ -418,9 +418,13 @@ function App() {
         document.getElementById('analysis-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       }, 150)
     } catch (error: any) {
+      let refundConfirmed = false
+      let refundedCents = 0
       if (chargeId) {
         try {
-          await refundCharge(chargeId, 'Análise não concluída — valor devolvido.')
+          const refund = await refundCharge(chargeId, 'Análise não concluída — valor devolvido.')
+          refundConfirmed = Boolean(refund.refunded || refund.alreadyRefunded)
+          refundedCents = Number(billableQuote?.priceCents || 0)
         } catch (refundError) {
           console.error('[Processo 360 IA] Falha ao estornar cobrança da análise.', refundError)
         }
@@ -434,7 +438,9 @@ function App() {
       }
       console.error('[Processo 360 IA] Falha na análise', message, error)
       if (message.includes('TEST_FORCED_ANALYSIS_FAILURE')) {
-        setAnalysisError('Falha de teste executada após a cobrança. O valor foi estornado automaticamente e deve aparecer no extrato.')
+        setAnalysisError(refundConfirmed
+          ? `Não foi possível concluir a análise. O valor de ${formatBRL(refundedCents)} foi devolvido ao seu saldo.`
+          : 'Não foi possível concluir a análise. A devolução automática não pôde ser confirmada; consulte o extrato e contate o administrador.')
       } else if (message.includes('PDF_NO_READABLE_CONTENT') || message.includes('PDF_INVALID_OR_UNREADABLE')) {
         setAnalysisError('Arquivo sem conteúdo legível, nada foi cobrado.')
       } else if (message.includes('ANALYSIS_PERSPECTIVE_MISMATCH')) {
@@ -466,7 +472,9 @@ function App() {
       } else if (message.includes('FIREBASE_AI_NOT_READY')) {
         setAnalysisError('O Firebase AI Logic ainda não está configurado corretamente para o aplicativo.')
       } else {
-        setAnalysisError('Não foi possível concluir a análise. ' + (message || 'Verifique a configuração do Gemini e tente novamente.'))
+        setAnalysisError(refundConfirmed
+          ? `Não foi possível concluir a análise. O valor de ${formatBRL(refundedCents)} foi devolvido ao seu saldo.`
+          : 'Não foi possível concluir a análise. ' + (message || 'Verifique a configuração do Gemini e tente novamente.'))
       }
     } finally {
       setProcessing(false)
@@ -1110,22 +1118,28 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
       setPieceStage('Rascunho validado')
       window.setTimeout(() => document.getElementById('piece-review')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
     } catch (error: any) {
+      let refundConfirmed = false
+      let refundedCents = 0
       if (chargeId) {
         try {
-          await refundCharge(chargeId, 'Peça jurídica não concluída — valor devolvido.')
+          const refund = await refundCharge(chargeId, 'Peça jurídica não concluída — valor devolvido.')
+          refundConfirmed = Boolean(refund.refunded || refund.alreadyRefunded)
+          refundedCents = Number(pieceQuoteCents || 0)
         } catch (refundError) {
           console.error('[Processo 360 IA][Motor B] Falha ao estornar cobrança da peça.', refundError)
         }
       }
       console.error('[Processo 360 IA][Motor B] Falha', error)
       const message=String(error?.message||'')
-      setPieceError(message.includes('WALLET_INSUFFICIENT') || message.includes('Saldo insuficiente') || message.includes('saldo insuficiente')
-        ? 'Saldo insuficiente para gerar a peça jurídica. Adicione saldo à carteira.'
-        : message.includes('WALLET_PRICE_CHANGED')
-          ? 'O preço da peça foi atualizado. Feche e abra novamente esta etapa para consultar o valor atual.'
-        : message.includes('PIECE_REPLICA_WITHOUT_DEFENSE')
-          ? 'Não é possível gerar Réplica / Manifestação à contestação porque o relatório não demonstra contestação ou defesa efetivamente apresentada nos autos.'
-          : 'Não foi possível gerar e validar o rascunho. ' + (message || 'Tente novamente.'))
+      setPieceError(refundConfirmed
+        ? `Não foi possível concluir a peça jurídica. O valor de ${formatBRL(refundedCents)} foi devolvido ao seu saldo.`
+        : message.includes('WALLET_INSUFFICIENT') || message.includes('Saldo insuficiente') || message.includes('saldo insuficiente')
+          ? 'Saldo insuficiente para gerar a peça jurídica. Adicione saldo à carteira.'
+          : message.includes('WALLET_PRICE_CHANGED')
+            ? 'O preço da peça foi atualizado. Feche e abra novamente esta etapa para consultar o valor atual.'
+          : message.includes('PIECE_REPLICA_WITHOUT_DEFENSE')
+            ? 'Não é possível gerar Réplica / Manifestação à contestação porque o relatório não demonstra contestação ou defesa efetivamente apresentada nos autos.'
+            : 'Não foi possível gerar e validar o rascunho. ' + (message || 'Tente novamente.'))
     } finally {
       setPieceBusy(false)
     }
