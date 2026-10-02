@@ -46,6 +46,7 @@ type WalletLedgerEntry = {
   reason?: string | null
   metadata?: { pageCount?: number; fileName?: string | null; pieceType?: string | null; processNumber?: string | null }
   relatedOperation?: string | null
+  relatedChargeId?: string | null
 }
 
 
