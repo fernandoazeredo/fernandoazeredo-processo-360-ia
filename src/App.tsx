@@ -8,7 +8,7 @@ import { analyzeUploadedProcess } from './ai'
 import type { AnalysisReport } from './ai'
 import { confirmClaimInOriginal, generateLegalPiece, pieceTypeOptions, suggestPieceType } from './pieces'
 import type { LegalPieceDraft, PieceClaim, ProfessionalProfile } from './pieces'
-import { chargeAnalysis, chargePiece, formatBRL, quoteAnalysis, quotePiece } from './wallet'
+import { chargeAnalysis, chargePiece, formatBRL, quoteAnalysis, quotePiece, refundCharge } from './wallet'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import type { WalletRecord, WalletStatus } from './wallet'
 
@@ -29,6 +29,8 @@ type WalletConfig = {
   package3Cents: number
   package3Url: string
   paymentInstructions?: string
+  lowBalanceWarningCents: number
+  supportContact?: string
 }
 
 type WalletLedgerEntry = {
@@ -41,6 +43,8 @@ type WalletLedgerEntry = {
   balanceAfterCents?: number
   createdAt?: any
   reason?: string | null
+  metadata?: { pageCount?: number; fileName?: string | null; pieceType?: string | null; processNumber?: string | null }
+  relatedOperation?: string | null
 }
 
 
@@ -87,6 +91,28 @@ const promptPurposes = [
 const promptPerspectives: Record<PromptArea, string[]> = {
   Global: ['Global'],
   ...perspectives
+}
+
+function walletOperationLabel(operation:string) {
+  const labels:Record<string,string> = {
+    recarga: 'Recarga',
+    recarga_admin: 'Recarga',
+    ajuste_saldo: 'Ajuste de saldo',
+    ajuste_admin: 'Ajuste de saldo',
+    analise_processo: 'Análise',
+    geracao_peca: 'Peça jurídica',
+    estorno: 'Estorno'
+  }
+  return labels[operation] || 'Movimentação'
+}
+
+function parseCurrencyInput(raw:string) {
+  const value=String(raw||'').trim()
+  if(!value) return NaN
+  const normalized=value.includes(',')
+    ? value.replace(/\./g,'').replace(',','.')
+    : value
+  return Number(normalized)
 }
 
 const stages = [
@@ -218,7 +244,7 @@ function App() {
   const [quoteBusy, setQuoteBusy] = useState(false)
   const [quoteError, setQuoteError] = useState('')
   const [walletLedger, setWalletLedger] = useState<WalletLedgerEntry[]>([])
-  const [walletConfig, setWalletConfig] = useState<WalletConfig>({analysisMinimumCents:0,analysisPerPageCents:0,piecePriceCents:0,package1Cents:4000,package1Url:'https://payment-link-v3.ton.com.br/pl_L4oBjJNOkKyEJLGCrvCjO31nA9pG78db',package2Cents:8000,package2Url:'https://payment-link-v3.ton.com.br/pl_4n9ELgN872OXmzD9cyT1RMvDdBbxzGaj',package3Cents:12000,package3Url:'https://payment-link-v3.ton.com.br/pl_1wy7Jor82XxB8OEULRIqGdGALMQKzY4N',paymentInstructions:''})
+  const [walletConfig, setWalletConfig] = useState<WalletConfig>({analysisMinimumCents:0,analysisPerPageCents:0,piecePriceCents:0,package1Cents:4000,package1Url:'https://payment-link-v3.ton.com.br/pl_L4oBjJNOkKyEJLGCrvCjO31nA9pG78db',package2Cents:8000,package2Url:'https://payment-link-v3.ton.com.br/pl_4n9ELgN872OXmzD9cyT1RMvDdBbxzGaj',package3Cents:12000,package3Url:'https://payment-link-v3.ton.com.br/pl_1wy7Jor82XxB8OEULRIqGdGALMQKzY4N',paymentInstructions:'',lowBalanceWarningCents:1000,supportContact:''})
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
@@ -310,7 +336,7 @@ function App() {
         if(cancelled) return
         const message=String(error?.message||'')
         if(message.includes('tabela de preços') || message.includes('failed-precondition')) {
-          setQuoteError('O preço desta análise ainda não foi configurado.')
+          setQuoteError('Serviço temporariamente indisponível.')
         } else {
           setQuoteError('Não foi possível calcular o valor desta análise.')
         }
@@ -336,6 +362,7 @@ function App() {
     setProcessingStage(stages[0])
     setProcessing(true)
 
+    let chargeId = ''
     try {
       let billableQuote = quote
       if (appUser?.email !== ADMIN_EMAIL) {
@@ -346,6 +373,8 @@ function App() {
         if (wallet.balanceCents < billableQuote.priceCents) {
           throw new Error('WALLET_INSUFFICIENT')
         }
+        const charge = await chargeAnalysis(billableQuote.pageCount, file.name)
+        chargeId = charge.chargeId
       }
 
       const report = await analyzeUploadedProcess(file, area, perspective, (value, stage) => {
@@ -353,15 +382,18 @@ function App() {
         setProcessingStage(stage)
       })
 
-      if (appUser?.email !== ADMIN_EMAIL && billableQuote) {
-        await chargeAnalysis(billableQuote.pageCount)
-      }
-
       setAnalysis(report)
       window.setTimeout(() => {
         document.getElementById('analysis-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       }, 150)
     } catch (error: any) {
+      if (chargeId) {
+        try {
+          await refundCharge(chargeId, 'Falha na análise antes da conclusão.')
+        } catch (refundError) {
+          console.error('[Processo 360 IA] Falha ao estornar cobrança da análise.', refundError)
+        }
+      }
       const rawMessage = error?.message ?? error
       let message = ''
       if (typeof rawMessage === 'string') message = rawMessage
@@ -439,6 +471,15 @@ function App() {
       </header>
 
       <main>
+        {appUser.email !== ADMIN_EMAIL && <section className="wallet-info-card">
+          <h2>Créditos disponíveis</h2>
+          {(wallet?.balanceCents||0) < Number(walletConfig.lowBalanceWarningCents||1000) &&
+            <div className="wallet-low-warning">Saldo baixo: {formatBRL(wallet?.balanceCents||0)}. Considere comprar créditos.</div>}
+          <h3>Como funcionam seus créditos</h3>
+          <p>Seus créditos pré-pagos são usados para pagar o processamento da análise e da peça antes da execução. O valor da operação aparece antes de você confirmar, e o saldo é atualizado após cada uso. Em caso de falha na análise, o valor é estornado.</p>
+          <p>O saldo pode levar alguns minutos para refletir uma nova recarga ou uso. Após o pagamento, o crédito é lançado manualmente e pode levar até 24 horas para aparecer.</p>
+          <p>Os créditos não expiram mensalmente e não são reembolsáveis após o uso. Para dúvidas, consulte o extrato da carteira.</p>
+        </section>}
         <section className="hero">
           <span className="eyebrow"><BrainCircuit size={16} /> Inteligência jurídica especializada</span>
           <h1>O processo completo.<br /><em>Analisado por inteiro.</em></h1>
@@ -473,7 +514,7 @@ function App() {
               ? <span>Calculando o valor da análise...</span>
               : quote
                 ? <>
-                    <div><small>Preço desta operação</small><strong>{formatBRL(quote.priceCents)}</strong><span>{quote.pageCount} página(s)</span></div>
+                    <div><small>Esta operação custa</small><strong>{formatBRL(quote.priceCents)}</strong><span>{quote.pageCount} página(s)</span></div>
                     <div><small>Seu saldo</small><strong>{formatBRL(wallet?.balanceCents || 0)}</strong></div>
                     <div><small>Saldo após a operação</small><strong>{formatBRL((wallet?.balanceCents || 0) - quote.priceCents)}</strong></div>
                     {(wallet?.balanceCents || 0) < quote.priceCents &&
@@ -500,11 +541,16 @@ function App() {
         {appUser.email !== ADMIN_EMAIL && walletLedger.length > 0 && <details className="wallet-statement">
           <summary>Extrato da carteira</summary>
           <div className="wallet-statement-list">
-            {walletLedger.slice(0,20).map(entry=><div key={entry.id} className="wallet-statement-row">
-              <span>{entry.operation.replace(/_/g,' ')}</span>
+            {walletLedger.slice(0,30).map(entry=><div key={entry.id} className={`wallet-statement-row ${entry.direction==='credit'?'wallet-entry-credit':entry.direction==='debit'?'wallet-entry-debit':''}`}>
+              <span className="wallet-entry-type">{walletOperationLabel(entry.operation)}</span>
               <span>{entry.createdAt?.toDate?.().toLocaleString('pt-BR') || '—'}</span>
               <b>{entry.direction==='credit'?'+':entry.direction==='debit'?'-':''}{formatBRL(entry.amountCents||0)}</b>
               <small>{formatBRL(entry.balanceBeforeCents||0)} → {formatBRL(entry.balanceAfterCents||0)}</small>
+              {(entry.metadata?.fileName || entry.metadata?.pieceType || entry.reason) && <em>
+                {entry.metadata?.fileName ? `${entry.metadata.fileName}${entry.metadata.pageCount ? ` · ${entry.metadata.pageCount} página(s)` : ''}` : ''}
+                {entry.metadata?.pieceType ? `${entry.metadata?.fileName ? ' · ' : ''}${entry.metadata.pieceType}` : ''}
+                {entry.reason ? `${entry.metadata?.fileName || entry.metadata?.pieceType ? ' · ' : ''}${entry.reason}` : ''}
+              </em>}
             </div>)}
           </div>
         </details>}
