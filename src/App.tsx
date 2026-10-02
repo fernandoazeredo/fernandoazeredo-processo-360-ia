@@ -49,6 +49,18 @@ type WalletLedgerEntry = {
 }
 
 
+type AIUsageEntry = {
+  id: string
+  uid: string
+  operation: 'analysis' | 'piece' | string
+  context?: string
+  model?: string
+  promptTokenCount?: number
+  candidatesTokenCount?: number
+  totalTokenCount?: number
+  createdAt?: any
+}
+
 type PromptItem = {
   id: string
   title: string
@@ -408,7 +420,7 @@ function App() {
     } catch (error: any) {
       if (chargeId) {
         try {
-          await refundCharge(chargeId, 'Falha na análise antes da conclusão.')
+          await refundCharge(chargeId, 'Análise não concluída — valor devolvido.')
         } catch (refundError) {
           console.error('[Processo 360 IA] Falha ao estornar cobrança da análise.', refundError)
         }
@@ -981,6 +993,14 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
   const [pieceQuoteError, setPieceQuoteError] = useState('')
 
   useEffect(() => {
+    if (!pieceOpen) return
+    const timer = window.setTimeout(() => {
+      document.getElementById('piece-module')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 180)
+    return () => window.clearTimeout(timer)
+  }, [pieceOpen])
+
+  useEffect(() => {
     if (!db || !user.uid) return
     const firestore = db
     return onSnapshot(doc(firestore, 'professionalProfiles', user.uid), async snap => {
@@ -1092,7 +1112,7 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
     } catch (error: any) {
       if (chargeId) {
         try {
-          await refundCharge(chargeId, 'Falha na geração da peça antes da conclusão.')
+          await refundCharge(chargeId, 'Peça jurídica não concluída — valor devolvido.')
         } catch (refundError) {
           console.error('[Processo 360 IA][Motor B] Falha ao estornar cobrança da peça.', refundError)
         }
@@ -1151,11 +1171,10 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
       </div>
       <div className="analysis-toolbar-actions">
         <button className="piece-launch-button" onClick={() => {
-          setPieceOpen(true)
           if (!isAdmin && piecePriceCents>0 && walletBalanceCents<piecePriceCents) {
             setPieceError(`Saldo insuficiente (${formatBRL(piecePriceCents)}) — Comprar créditos.`)
           }
-          window.setTimeout(()=>document.getElementById('piece-module')?.scrollIntoView({behavior:'smooth',block:'start'}),80)
+          setPieceOpen(true)
         }}><FilePenLine size={18}/> Gerar Peça Jurídica</button>
         <button className="export-button" onClick={() => exportAnalysisAsPdf(report)}><Download size={18}/> Exportar análise em PDF</button>
       </div>
@@ -1796,7 +1815,9 @@ function WalletManager({user,onLogout,serviceDb,serviceFunctions}:{user:User;onL
                 <button className="sub-action deactivate" onClick={()=>changeStatus(item,'inativo')}>Desativar</button>
                 <button className="sub-action block" onClick={()=>changeStatus(item,'bloqueado')}>Bloquear</button>
                 <button className="sub-action" disabled={adjustingUid===item.uid} onClick={()=>openAdjustBalance(item)}>{adjustingUid===item.uid?'Ajustando...':'Ajustar saldo'}</button>
-                <button className="sub-action" disabled={testArmingUid===item.uid} onClick={()=>armTestFailure(item)}>{testArmingUid===item.uid?'Armando teste...':'Testar estorno'}</button>
+                <button className={`sub-action ${item.forceNextAnalysisFailure?'test-armed':''}`} disabled={testArmingUid===item.uid || item.forceNextAnalysisFailure===true} onClick={()=>armTestFailure(item)}>
+                  {testArmingUid===item.uid ? 'Armando teste...' : item.forceNextAnalysisFailure ? 'Estorno armado ✓' : 'Testar estorno'}
+                </button>
                 <button className="sub-action delete" onClick={()=>removeWalletUser(item)}><Trash2 size={14}/> Apagar</button>
               </div>
             </td>
@@ -1849,7 +1870,7 @@ function WalletManager({user,onLogout,serviceDb,serviceFunctions}:{user:User;onL
 }
 
 function AdminModal({user,onUser,onClose,onViewAsClient}:{user:User|null;onUser:(u:User|null)=>void;onClose:()=>void;onViewAsClient:()=>void}) {
-  const [section,setSection]=useState<'carteira'|'prompts'>('carteira')
+  const [section,setSection]=useState<'carteira'|'prompts'|'uso'>('carteira')
   const [password,setPassword]=useState('')
   const [error,setError]=useState('')
   const [loading,setLoading]=useState(false)
@@ -1893,11 +1914,14 @@ function AdminModal({user,onUser,onClose,onViewAsClient}:{user:User|null;onUser:
             <div className="admin-section-tabs">
               <button className={section==='carteira'?'active':''} onClick={()=>setSection('carteira')}><Users size={17}/> Carteira</button>
               <button className={section==='prompts'?'active':''} onClick={()=>setSection('prompts')}><BrainCircuit size={17}/> Prompts</button>
+              <button className={section==='uso'?'active':''} onClick={()=>setSection('uso')}><FileText size={17}/> Uso de IA</button>
               <button onClick={onViewAsClient}><Search size={17}/> Ver como cliente</button>
             </div>
             {section === 'carteira'
               ? <WalletManager user={user} onLogout={logout} serviceDb={serviceDb} serviceFunctions={serviceFunctions}/>
-              : <PromptManager user={user} onLogout={logout} serviceDb={serviceDb}/>}
+              : section === 'prompts'
+                ? <PromptManager user={user} onLogout={logout} serviceDb={serviceDb}/>
+                : <AIUsageManager serviceDb={serviceDb}/>}
           </>
         : <form onSubmit={login}>
             <span className="admin-badge"><LockKeyhole/> Acesso restrito</span>
@@ -1911,6 +1935,64 @@ function AdminModal({user,onUser,onClose,onViewAsClient}:{user:User|null;onUser:
           </form>}
     </div>
   </div>
+}
+
+function AIUsageManager({serviceDb}:{serviceDb:any}) {
+  const [items,setItems]=useState<AIUsageEntry[]>([])
+  const [loading,setLoading]=useState(true)
+  const [error,setError]=useState('')
+
+  useEffect(()=>{
+    if(!serviceDb){ setLoading(false); setError('Firestore não configurado.'); return }
+    const q=query(collection(serviceDb,'aiUsage'),orderBy('createdAt','desc'),limit(100))
+    return onSnapshot(q,snap=>{
+      setItems(snap.docs.map(d=>({id:d.id,...d.data()} as AIUsageEntry)))
+      setLoading(false)
+    },err=>{
+      console.error(err)
+      setError('Não foi possível carregar os registros de tokens.')
+      setLoading(false)
+    })
+  },[serviceDb])
+
+  const promptTokens=items.reduce((sum,item)=>sum+Number(item.promptTokenCount||0),0)
+  const outputTokens=items.reduce((sum,item)=>sum+Number(item.candidatesTokenCount||0),0)
+  const totalTokens=items.reduce((sum,item)=>sum+Number(item.totalTokenCount||0),0)
+
+  return <section className="ai-usage-admin">
+    <div className="admin-header">
+      <div>
+        <span className="admin-badge"><BrainCircuit/> Uso de IA</span>
+        <h2>Tokens registrados</h2>
+        <p className="muted">Últimos 100 registros gravados pelo Gemini para análises e peças.</p>
+      </div>
+    </div>
+    {loading ? <p>Carregando...</p> : error ? <p className="error">{error}</p> : <>
+      <div className="subscriber-summary">
+        <span><b>{items.length}</b><small>Registros</small></span>
+        <span><b>{promptTokens.toLocaleString('pt-BR')}</b><small>Tokens de entrada</small></span>
+        <span><b>{outputTokens.toLocaleString('pt-BR')}</b><small>Tokens de saída</small></span>
+        <span><b>{totalTokens.toLocaleString('pt-BR')}</b><small>Tokens totais</small></span>
+      </div>
+      <div className="subscriber-table-wrap">
+        <table className="subscriber-table ai-usage-table">
+          <thead><tr><th>Data</th><th>Operação</th><th>Modelo</th><th>Entrada</th><th>Saída</th><th>Total</th><th>Contexto</th></tr></thead>
+          <tbody>
+            {items.map(item=><tr key={item.id}>
+              <td>{item.createdAt?.toDate?.().toLocaleString('pt-BR') || '—'}</td>
+              <td>{item.operation==='analysis'?'Análise':item.operation==='piece'?'Peça':item.operation}</td>
+              <td>{item.model||'—'}</td>
+              <td>{Number(item.promptTokenCount||0).toLocaleString('pt-BR')}</td>
+              <td>{Number(item.candidatesTokenCount||0).toLocaleString('pt-BR')}</td>
+              <td><b>{Number(item.totalTokenCount||0).toLocaleString('pt-BR')}</b></td>
+              <td>{item.context||'—'}</td>
+            </tr>)}
+            {items.length===0&&<tr><td colSpan={7}>Nenhum registro de token encontrado.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </>}
+  </section>
 }
 
 function PromptManager({user,onLogout,serviceDb}:{user:User;onLogout:()=>void;serviceDb:any}) {
