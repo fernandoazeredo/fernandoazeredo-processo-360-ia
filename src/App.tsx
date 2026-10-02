@@ -1025,6 +1025,7 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
   const [confirmation, setConfirmation] = useState<Record<string, string>>({})
   const [professionalProfile, setProfessionalProfile] = useState<ProfessionalProfile>({ name: '', oab: '', address: '', email: '' })
   const [profileStatus, setProfileStatus] = useState('')
+  const [profileEditing, setProfileEditing] = useState(false)
   const [pieceQuoteCents, setPieceQuoteCents] = useState(piecePriceCents)
   const [pieceQuoteError, setPieceQuoteError] = useState('')
 
@@ -1089,6 +1090,7 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
         updatedAt: serverTimestamp()
       }, { merge: true })
       setProfileStatus('Dados salvos.')
+      setProfileEditing(false)
     } catch (error) {
       console.error('[Processo 360 IA] Falha ao salvar dados profissionais', error)
       setProfileStatus('Não foi possível salvar os dados.')
@@ -1289,15 +1291,23 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
           <span><b>Área:</b> {report.area}</span>
           <span><b>Perspectiva:</b> {report.perspective}</span>
         </div>
-        <div className="professional-profile">
-          <h3>Dados do advogado</h3>
-          <div className="form-grid">
-            <label>Nome profissional<input value={professionalProfile.name} onChange={event => setProfessionalProfile(current => ({ ...current, name: event.target.value }))} placeholder="Nome do advogado" /></label>
-            <label>OAB/UF<input value={professionalProfile.oab} onChange={event => setProfessionalProfile(current => ({ ...current, oab: event.target.value }))} placeholder="OAB/RJ 00.000" /></label>
-            <label>Endereço profissional<input value={professionalProfile.address} onChange={event => setProfessionalProfile(current => ({ ...current, address: event.target.value }))} placeholder="Endereço do escritório" /></label>
-            <label>E-mail<input type="email" value={professionalProfile.email} onChange={event => setProfessionalProfile(current => ({ ...current, email: event.target.value }))} placeholder="E-mail profissional" /></label>
+        <div className="professional-profile collapsed-profile">
+          <div className="professional-profile-head">
+            <div>
+              <h3>Dados do advogado</h3>
+              {!profileEditing && <small>{professionalProfile.name || 'Nome não informado'}{professionalProfile.oab ? ` · ${professionalProfile.oab}` : ''}</small>}
+            </div>
+            <button type="button" className="secondary-button compact" onClick={()=>setProfileEditing(v=>!v)}>{profileEditing?'Fechar':'Editar'}</button>
           </div>
-          <button type="button" className="secondary-button compact" onClick={saveProfessionalProfile}><Save size={16}/> Salvar dados do advogado</button>
+          {profileEditing && <>
+            <div className="form-grid">
+              <label>Nome profissional<input value={professionalProfile.name} onChange={event => setProfessionalProfile(current => ({ ...current, name: event.target.value }))} placeholder="Nome do advogado" /></label>
+              <label>OAB/UF<input value={professionalProfile.oab} onChange={event => setProfessionalProfile(current => ({ ...current, oab: event.target.value }))} placeholder="OAB/RJ 00.000" /></label>
+              <label>Endereço profissional<input value={professionalProfile.address} onChange={event => setProfessionalProfile(current => ({ ...current, address: event.target.value }))} placeholder="Endereço do escritório" /></label>
+              <label>E-mail<input type="email" value={professionalProfile.email} onChange={event => setProfessionalProfile(current => ({ ...current, email: event.target.value }))} placeholder="E-mail profissional" /></label>
+            </div>
+            <button type="button" className="secondary-button compact" onClick={saveProfessionalProfile}><Save size={16}/> Salvar dados do advogado</button>
+          </>}
           {profileStatus && <small>{profileStatus}</small>}
         </div>
         <label>Tipo de peça
@@ -1635,14 +1645,11 @@ function WalletManager({user,onLogout,serviceDb,serviceFunctions}:{user:User;onL
   },[])
 
   async function changeStatus(item:WalletRecord,status:WalletStatus){
-    if(!serviceDb) return
+    if(!serviceFunctions) return
     setError('')
     try{
-      await updateDoc(doc(serviceDb,'wallets',item.id),{
-        status,
-        updatedAt:serverTimestamp(),
-        updatedBy:user.email
-      })
+      const call=httpsCallable(serviceFunctions,'adminSetWalletStatus')
+      await call({uid:item.uid,status})
     }catch{
       setError('Não foi possível alterar o status do usuário.')
     }
@@ -1941,7 +1948,7 @@ function AdminModal({user,onUser,onClose,onViewAsClient}:{user:User|null;onUser:
 
   async function logout(){
     if(adminAuth?.currentUser?.email===ADMIN_EMAIL) await signOut(adminAuth)
-    if(auth?.currentUser?.email!==ADMIN_EMAIL) onUser(null)
+    onUser(null)
   }
 
   const usingPrimaryAdminSession = Boolean(auth?.currentUser?.email===ADMIN_EMAIL && user?.uid===auth.currentUser.uid)
