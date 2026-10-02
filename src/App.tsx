@@ -568,25 +568,31 @@ function App() {
             </label>
           </div>
 
-          {file && (appUser.email !== ADMIN_EMAIL || adminClientView) && <div className="analysis-price-card">
+          {file && (appUser.email !== ADMIN_EMAIL || adminClientView) && <div className="operation-price-line">
             {quoteBusy
               ? <span>Calculando o valor da análise...</span>
               : quote
                 ? <>
-                    <div className="price-summary-line"><b>Custa {formatBRL(quote.priceCents)}</b><span>· Seu saldo {formatBRL(wallet?.balanceCents || 0)}</span><small>{quote.pageCount} página(s)</small></div>
-                    {(wallet?.balanceCents || 0) < quote.priceCents && <>
-                      <div className="price-missing-line">Faltam <b>{formatBRL(quote.priceCents-(wallet?.balanceCents||0))}</b></div>
-                      <button className="buy-credits-button compact" type="button" onClick={()=>setWalletTopupOpen(true)}>Comprar créditos</button>
-                    </>}
+                    <span className="operation-price-main">{quote.pageCount} {quote.pageCount===1?'página':'páginas'} · <b>{formatBRL(quote.priceCents)}</b></span>
+                    <span className={(wallet?.balanceCents||0) < quote.priceCents ? 'operation-balance missing' : 'operation-balance'}>
+                      {(wallet?.balanceCents||0) < quote.priceCents
+                        ? <>Faltam <b>{formatBRL(quote.priceCents-(wallet?.balanceCents||0))}</b></>
+                        : <>Saldo {formatBRL(wallet?.balanceCents||0)}</>}
+                    </span>
                   </>
                 : quoteError
                   ? <span className="error">{quoteError}</span>
                   : null}
           </div>}
 
-          <button className="primary-button" disabled={!file || processing || adminClientView || (appUser.email !== ADMIN_EMAIL && (!quote || (wallet?.balanceCents||0) < quote.priceCents))} onClick={startAnalysis}>
-            {adminClientView ? 'Visualização do cliente — análise desativada' : processing ? 'Analisando processo...' : 'Iniciar análise completa'} <ChevronRight size={18}/>
-          </button>
+          {(appUser.email !== ADMIN_EMAIL && quote && (wallet?.balanceCents||0) < quote.priceCents)
+            ? <button className="primary-button buy-required-button" type="button" onClick={()=>setWalletTopupOpen(true)}>
+                <CreditCard size={18}/> Comprar créditos
+              </button>
+            : <button className="primary-button" disabled={!file || processing || adminClientView || (appUser.email !== ADMIN_EMAIL && !quote)} onClick={startAnalysis}>
+                {adminClientView ? 'Visualização do cliente — análise desativada' : processing ? 'Analisando processo...' : 'Iniciar análise completa'} <ChevronRight size={18}/>
+              </button>}
+
           {analysisError && (
             <div className="analysis-error-actions">
               <p className="analysis-error">{analysisError}</p>
@@ -618,7 +624,11 @@ function App() {
                 if(entry.operation==='geracao_peca') return `Peça — ${entry.metadata?.pieceType||'Peça jurídica'}`
                 if(entry.operation==='estorno') return entry.relatedOperation==='geracao_peca' ? 'Estorno — peça não concluída' : 'Estorno — análise não concluída'
                 if(entry.operation==='recarga' || entry.operation==='recarga_admin') return 'Recarga'
-                if(entry.operation.startsWith('ajuste_')) return `Ajuste administrativo${entry.reason ? ` — ${entry.reason}` : ''}`
+                if(entry.operation.startsWith('ajuste_')) {
+                  const reason=String(entry.reason||'').trim()
+                  const generic=/^(ajuste|ajuste administrativo)$/i.test(reason)
+                  return generic || !reason ? 'Ajuste administrativo' : `Ajuste administrativo — ${reason}`
+                }
                 return walletOperationLabel(entry.operation)
               }
               return <>
@@ -671,7 +681,7 @@ function App() {
           <button className="wallet-modal-close" type="button" onClick={()=>setWalletInfoOpen(false)} aria-label="Fechar"><X size={20}/></button>
           <h2>Como funcionam os créditos</h2>
           <p>O valor de cada operação aparece antes de você confirmar. Em caso de falha na análise ou na peça, o valor cobrado é estornado automaticamente.</p>
-          <p>A recarga continua manual: após o pagamento, envie o comprovante para {walletConfig.supportContact?.trim() || '[contato]'}. O crédito é lançado em até 24 horas.</p>
+          <p>A recarga continua manual: após o pagamento, envie o comprovante{walletConfig.supportContact?.trim() ? <> para <b>{walletConfig.supportContact.trim()}</b></> : null}. O crédito é lançado em até 24 horas.</p>
           <p>Os créditos não expiram mensalmente e o saldo não é zerado.</p>
         </section>
       </div>}
@@ -1316,17 +1326,22 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
             {options.map(option => <option key={option}>{option}</option>)}
           </select>
         </label>
-        {!isAdmin && <div className="analysis-price-card piece-price-card">
-          <div className="price-summary-line"><b>Custa {formatBRL(pieceQuoteCents||0)}</b><span>· Seu saldo {formatBRL(walletBalanceCents||0)}</span></div>
+        {!isAdmin && <div className="operation-price-line piece-operation-price">
+          <span className="operation-price-main">Peça · <b>{formatBRL(pieceQuoteCents||0)}</b></span>
+          <span className={walletBalanceCents < pieceQuoteCents ? 'operation-balance missing' : 'operation-balance'}>
+            {walletBalanceCents < pieceQuoteCents
+              ? <>Faltam <b>{formatBRL(pieceQuoteCents-walletBalanceCents)}</b></>
+              : <>Saldo {formatBRL(walletBalanceCents||0)}</>}
+          </span>
           {pieceQuoteError && <span className="error">{pieceQuoteError}</span>}
-          {pieceQuoteCents>0 && walletBalanceCents < pieceQuoteCents && <div className="piece-insufficient-warning">
-            <b>Faltam {formatBRL(pieceQuoteCents-walletBalanceCents)}</b>
-            <button type="button" className="secondary-button compact" onClick={onRecharge}>Comprar créditos</button>
-          </div>}
         </div>}
-        <button className="primary-button" disabled={pieceBusy || (!isAdmin && (pieceQuoteCents<=0 || walletBalanceCents<pieceQuoteCents))} onClick={handleGeneratePiece}>
-          {pieceBusy ? pieceStage || 'Gerando rascunho...' : `Gerar Rascunho${!isAdmin && pieceQuoteCents>0 ? ` — ${formatBRL(pieceQuoteCents)}` : ''}`} <ChevronRight size={18}/>
-        </button>
+        {!isAdmin && pieceQuoteCents>0 && walletBalanceCents<pieceQuoteCents
+          ? <button className="primary-button buy-required-button" type="button" onClick={onRecharge}>
+              <CreditCard size={18}/> Comprar créditos
+            </button>
+          : <button className="primary-button" disabled={pieceBusy || (!isAdmin && pieceQuoteCents<=0)} onClick={handleGeneratePiece}>
+              {pieceBusy ? pieceStage || 'Gerando rascunho...' : 'Gerar Rascunho'} <ChevronRight size={18}/>
+            </button>}
         {pieceError && <p className="analysis-error">{pieceError}</p>}
       </div>
 
