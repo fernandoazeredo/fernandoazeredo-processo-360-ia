@@ -1,7 +1,7 @@
 import { getGenerativeModel, Schema } from 'firebase/ai'
-import { collection, getDocs, query, where } from 'firebase/firestore'
+import { addDoc, collection, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
 import { PDFDocument } from 'pdf-lib'
-import { aiClient, db } from './firebase'
+import { aiClient, auth, db } from './firebase'
 
 export const CONSOLIDATION_MODEL = 'gemini-3.8-flash'
 export const EXTRACTION_MODEL = 'gemini-3.8-flash'
@@ -12,6 +12,24 @@ const MAX_LOT_PAGES = 60
 const MAX_LOT_BYTES = 8 * 1024 * 1024
 const REQUEST_TIMEOUT_MS = 210_000
 const RETRY_DELAYS_MS = [3000, 7000]
+
+async function recordAnalysisUsage(context: string, model: string, usage: any) {
+  if (!db || !auth?.currentUser || !usage) return
+  try {
+    await addDoc(collection(db, 'aiUsage'), {
+      uid: auth.currentUser.uid,
+      operation: 'analysis',
+      context,
+      model,
+      promptTokenCount: Number(usage.promptTokenCount || 0),
+      candidatesTokenCount: Number(usage.candidatesTokenCount || 0),
+      totalTokenCount: Number(usage.totalTokenCount || 0),
+      createdAt: serverTimestamp()
+    })
+  } catch (error) {
+    console.warn('[Processo 360 IA][Uso IA] Não foi possível registrar tokens da análise.', error)
+  }
+}
 
 export type GeminiAnalysisReport = {
   processNumber: string
@@ -318,11 +336,13 @@ async function generateContentWithFallback(
     })
 
     try {
-      return await withTimeout(
+      const result = await withTimeout(
         model.generateContent(contents),
         modelName,
         context
       )
+      await recordAnalysisUsage(context, modelName, (result as any)?.response?.usageMetadata)
+      return result
     } catch (error: any) {
       lastError = error
       const message = errorToText(error)
