@@ -489,6 +489,19 @@ function App() {
           {(appUser.email !== ADMIN_EMAIL || adminClientView) && <>
             {adminClientView && <span className="client-preview-badge">Visualização do cliente</span>}
             <span className="wallet-balance">Saldo: <b>{formatBRL(wallet?.balanceCents || 0)}</b></span>
+            {(() => {
+              const margin=Number(walletConfig.marginMultiplier||3)
+              const minimum=Math.ceil(Number(walletConfig.analysisMinimumCostCents||0)*margin)
+              const perPage=Math.ceil(Number(walletConfig.analysisCostPerPageCents||0)*margin)
+              const piece=Math.ceil(Number(walletConfig.pieceCostCents||0)*margin)
+              const includedPages=perPage>0 ? Math.max(1,Math.floor(minimum/perPage)) : 0
+              return minimum>0 && perPage>0 && piece>0
+                ? <span className="topbar-consumption">
+                    Análise {formatBRL(minimum)}{includedPages>0 ? ` até ${includedPages} pág.; depois ${formatBRL(perPage)}/pág.` : ''}
+                    <small>Peça {formatBRL(piece)} · valor antes de confirmar · falha = estorno</small>
+                  </span>
+                : null
+            })()}
             <button className="buy-credits-button" type="button" onClick={()=>setWalletTopupOpen(true)}><CreditCard size={17}/> Comprar créditos</button>
           </>}
           <button className="icon-button" onClick={() => setDark(!dark)} aria-label="Alternar tema">
@@ -501,20 +514,7 @@ function App() {
       <main>
         {(appUser.email !== ADMIN_EMAIL || adminClientView) && <section className="wallet-info-card">
           <h2>Créditos disponíveis</h2>
-          {(() => {
-            const margin=Number(walletConfig.marginMultiplier||3)
-            const minimum=Math.ceil(Number(walletConfig.analysisMinimumCostCents||0)*margin)
-            const perPage=Math.ceil(Number(walletConfig.analysisCostPerPageCents||0)*margin)
-            const piece=Math.ceil(Number(walletConfig.pieceCostCents||0)*margin)
-            const includedPages=perPage>0 ? Math.max(1,Math.floor(minimum/perPage)) : 0
-            return minimum>0 && perPage>0 && piece>0
-              ? <p className="wallet-consumption-line">
-                  Análise a partir de <b>{formatBRL(minimum)}</b>{includedPages>0 ? <> (até {includedPages} páginas; depois <b>{formatBRL(perPage)}</b> por página)</> : null}
-                  <span> · Peça jurídica <b>{formatBRL(piece)}</b> · O valor aparece antes de confirmar · Falha na análise = estorno automático.</span>
-                </p>
-              : null
-          })()}
-          {(wallet?.balanceCents||0) < Number(walletConfig.lowBalanceWarningCents||1000) &&
+         {(wallet?.balanceCents||0) < Number(walletConfig.lowBalanceWarningCents||1000) &&
             <div className="wallet-low-warning">Saldo baixo: {formatBRL(wallet?.balanceCents||0)}. Considere comprar créditos.</div>}
           <h3>Como funcionam seus créditos</h3>
           <p>Seus créditos pré-pagos são usados para pagar o processamento da análise e da peça antes da execução. O valor da operação aparece antes de você confirmar, e o saldo é atualizado após cada uso. Em caso de falha na análise, o valor é estornado.</p>
@@ -1150,7 +1150,13 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
         <h2>Relatório jurídico consolidado</h2>
       </div>
       <div className="analysis-toolbar-actions">
-        <button className="piece-launch-button" onClick={() => setPieceOpen(true)}><FilePenLine size={18}/> Gerar Peça Jurídica</button>
+        <button className="piece-launch-button" onClick={() => {
+          setPieceOpen(true)
+          if (!isAdmin && piecePriceCents>0 && walletBalanceCents<piecePriceCents) {
+            setPieceError(`Saldo insuficiente (${formatBRL(piecePriceCents)}) — Comprar créditos.`)
+          }
+          window.setTimeout(()=>document.getElementById('piece-module')?.scrollIntoView({behavior:'smooth',block:'start'}),80)
+        }}><FilePenLine size={18}/> Gerar Peça Jurídica</button>
         <button className="export-button" onClick={() => exportAnalysisAsPdf(report)}><Download size={18}/> Exportar análise em PDF</button>
       </div>
     </div>
