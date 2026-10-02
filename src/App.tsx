@@ -475,8 +475,7 @@ function App() {
             <span className="wallet-balance">Saldo: <b>{formatBRL(wallet?.balanceCents || 0)}</b></span>
             <button className="buy-credits-button" type="button" onClick={()=>setWalletTopupOpen(true)}><CreditCard size={17}/> Comprar créditos</button>
           </>}
-          {appUser.email===ADMIN_EMAIL && !adminClientView && <button className="secondary-button compact admin-top-link" onClick={()=>setAdminOpen(true)}>Área ADM</button>}
-                    <button className="icon-button" onClick={() => setDark(!dark)} aria-label="Alternar tema">
+          <button className="icon-button" onClick={() => setDark(!dark)} aria-label="Alternar tema">
             {dark ? <Sun size={19} /> : <Moon size={19} />}
           </button>
           <button className="secondary-button compact" onClick={() => auth && signOut(auth)}>Sair</button>
@@ -574,7 +573,15 @@ function App() {
 
       <footer>
         <span>© 2026 Processo 360 IA</span>
-        {adminUser && !adminClientView && <button onClick={() => setAdminOpen(true)}>Área ADM</button>}
+        <button
+          className="footer-admin-link"
+          onClick={() => {
+            if (appUser.email === ADMIN_EMAIL) setAdminUser(appUser)
+            setAdminOpen(true)
+          }}
+        >
+          Área ADM
+        </button>
         {adminUser && adminClientView && <button onClick={() => setAdminClientView(false)}>Sair da visualização do cliente</button>}
       </footer>
 
