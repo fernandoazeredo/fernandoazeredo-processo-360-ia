@@ -1399,7 +1399,8 @@ function BuyCreditsModal({config,balanceCents,onClose}:{config:WalletConfig;bala
           <strong>{formatBRL(item.value)}</strong>
         </button>)}
       </div>
-      <small className="wallet-payment-note">O pagamento é realizado em ambiente seguro do provedor de pagamentos. Após a confirmação, o saldo deverá ser liberado na carteira.</small>
+      <small className="wallet-payment-note">O pagamento é realizado em ambiente seguro do provedor de pagamentos.</small>
+      <small className="wallet-payment-note"><b>Após pagar, envie o comprovante para {config.supportContact?.trim() || '[contato]'}. O crédito é lançado manualmente em até 24 horas.</b></small>
       {config.paymentInstructions && <small className="wallet-payment-note">{config.paymentInstructions}</small>}
     </section>
   </div>
@@ -1409,13 +1410,14 @@ function WalletFundingPanel({config,missingCents}:{config:WalletConfig;missingCe
   const packages = walletPackages(config)
 
   return <div className="wallet-funding-panel">
-    <p>Saldo insuficiente. Adicione pelo menos <b>{formatBRL(Math.max(0,missingCents))}</b>.</p>
+    <p><b>Saldo insuficiente — Comprar créditos.</b> Adicione pelo menos <b>{formatBRL(Math.max(0,missingCents))}</b>.</p>
     {packages.length
       ? <div className="wallet-package-actions">{packages.map((item,index)=>
           <button key={index} type="button" onClick={()=>window.open(item.url,'_blank','noopener,noreferrer')}>
             Adicionar {formatBRL(item.value)}
           </button>)}</div>
       : <small>Os links de recarga ainda não foram configurados.</small>}
+    <small>Após pagar, envie o comprovante para {config.supportContact?.trim() || '[contato]'}. O crédito é lançado manualmente em até 24 horas.</small>
     {config.paymentInstructions && <small>{config.paymentInstructions}</small>}
   </div>
 }
@@ -1683,10 +1685,8 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
         </label>
         {adjustmentType==='recarga'
           ? <label>Valor da recarga
-              <select value={adjustmentValue} onChange={e=>setAdjustmentValue(e.target.value)}>
-                <option value="">Selecione</option>
-                {[config.package1Cents,config.package2Cents,config.package3Cents].filter(v=>Number(v)>0).map(v=><option key={v} value={(Number(v)/100).toFixed(2)}>{formatBRL(Number(v))}</option>)}
-              </select>
+              <input value={adjustmentValue} onChange={e=>setAdjustmentValue(e.target.value)} placeholder="Ex.: 40,00 ou 40.00"/>
+              <small>Pacotes permitidos: {[config.package1Cents,config.package2Cents,config.package3Cents].filter(v=>Number(v)>0).map(v=>formatBRL(Number(v))).join(' · ')}</small>
             </label>
           : <label>Valor do ajuste (+ ou −)
               <input value={adjustmentValue} onChange={e=>setAdjustmentValue(e.target.value)} placeholder="Ex.: 10,50 ou -5.00"/>
