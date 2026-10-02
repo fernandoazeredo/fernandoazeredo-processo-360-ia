@@ -1,7 +1,7 @@
 import { getGenerativeModel, Schema } from 'firebase/ai'
-import { collection, getDocs, query, where } from 'firebase/firestore'
+import { addDoc, collection, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
 import { PDFDocument } from 'pdf-lib'
-import { aiClient, db } from './firebase'
+import { aiClient, auth, db } from './firebase'
 import { MOTOR_B_BASE_GLOBAL, MOTOR_B_PURPOSES, MOTOR_B_REVIEWER, MOTOR_B_TRABALHISTA_RECLAMADA, MOTOR_B_TRABALHISTA_RECLAMANTE, MOTOR_B_VALIDATOR } from './piecePrompts'
 import type { AnalysisReport } from './ai'
 
@@ -10,6 +10,24 @@ const PIECE_FALLBACK_MODELS = [PIECE_MODEL, 'gemini-3.5-flash', 'gemini-3.5-flas
 const REQUEST_TIMEOUT_MS = 90_000
 const PLACEHOLDER = '[DADO A CONFIRMAR]'
 const MOTOR_B_LOCAL_VERSION = 5
+
+async function recordPieceUsage(context: string, model: string, usage: any) {
+  if (!db || !auth?.currentUser || !usage) return
+  try {
+    await addDoc(collection(db, 'aiUsage'), {
+      uid: auth.currentUser.uid,
+      operation: 'piece',
+      context,
+      model,
+      promptTokenCount: Number(usage.promptTokenCount || 0),
+      candidatesTokenCount: Number(usage.candidatesTokenCount || 0),
+      totalTokenCount: Number(usage.totalTokenCount || 0),
+      createdAt: serverTimestamp()
+    })
+  } catch (error) {
+    console.warn('[Processo 360 IA][Uso IA] Não foi possível registrar tokens da peça.', error)
+  }
+}
 
 export type ClaimStatus = 'CONFIRMADA' | 'PARCIALMENTE CONFIRMADA' | 'NÃO CONFIRMADA' | 'CORRIGIDA' | 'CONFLITANTE'
 export type PieceSection = { title: string; content: string }
@@ -223,6 +241,7 @@ async function generateJson(prompt: string, schema: any, context: string, conten
       const result = await withTimeout(model.generateContent(contents?.length ? [prompt, ...contents] : prompt), context)
       const raw = result.response.text()
       if (!raw?.trim()) throw new Error(`PIECE_EMPTY_RESPONSE: ${context}`)
+      await recordPieceUsage(context, modelName, (result.response as any).usageMetadata)
       return { parsed: JSON.parse(raw), model: modelName }
     } catch (error) {
       lastError = error
