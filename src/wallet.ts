@@ -18,6 +18,10 @@ export type WalletRecord = {
   createdAt?: any
   updatedAt?: any
   forceNextAnalysisFailure?: boolean
+  lastStatusChangedAt?: any
+  lastStatusChangedBy?: string
+  lastStatusFrom?: WalletStatus
+  lastStatusTo?: WalletStatus
 }
 
 export type WalletQuote = {
