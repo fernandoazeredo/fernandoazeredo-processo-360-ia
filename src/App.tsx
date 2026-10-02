@@ -373,7 +373,7 @@ function App() {
         if (wallet.balanceCents < billableQuote.priceCents) {
           throw new Error('WALLET_INSUFFICIENT')
         }
-        const charge = await chargeAnalysis(billableQuote.pageCount, file.name)
+        const charge = await chargeAnalysis(billableQuote.pageCount, file.name, billableQuote.priceCents)
         chargeId = charge.chargeId
       }
 
@@ -404,6 +404,8 @@ function App() {
       console.error('[Processo 360 IA] Falha na análise', message, error)
       if (message.includes('WALLET_INSUFFICIENT') || message.includes('Saldo insuficiente')) {
         setAnalysisError('Saldo insuficiente para realizar esta análise. Adicione saldo à sua carteira e tente novamente.')
+      } else if (message.includes('WALLET_PRICE_CHANGED')) {
+        setAnalysisError('O preço desta análise foi atualizado. Recarregue a cotação e confirme novamente.')
       } else if (message.includes('WALLET_BLOCKED') || message.includes('carteira está inativa')) {
         setAnalysisError('Sua carteira está inativa ou bloqueada. Entre em contato com o administrador.')
       } else if (message.includes('ANALYSIS_CANCELLED')) {
@@ -1004,7 +1006,7 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
     let chargeId = ''
     try {
       if (!isAdmin) {
-        const charge = await chargePiece(pieceType, report.processNumber)
+        const charge = await chargePiece(pieceType, report.processNumber, pieceQuoteCents)
         chargeId = charge.chargeId
       }
       window.setTimeout(() => setPieceStage('Validando fatos contra o relatório consolidado'), 900)
@@ -1022,8 +1024,10 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
       }
       console.error('[Processo 360 IA][Motor B] Falha', error)
       const message=String(error?.message||'')
-      setPieceError(message.includes('Saldo insuficiente')
+      setPieceError(message.includes('WALLET_INSUFFICIENT') || message.includes('Saldo insuficiente') || message.includes('saldo insuficiente')
         ? 'Saldo insuficiente para gerar a peça jurídica. Adicione saldo à carteira.'
+        : message.includes('WALLET_PRICE_CHANGED')
+          ? 'O preço da peça foi atualizado. Feche e abra novamente esta etapa para consultar o valor atual.'
         : message.includes('PIECE_REPLICA_WITHOUT_DEFENSE')
           ? 'Não é possível gerar Réplica / Manifestação à contestação porque o relatório não demonstra contestação ou defesa efetivamente apresentada nos autos.'
           : 'Não foi possível gerar e validar o rascunho. ' + (message || 'Tente novamente.'))
