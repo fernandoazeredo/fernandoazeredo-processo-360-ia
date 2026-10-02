@@ -535,13 +535,15 @@ function App() {
 
       <main>
         {(appUser.email !== ADMIN_EMAIL || adminClientView) && <section className="wallet-info-card">
-          <h2>Créditos disponíveis</h2>
-         {(wallet?.balanceCents||0) < Number(walletConfig.lowBalanceWarningCents||1000) &&
+          <div className="wallet-info-heading">
+            <h2>Créditos disponíveis</h2>
+            <p>Seus créditos são usados para pagar pelos serviços da API Gemini antes do uso deles. Os créditos não são reembolsáveis e não expiram mensalmente. O saldo pode levar alguns minutos para refletir uma recarga, um uso ou um ajuste administrativo.</p>
+          </div>
+          {(wallet?.balanceCents||0) < Number(walletConfig.lowBalanceWarningCents||1000) &&
             <div className="wallet-low-warning">Saldo baixo: {formatBRL(wallet?.balanceCents||0)}. Considere comprar créditos.</div>}
           <h3>Como funcionam seus créditos</h3>
-          <p>Seus créditos pré-pagos são usados para pagar o processamento da análise e da peça antes da execução. O valor da operação aparece antes de você confirmar, e o saldo é atualizado após cada uso. Em caso de falha na análise, o valor é estornado.</p>
-          <p>O saldo pode levar alguns minutos para refletir uma nova recarga, uso ou ajuste administrativo. Após o pagamento, a recarga é lançada manualmente e pode levar até 24 horas para aparecer. Todo ajuste administrativo fica identificado no extrato.</p>
-          <p>Os créditos não expiram mensalmente e não são reembolsáveis após o uso. Para dúvidas, consulte o extrato da carteira.</p>
+          <p>Após o pagamento, a recarga é lançada manualmente e pode levar até 24 horas para aparecer. Todo ajuste administrativo fica identificado no extrato.</p>
+          <p>O valor de cada operação aparece antes de você confirmar. Em caso de falha na análise ou na peça, o valor cobrado é estornado automaticamente.</p>
         </section>}
         <section className="hero">
           <span className="eyebrow"><BrainCircuit size={16} /> Inteligência jurídica especializada</span>
