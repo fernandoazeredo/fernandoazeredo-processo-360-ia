@@ -3200,3 +3200,30 @@ select:focus,input:focus,textarea:focus{
   .wallet-adjust-preview{grid-template-columns:1fr 1fr;padding:8px;font-size:.88rem}
   .piece-insufficient-warning{align-items:flex-start;flex-direction:column}
 }
+
+.topbar-consumption{
+  display:flex;
+  flex-direction:column;
+  max-width:430px;
+  font-size:.78rem;
+  line-height:1.2;
+  white-space:normal;
+}
+.topbar-consumption small{
+  display:block;
+  opacity:.78;
+  font-size:.72rem;
+}
+@media(max-width:900px){
+  .topbar-consumption{max-width:300px}
+}
+@media(max-width:700px){
+  .topbar-actions{flex-wrap:wrap}
+  .topbar-consumption{
+    order:3;
+    flex-basis:100%;
+    max-width:none;
+    font-size:.74rem;
+  }
+  .topbar-consumption small{font-size:.69rem}
+}
