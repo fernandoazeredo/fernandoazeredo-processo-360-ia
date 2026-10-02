@@ -737,8 +737,12 @@ export const walletChargeAnalysis = onCall(
     if (!request.auth) throw new HttpsError('unauthenticated', 'É necessário estar autenticado.')
 
     const pageCount = Number(request.data?.pageCount || 0)
+    const expectedPriceCents = Math.trunc(Number(request.data?.expectedPriceCents || 0))
     const pricing = await readWalletPricing()
     const priceCents = analysisPriceFromPages(pageCount, pricing)
+    if (expectedPriceCents > 0 && expectedPriceCents !== priceCents) {
+      throw new HttpsError('failed-precondition', 'WALLET_PRICE_CHANGED: o preço foi atualizado. Consulte novamente antes de confirmar.')
+    }
 
     return chargeWallet(request.auth.uid, priceCents, 'analise_processo', { pageCount, fileName: String(request.data?.fileName || '').trim() || null })
   }
@@ -766,6 +770,10 @@ export const walletChargePiece = onCall(
     const pricing = await readWalletPricing()
     if (pricing.piecePriceCents <= 0) {
       throw new HttpsError('failed-precondition', 'O preço para geração de peça ainda não foi configurado.')
+    }
+    const expectedPriceCents = Math.trunc(Number(request.data?.expectedPriceCents || 0))
+    if (expectedPriceCents > 0 && expectedPriceCents !== pricing.piecePriceCents) {
+      throw new HttpsError('failed-precondition', 'WALLET_PRICE_CHANGED: o preço foi atualizado. Consulte novamente antes de confirmar.')
     }
 
     return chargeWallet(request.auth.uid, pricing.piecePriceCents, 'geracao_peca', { pieceType: String(request.data?.pieceType || '').trim() || null, processNumber: String(request.data?.processNumber || '').trim() || null })
