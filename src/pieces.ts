@@ -9,7 +9,7 @@ const PIECE_MODEL = 'gemini-3.8-flash'
 const PIECE_FALLBACK_MODELS = [PIECE_MODEL, 'gemini-3.5-flash', 'gemini-3.5-flash-lite'] as const
 const REQUEST_TIMEOUT_MS = 90_000
 const PLACEHOLDER = '[DADO A CONFIRMAR]'
-const MOTOR_B_LOCAL_VERSION = 7
+const MOTOR_B_LOCAL_VERSION = 8
 
 async function recordPieceUsage(context: string, model: string, usage: any) {
   if (!db || !auth?.currentUser || !usage) return
@@ -65,7 +65,7 @@ type MotorBPromptDoc = {
   status?: string
 }
 
-type LoadedPrompt = { content: string; version: number; source: 'firestore' | 'local-v7' }
+type LoadedPrompt = { content: string; version: number; source: 'firestore' | 'local-v8' }
 
 const pieceMapping: Record<string, Record<string, string>> = {
   Trabalhista: { Reclamante: 'Petição / Manifestação', Reclamada: 'Contestação / Defesa' },
@@ -134,7 +134,7 @@ const confirmationSchema = Schema.object({ properties: {
 } })
 
 async function loadMotorBPrompt(area: string, perspective: string, purpose: string, localPrompt: string): Promise<LoadedPrompt> {
-  if (!db) return { content: localPrompt, version: MOTOR_B_LOCAL_VERSION, source: 'local-v7' }
+  if (!db) return { content: localPrompt, version: MOTOR_B_LOCAL_VERSION, source: 'local-v8' }
   try {
     const snap = await getDocs(query(collection(db, 'prompts'), where('status', '==', 'publicado')))
     const candidates = snap.docs
@@ -145,14 +145,14 @@ async function loadMotorBPrompt(area: string, perspective: string, purpose: stri
       ))
       .sort((a, b) => (Number(b.version) || 0) - (Number(a.version) || 0))
     const selected = candidates[0]
-    // V7 local é o piso de qualidade. Prompt publicado só substitui quando for v7 ou superior.
+    // V8 local é o piso de qualidade. Prompt publicado só substitui quando for v8 ou superior.
     if (selected && (Number(selected.version) || 0) >= MOTOR_B_LOCAL_VERSION) {
       return { content: String(selected.content || '').trim(), version: Number(selected.version), source: 'firestore' }
     }
-    return { content: localPrompt, version: MOTOR_B_LOCAL_VERSION, source: 'local-v7' }
+    return { content: localPrompt, version: MOTOR_B_LOCAL_VERSION, source: 'local-v8' }
   } catch (error) {
-    console.warn('[Processo 360 IA][Motor B] Prompt publicado indisponível; usando Motor B local v7.', purpose, error)
-    return { content: localPrompt, version: MOTOR_B_LOCAL_VERSION, source: 'local-v7' }
+    console.warn('[Processo 360 IA][Motor B] Prompt publicado indisponível; usando Motor B local v8.', purpose, error)
+    return { content: localPrompt, version: MOTOR_B_LOCAL_VERSION, source: 'local-v8' }
   }
 }
 
@@ -230,7 +230,7 @@ async function generateJson(prompt: string, schema: any, context: string, conten
       const model = getGenerativeModel(aiClient, {
         model: modelName,
         systemInstruction: [
-          'PROCESSO 360 IA — MOTOR B V7.',
+          'PROCESSO 360 IA — MOTOR B V8.',
           'Nunca invente fatos, datas, valores, documentos, decisões, números, pessoas ou eventos.',
           'Confronte narrativa com prova documental específica; não repita erro do resumo quando documento estruturado o contradisser.',
           'Rastreabilidade técnica pertence ao painel de auditoria, nunca ao corpo exportável da peça.',
@@ -314,6 +314,16 @@ function applyDefenseSafeguards(sections: PieceSection[], pieceType: string) {
       .replace(/(?:a\s+)?reclamada\s+(?:admite|reconhece)\s+a\s+incidência\s+da\s+Súmula\s+338(?:,\s*III)?(?:,?\s+do\s+TST)?/gi,
         'a Reclamada sustenta, subsidiariamente, que eventual presunção relacionada à Súmula 338, III, do TST é relativa e pode ser afastada pelo conjunto probatório')
   })))
+}
+
+function ensureProvisionalCauseReviewMarker(sections: PieceSection[]) {
+  return sections.map(section => {
+    const content = String(section.content || '').replace(
+      /(valor[^.\n]{0,180}(?:parcial|provisóri)[^.\n]{0,180}R\$\s*[\d.]+,\d{2})(?!\s*⚠\s*REVISAR)/gi,
+      '$1 ⚠ REVISAR'
+    )
+    return { ...section, content }
+  })
 }
 
 function applyDeterministicPieceFields(sections: PieceSection[], professionalProfile: ProfessionalProfile | undefined, pieceDate: string) {
@@ -407,10 +417,10 @@ export async function generateLegalPiece(report: AnalysisReport, pieceType: stri
   const reviewed = Array.isArray(reviewResult.parsed.sections)
     ? reviewResult.parsed.sections.map((item: any) => ({ title: String(item.title || ''), content: String(item.content || '') }))
     : factSafeSections
-  const safeSections = applyDeterministicPieceFields(applyDefenseSafeguards(hardenCorrectedSections(reviewed, claims), pieceType), professionalProfile, pieceDate)
+  const safeSections = ensureProvisionalCauseReviewMarker(applyDeterministicPieceFields(applyDefenseSafeguards(hardenCorrectedSections(reviewed, claims), pieceType), professionalProfile, pieceDate))
 
   const promptVersion = [
-    `motor-b-v7:base-${basePromptDoc.source}-v${basePromptDoc.version}`,
+    `motor-b-v8:base-${basePromptDoc.source}-v${basePromptDoc.version}`,
     `piece-${specificPromptDoc.source}-v${specificPromptDoc.version}`,
     `validator-${validatorPromptDoc.source}-v${validatorPromptDoc.version}`,
     `reviewer-${reviewerPromptDoc.source}-v${reviewerPromptDoc.version}`
