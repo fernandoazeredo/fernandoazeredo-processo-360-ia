@@ -19,9 +19,10 @@ type Area = 'Trabalhista' | 'Cível' | 'Criminal' | 'Ambiental' | 'Tributário' 
 type PromptArea = Area | 'Global'
 type PromptStatus = 'rascunho' | 'publicado' | 'inativo'
 type WalletConfig = {
-  analysisMinimumCents: number
-  analysisPerPageCents: number
-  piecePriceCents: number
+  analysisMinimumCostCents: number
+  analysisCostPerPageCents: number
+  pieceCostCents: number
+  marginMultiplier: number
   package1Cents: number
   package1Url: string
   package2Cents: number
@@ -244,7 +245,7 @@ function App() {
   const [quoteBusy, setQuoteBusy] = useState(false)
   const [quoteError, setQuoteError] = useState('')
   const [walletLedger, setWalletLedger] = useState<WalletLedgerEntry[]>([])
-  const [walletConfig, setWalletConfig] = useState<WalletConfig>({analysisMinimumCents:0,analysisPerPageCents:0,piecePriceCents:0,package1Cents:4000,package1Url:'https://payment-link-v3.ton.com.br/pl_L4oBjJNOkKyEJLGCrvCjO31nA9pG78db',package2Cents:8000,package2Url:'https://payment-link-v3.ton.com.br/pl_4n9ELgN872OXmzD9cyT1RMvDdBbxzGaj',package3Cents:12000,package3Url:'https://payment-link-v3.ton.com.br/pl_1wy7Jor82XxB8OEULRIqGdGALMQKzY4N',paymentInstructions:'',lowBalanceWarningCents:1000,supportContact:''})
+  const [walletConfig, setWalletConfig] = useState<WalletConfig>({analysisMinimumCostCents:0,analysisCostPerPageCents:0,pieceCostCents:0,marginMultiplier:3,package1Cents:4000,package1Url:'https://payment-link-v3.ton.com.br/pl_L4oBjJNOkKyEJLGCrvCjO31nA9pG78db',package2Cents:8000,package2Url:'https://payment-link-v3.ton.com.br/pl_4n9ELgN872OXmzD9cyT1RMvDdBbxzGaj',package3Cents:12000,package3Url:'https://payment-link-v3.ton.com.br/pl_1wy7Jor82XxB8OEULRIqGdGALMQKzY4N',paymentInstructions:'',lowBalanceWarningCents:1000,supportContact:''})
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
@@ -557,7 +558,7 @@ function App() {
           </div>
         </details>}
 
-        {analysis && <AnalysisResult report={analysis} originalFile={file} isAdmin={appUser.email===ADMIN_EMAIL} piecePriceCents={walletConfig.piecePriceCents} walletBalanceCents={wallet?.balanceCents||0} onRecharge={()=>setWalletTopupOpen(true)} user={appUser} />}
+        {analysis && <AnalysisResult report={analysis} originalFile={file} isAdmin={appUser.email===ADMIN_EMAIL} piecePriceCents={Math.ceil((walletConfig.pieceCostCents||0)*(walletConfig.marginMultiplier||3))} walletBalanceCents={wallet?.balanceCents||0} onRecharge={()=>setWalletTopupOpen(true)} user={appUser} />}
 
       </main>
 
@@ -1453,9 +1454,10 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
   const [adjustmentValue,setAdjustmentValue]=useState('')
   const [adjustmentReason,setAdjustmentReason]=useState('')
   const [config,setConfig]=useState<WalletConfig>({
-    analysisMinimumCents:0,
-    analysisPerPageCents:0,
-    piecePriceCents:0,
+    analysisMinimumCostCents:0,
+    analysisCostPerPageCents:0,
+    pieceCostCents:0,
+    marginMultiplier:3,
     package1Cents:4000,package1Url:'https://payment-link-v3.ton.com.br/pl_L4oBjJNOkKyEJLGCrvCjO31nA9pG78db',
     package2Cents:8000,package2Url:'https://payment-link-v3.ton.com.br/pl_4n9ELgN872OXmzD9cyT1RMvDdBbxzGaj',
     package3Cents:12000,package3Url:'https://payment-link-v3.ton.com.br/pl_1wy7Jor82XxB8OEULRIqGdGALMQKzY4N',
@@ -1602,24 +1604,30 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
     <form className="subscription-config-form" onSubmit={saveConfig}>
       <div className="form-title"><CreditCard size={18}/><b>Preços e recargas</b></div>
       <p className="muted">Estes valores são administrativos. O usuário verá somente o preço final da operação.</p>
-      {(config.analysisMinimumCents<=0 || config.analysisPerPageCents<=0 || config.piecePriceCents<=0) &&
+      {(config.analysisMinimumCostCents<=0 || config.analysisCostPerPageCents<=0 || config.pieceCostCents<=0) &&
         <div className="admin-price-warning">Atenção: há preço zerado. Enquanto isso, o cliente verá “Serviço temporariamente indisponível”.</div>}
       <div className="wallet-formula-note">
-        <b>Fórmula da análise:</b> preço final = maior valor entre o preço mínimo e (número de páginas × preço por página).
+        <b>Fórmula da análise:</b> preço final = maior valor entre (custo mínimo × margem) e (número de páginas × custo por página × margem).
         <br/>
-        <span>Exemplo com 60 páginas: 60 × {formatBRL(config.analysisPerPageCents||0)} = {formatBRL(60*(config.analysisPerPageCents||0))}; preço final = {formatBRL(Math.max(config.analysisMinimumCents||0,60*(config.analysisPerPageCents||0)))}.</span>
+        <span>Margem aplicada automaticamente: <b>{config.marginMultiplier||3}×</b>. Exemplo com 60 páginas: 60 × {formatBRL(config.analysisCostPerPageCents||0)} × {config.marginMultiplier||3} = {formatBRL(60*(config.analysisCostPerPageCents||0)*(config.marginMultiplier||3))}; mínimo de venda = {formatBRL((config.analysisMinimumCostCents||0)*(config.marginMultiplier||3))}; preço final = {formatBRL(Math.max((config.analysisMinimumCostCents||0)*(config.marginMultiplier||3),60*(config.analysisCostPerPageCents||0)*(config.marginMultiplier||3)))}.</span>
       </div>
       <div className="admin-form-grid">
-        <label>Preço mínimo por análise (centavos)
-          <input type="number" min="0" value={config.analysisMinimumCents} onChange={e=>setConfig({...config,analysisMinimumCents:Number(e.target.value)||0})}/>
+        <label>Custo mínimo da análise (centavos)
+          <input type="number" min="0" value={config.analysisMinimumCostCents} onChange={e=>setConfig({...config,analysisMinimumCostCents:Number(e.target.value)||0})}/>
         </label>
-        <label>Preço por página (centavos)
-          <input type="number" min="0" step="0.01" value={config.analysisPerPageCents} onChange={e=>setConfig({...config,analysisPerPageCents:Number(e.target.value)||0})}/>
+        <label>Custo por página (centavos)
+          <input type="number" min="0" step="0.01" value={config.analysisCostPerPageCents} onChange={e=>setConfig({...config,analysisCostPerPageCents:Number(e.target.value)||0})}/>
         </label>
       </div>
-      <label>Preço para gerar peça jurídica (centavos)
-        <input type="number" min="0" value={config.piecePriceCents} onChange={e=>setConfig({...config,piecePriceCents:Number(e.target.value)||0})}/>
-      </label>
+      <div className="admin-form-grid">
+        <label>Custo da peça jurídica (centavos)
+          <input type="number" min="0" value={config.pieceCostCents} onChange={e=>setConfig({...config,pieceCostCents:Number(e.target.value)||0})}/>
+        </label>
+        <label>Margem automática
+          <input type="number" value={config.marginMultiplier||3} readOnly />
+        </label>
+      </div>
+      <small>Preço fixo da peça = custo da peça × {config.marginMultiplier||3}. Preço atual: {formatBRL((config.pieceCostCents||0)*(config.marginMultiplier||3))}.</small>
 
       {[1,2,3].map(index=>{
         const valueKey=`package${index}Cents` as 'package1Cents'
