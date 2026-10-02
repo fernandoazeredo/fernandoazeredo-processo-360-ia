@@ -623,7 +623,7 @@ function App() {
               return <>
                 <div className="ledger-head"><span>Data</span><span>Descrição</span><span>Valor</span><span>Saldo</span></div>
                 {visibleEntries.map(entry=><div key={entry.id} className={`wallet-statement-row ${entry.direction==='credit'?'wallet-entry-credit':entry.direction==='debit'?'wallet-entry-debit':''} ${entry.operation==='estorno'?'refund-row':''}`}>
-                  <span>{entry.createdAt?.toDate?.().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) || '—'}</span>
+                  <span>{(entry.createdAt?.toDate?.().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) || '—').replace(',','')}</span>
                   <span className="wallet-entry-description">{description(entry)}</span>
                   <b>{entry.direction==='credit'?'+':entry.direction==='debit'?'-':''}{formatBRL(entry.amountCents||0)}</b>
                   <strong>{formatBRL(entry.balanceAfterCents||0)}</strong>
@@ -1316,12 +1316,10 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
           </select>
         </label>
         {!isAdmin && <div className="analysis-price-card piece-price-card">
-          <div><small>Preço desta operação</small><strong>{formatBRL(pieceQuoteCents||0)}</strong></div>
-          <div><small>Seu saldo</small><strong>{formatBRL(walletBalanceCents||0)}</strong></div>
-          <div><small>{walletBalanceCents >= pieceQuoteCents ? 'Saldo após a operação' : 'Saldo insuficiente'}</small><strong>{walletBalanceCents >= pieceQuoteCents ? formatBRL(walletBalanceCents-pieceQuoteCents) : `Faltam ${formatBRL(pieceQuoteCents-walletBalanceCents)}`}</strong></div>
+          <div className="price-summary-line"><b>Custa {formatBRL(pieceQuoteCents||0)}</b><span>· Seu saldo {formatBRL(walletBalanceCents||0)}</span></div>
           {pieceQuoteError && <span className="error">{pieceQuoteError}</span>}
           {pieceQuoteCents>0 && walletBalanceCents < pieceQuoteCents && <div className="piece-insufficient-warning">
-            <b>Saldo insuficiente ({formatBRL(pieceQuoteCents)}) — Comprar créditos</b>
+            <b>Faltam {formatBRL(pieceQuoteCents-walletBalanceCents)}</b>
             <button type="button" className="secondary-button compact" onClick={onRecharge}>Comprar créditos</button>
           </div>}
         </div>}
