@@ -50,9 +50,9 @@ export async function quotePiece(): Promise<{ priceCents: number }> {
   }
 }
 
-export async function chargeAnalysis(pageCount: number, fileName?: string): Promise<{ chargeId: string; priceCents: number; balanceCents: number }> {
+export async function chargeAnalysis(pageCount: number, fileName?: string, expectedPriceCents?: number): Promise<{ chargeId: string; priceCents: number; balanceCents: number }> {
   const call = httpsCallable(requireFunctions(), 'walletChargeAnalysis')
-  const result = await call({ pageCount, fileName: fileName || '' })
+  const result = await call({ pageCount, fileName: fileName || '', expectedPriceCents: Number(expectedPriceCents || 0) })
   const data = result.data as any
 
   return {
@@ -62,9 +62,9 @@ export async function chargeAnalysis(pageCount: number, fileName?: string): Prom
   }
 }
 
-export async function chargePiece(pieceType?: string, processNumber?: string): Promise<{ chargeId: string; priceCents: number; balanceCents: number }> {
+export async function chargePiece(pieceType?: string, processNumber?: string, expectedPriceCents?: number): Promise<{ chargeId: string; priceCents: number; balanceCents: number }> {
   const call = httpsCallable(requireFunctions(), 'walletChargePiece')
-  const result = await call({ pieceType: pieceType || '', processNumber: processNumber || '' })
+  const result = await call({ pieceType: pieceType || '', processNumber: processNumber || '', expectedPriceCents: Number(expectedPriceCents || 0) })
   const data = result.data as any
 
   return {
