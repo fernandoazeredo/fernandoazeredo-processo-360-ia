@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from 'react'
 import { createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, signOut, User } from 'firebase/auth'
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
 import { AlertTriangle, BrainCircuit, CheckCircle2, ChevronRight, CreditCard, Download, FilePenLine, FileText, LockKeyhole, Moon, Pencil, Plus, Save, Search, ShieldCheck, Sun, Trash2, UploadCloud, Users, X } from 'lucide-react'
-import { auth, db, firebaseConfigured, functions } from './firebase'
+import { adminAuth, adminDb, adminFunctions, auth, db, firebaseConfigured, functions } from './firebase'
 import { httpsCallable } from 'firebase/functions'
 import { analyzeUploadedProcess } from './ai'
 import type { AnalysisReport } from './ai'
@@ -1493,7 +1493,7 @@ function WalletBlockedPage({user,wallet}:{user:User;wallet:WalletRecord|null}) {
   </div>
 }
 
-function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
+function WalletManager({user,onLogout,serviceDb,serviceFunctions}:{user:User;onLogout:()=>void;serviceDb:any;serviceFunctions:any}) {
   const [items,setItems]=useState<WalletRecord[]>([])
   const [filter,setFilter]=useState('')
   const [error,setError]=useState('')
@@ -1518,14 +1518,14 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
   })
 
   useEffect(()=>{
-    if(!db) return
-    const unsubscribeWallets = onSnapshot(collection(db,'wallets'), snap=>{
+    if(!serviceDb) return
+    const unsubscribeWallets = onSnapshot(collection(serviceDb,'wallets'), snap=>{
       const rows=snap.docs.map(d=>({id:d.id,...d.data()} as WalletRecord))
       rows.sort((a,b)=>String(a.email||'').localeCompare(String(b.email||'')))
       setItems(rows)
     },()=>setError('Não foi possível carregar os usuários.'))
 
-    const unsubscribeConfig = onSnapshot(doc(db,'walletConfig','main'), snap=>{
+    const unsubscribeConfig = onSnapshot(doc(serviceDb,'walletConfig','main'), snap=>{
       if(snap.exists()) setConfig(prev=>({...prev,...snap.data()} as WalletConfig))
     })
 
@@ -1533,10 +1533,10 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
   },[])
 
   async function changeStatus(item:WalletRecord,status:WalletStatus){
-    if(!db) return
+    if(!serviceDb) return
     setError('')
     try{
-      await updateDoc(doc(db,'wallets',item.id),{
+      await updateDoc(doc(serviceDb,'wallets',item.id),{
         status,
         updatedAt:serverTimestamp(),
         updatedBy:user.email
@@ -1555,7 +1555,7 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
   }
 
   async function confirmAdjustBalance(){
-    if(!functions || !adjustingItem) return
+    if(!serviceFunctions || !adjustingItem) return
     const value=parseCurrencyInput(adjustmentValue)
     if(!Number.isFinite(value) || value===0){
       setError('Informe um valor válido diferente de zero. Use vírgula ou ponto como separador decimal.')
@@ -1584,7 +1584,7 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
     setAdjustingUid(adjustingItem.uid)
     setError('')
     try{
-      const call=httpsCallable(functions,'adminAdjustWallet')
+      const call=httpsCallable(serviceFunctions,'adminAdjustWallet')
       await call({
         uid:adjustingItem.uid,
         deltaCents:cents,
@@ -1607,10 +1607,10 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
   }
 
   async function removeWalletUser(item:WalletRecord){
-    if(!functions) return
+    if(!serviceFunctions) return
     if(!window.confirm(`Excluir definitivamente o usuário ${item.email}? A conta de autenticação também será removida.`)) return
     try{
-      const call=httpsCallable(functions,'adminDeleteWalletUser')
+      const call=httpsCallable(serviceFunctions,'adminDeleteWalletUser')
       await call({uid:item.uid})
     }catch(err:any){
       console.error(err)
@@ -1620,11 +1620,11 @@ function WalletManager({user,onLogout}:{user:User;onLogout:()=>void}) {
 
   async function saveConfig(e:FormEvent){
     e.preventDefault()
-    if(!db) return
+    if(!serviceDb) return
     setSavingConfig(true)
     setError('')
     try{
-      await setDoc(doc(db,'walletConfig','main'),{
+      await setDoc(doc(serviceDb,'walletConfig','main'),{
         ...config,
         updatedAt:serverTimestamp(),
         updatedBy:user.email
@@ -1797,15 +1797,15 @@ function AdminModal({user,onUser,onClose,onViewAsClient}:{user:User|null;onUser:
   async function login(e:FormEvent) {
     e.preventDefault()
     setError('')
-    if (!auth) {
+    if (!adminAuth) {
       setError('Configure as credenciais do Firebase para ativar o login.')
       return
     }
     setLoading(true)
     try {
-      const credential=await signInWithEmailAndPassword(auth,ADMIN_EMAIL,password)
+      const credential=await signInWithEmailAndPassword(adminAuth,ADMIN_EMAIL,password)
       if (credential.user.email !== ADMIN_EMAIL) {
-        await signOut(auth)
+        await signOut(adminAuth)
         throw new Error('unauthorized')
       }
       onUser(credential.user)
@@ -1817,9 +1817,13 @@ function AdminModal({user,onUser,onClose,onViewAsClient}:{user:User|null;onUser:
   }
 
   async function logout(){
-    if(auth) await signOut(auth)
-    onUser(null)
+    if(adminAuth?.currentUser?.email===ADMIN_EMAIL) await signOut(adminAuth)
+    if(auth?.currentUser?.email!==ADMIN_EMAIL) onUser(null)
   }
+
+  const usingPrimaryAdminSession = Boolean(auth?.currentUser?.email===ADMIN_EMAIL && user?.uid===auth.currentUser.uid)
+  const serviceDb = usingPrimaryAdminSession ? db : adminDb
+  const serviceFunctions = usingPrimaryAdminSession ? functions : adminFunctions
 
   return <div className="modal-backdrop">
     <div className={`admin-modal ${user ? 'admin-modal-large' : ''}`}>
@@ -1832,8 +1836,8 @@ function AdminModal({user,onUser,onClose,onViewAsClient}:{user:User|null;onUser:
               <button onClick={onViewAsClient}><Search size={17}/> Ver como cliente</button>
             </div>
             {section === 'carteira'
-              ? <WalletManager user={user} onLogout={logout}/>
-              : <PromptManager user={user} onLogout={logout}/>}
+              ? <WalletManager user={user} onLogout={logout} serviceDb={serviceDb} serviceFunctions={serviceFunctions}/>
+              : <PromptManager user={user} onLogout={logout} serviceDb={serviceDb}/>}
           </>
         : <form onSubmit={login}>
             <span className="admin-badge"><LockKeyhole/> Acesso restrito</span>
@@ -1849,7 +1853,7 @@ function AdminModal({user,onUser,onClose,onViewAsClient}:{user:User|null;onUser:
   </div>
 }
 
-function PromptManager({user,onLogout}:{user:User;onLogout:()=>void}) {
+function PromptManager({user,onLogout,serviceDb}:{user:User;onLogout:()=>void;serviceDb:any}) {
   const [items,setItems]=useState<PromptItem[]>([])
   const [loading,setLoading]=useState(true)
   const [error,setError]=useState('')
@@ -1863,12 +1867,12 @@ function PromptManager({user,onLogout}:{user:User;onLogout:()=>void}) {
   const [status,setStatus]=useState<PromptStatus>('rascunho')
 
   useEffect(()=>{
-    if(!db){
+    if(!serviceDb){
       setLoading(false)
       setError('Firestore não configurado.')
       return
     }
-    const q=query(collection(db,'prompts'),orderBy('updatedAt','desc'))
+    const q=query(collection(serviceDb,'prompts'),orderBy('updatedAt','desc'))
     return onSnapshot(q,snap=>{
       setItems(snap.docs.map(d=>({id:d.id,...d.data()} as PromptItem)))
       setLoading(false)
@@ -1908,7 +1912,7 @@ function PromptManager({user,onLogout}:{user:User;onLogout:()=>void}) {
   async function save(e:FormEvent){
     e.preventDefault()
     setError('')
-    if(!db) return
+    if(!serviceDb) return
 
     const payload={
       title:title.trim(),
@@ -1923,8 +1927,8 @@ function PromptManager({user,onLogout}:{user:User;onLogout:()=>void}) {
     }
 
     try{
-      if(editingId) await updateDoc(doc(db,'prompts',editingId),payload)
-      else await addDoc(collection(db,'prompts'),{...payload,createdAt:serverTimestamp(),createdBy:user.email})
+      if(editingId) await updateDoc(doc(serviceDb,'prompts',editingId),payload)
+      else await addDoc(collection(serviceDb,'prompts'),{...payload,createdAt:serverTimestamp(),createdBy:user.email})
       reset()
     }catch{
       setError('Não foi possível salvar. Confirme se o Firestore está criado e com as regras publicadas.')
@@ -1932,9 +1936,9 @@ function PromptManager({user,onLogout}:{user:User;onLogout:()=>void}) {
   }
 
   async function remove(id:string){
-    if(!db || !window.confirm('Excluir este prompt?')) return
+    if(!serviceDb || !window.confirm('Excluir este prompt?')) return
     try{
-      await deleteDoc(doc(db,'prompts',id))
+      await deleteDoc(doc(serviceDb,'prompts',id))
       if(editingId===id) reset()
     }catch{
       setError('Não foi possível excluir o prompt.')
