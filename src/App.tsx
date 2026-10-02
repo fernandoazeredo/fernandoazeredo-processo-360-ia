@@ -1857,7 +1857,12 @@ function WalletManager({user,onLogout,serviceDb,serviceFunctions}:{user:User;onL
           {visible.map(item=><tr key={item.id}>
             <td><strong>{item.displayName||'—'}</strong><small>{item.email}</small></td>
             <td><strong>{formatBRL(item.balanceCents||0)}</strong></td>
-            <td><span className={`subscriber-status-badge ${item.status}`}>{item.status}</span></td>
+            <td>
+              <span className={`subscriber-status-badge ${item.status}`}>{item.status}</span>
+              {item.lastStatusChangedAt && <small className="status-audit-note">
+                {item.lastStatusChangedBy || 'admin'} · {item.lastStatusChangedAt?.toDate?.().toLocaleString('pt-BR') || '—'}
+              </small>}
+            </td>
             <td>
               <div className="subscriber-actions">
                 <button className="sub-action activate" onClick={()=>changeStatus(item,'ativo')}>Ativar</button>
