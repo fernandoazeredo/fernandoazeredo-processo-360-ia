@@ -2744,6 +2744,7 @@ select:focus,input:focus,textarea:focus{
   .subscription-card{padding:22px 16px;border-radius:18px;}
   .subscription-plans{grid-template-columns:1fr;}
   .subscriber-summary{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .ai-usage-summary{grid-template-columns:repeat(2,minmax(0,1fr));}
   .subscriber-toolbar{align-items:stretch;flex-direction:column;}
   .admin-section-tabs{margin-right:34px;}
 }
@@ -3237,7 +3238,8 @@ select:focus,input:focus,textarea:focus{
   cursor:default;
 }
 .ai-usage-admin{display:grid;gap:14px}
-.ai-usage-table{min-width:980px}
+.ai-usage-summary{grid-template-columns:repeat(5,minmax(0,1fr))}
+.ai-usage-table{min-width:1080px}
 .ai-usage-table td:last-child{
   max-width:360px;
   white-space:normal;
