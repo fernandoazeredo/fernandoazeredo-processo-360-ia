@@ -58,6 +58,7 @@ type AIUsageEntry = {
   model?: string
   promptTokenCount?: number
   candidatesTokenCount?: number
+  thoughtsTokenCount?: number
   totalTokenCount?: number
   createdAt?: any
 }
@@ -2041,6 +2042,7 @@ function AIUsageManager({serviceDb}:{serviceDb:any}) {
 
   const promptTokens=items.reduce((sum,item)=>sum+Number(item.promptTokenCount||0),0)
   const outputTokens=items.reduce((sum,item)=>sum+Number(item.candidatesTokenCount||0),0)
+  const thinkingTokens=items.reduce((sum,item)=>sum+Number(item.thoughtsTokenCount||0),0)
   const totalTokens=items.reduce((sum,item)=>sum+Number(item.totalTokenCount||0),0)
 
   return <section className="ai-usage-admin">
@@ -2052,15 +2054,16 @@ function AIUsageManager({serviceDb}:{serviceDb:any}) {
       </div>
     </div>
     {loading ? <p>Carregando...</p> : error ? <p className="error">{error}</p> : <>
-      <div className="subscriber-summary">
+      <div className="subscriber-summary ai-usage-summary">
         <span><b>{items.length}</b><small>Registros</small></span>
         <span><b>{promptTokens.toLocaleString('pt-BR')}</b><small>Tokens de entrada</small></span>
         <span><b>{outputTokens.toLocaleString('pt-BR')}</b><small>Tokens de saída</small></span>
+        <span><b>{thinkingTokens.toLocaleString('pt-BR')}</b><small>Tokens de raciocínio</small></span>
         <span><b>{totalTokens.toLocaleString('pt-BR')}</b><small>Tokens totais</small></span>
       </div>
       <div className="subscriber-table-wrap">
         <table className="subscriber-table ai-usage-table">
-          <thead><tr><th>Data</th><th>Operação</th><th>Modelo</th><th>Entrada</th><th>Saída</th><th>Total</th><th>Contexto</th></tr></thead>
+          <thead><tr><th>Data</th><th>Operação</th><th>Modelo</th><th>Entrada</th><th>Saída</th><th>Raciocínio</th><th>Total</th><th>Contexto</th></tr></thead>
           <tbody>
             {items.map(item=><tr key={item.id}>
               <td>{item.createdAt?.toDate?.().toLocaleString('pt-BR') || '—'}</td>
@@ -2068,10 +2071,11 @@ function AIUsageManager({serviceDb}:{serviceDb:any}) {
               <td>{item.model||'—'}</td>
               <td>{Number(item.promptTokenCount||0).toLocaleString('pt-BR')}</td>
               <td>{Number(item.candidatesTokenCount||0).toLocaleString('pt-BR')}</td>
+              <td>{Number(item.thoughtsTokenCount||0).toLocaleString('pt-BR')}</td>
               <td><b>{Number(item.totalTokenCount||0).toLocaleString('pt-BR')}</b></td>
               <td>{item.context||'—'}</td>
             </tr>)}
-            {items.length===0&&<tr><td colSpan={7}>Nenhum registro de token encontrado.</td></tr>}
+            {items.length===0&&<tr><td colSpan={8}>Nenhum registro de token encontrado.</td></tr>}
           </tbody>
         </table>
       </div>
