@@ -132,6 +132,21 @@ function parseCurrencyInput(raw:string) {
   return Number(normalized)
 }
 
+function scrollToAlert(id:string) {
+  const reveal = () => {
+    const target=document.getElementById(id)
+    if(!target) return false
+    target.scrollIntoView({behavior:'smooth',block:'center',inline:'nearest'})
+    target.focus({preventScroll:true})
+    return true
+  }
+
+  window.requestAnimationFrame(() => {
+    if(reveal()) return
+    window.setTimeout(reveal,80)
+  })
+}
+
 const stages = [
   'Preparando o processo',
   'Lendo o PDF localmente',
@@ -253,10 +268,7 @@ function App() {
 
   useEffect(() => {
     if (!analysisError) return
-    const timer = window.setTimeout(() => {
-      document.getElementById('analysis-error-box')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }, 120)
-    return () => window.clearTimeout(timer)
+    scrollToAlert('analysis-error-box')
   }, [analysisError])
   const [adminOpen, setAdminOpen] = useState(false)
   const [adminClientView, setAdminClientView] = useState(false)
@@ -603,7 +615,7 @@ function App() {
               </button>}
 
           {analysisError && (
-            <div className="analysis-error-actions" id="analysis-error-box">
+            <div className="analysis-error-actions" id="analysis-error-box" tabIndex={-1}>
               <p className="analysis-error">{analysisError}</p>
               <button type="button" className="retry-analysis-button" disabled={!file || processing} onClick={startAnalysis}>
                 Tentar novamente
@@ -1044,10 +1056,7 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
 
   useEffect(() => {
     if (!pieceError) return
-    const timer = window.setTimeout(() => {
-      document.getElementById('piece-error-box')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }, 120)
-    return () => window.clearTimeout(timer)
+    scrollToAlert('piece-error-box')
   }, [pieceError])
   const [confirmingClaim, setConfirmingClaim] = useState<string | null>(null)
   const [confirmation, setConfirmation] = useState<Record<string, string>>({})
@@ -1359,7 +1368,7 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
           : <button className="primary-button" disabled={pieceBusy || (!isAdmin && pieceQuoteCents<=0)} onClick={handleGeneratePiece}>
               {pieceBusy ? pieceStage || 'Gerando rascunho...' : 'Gerar Rascunho'} <ChevronRight size={18}/>
             </button>}
-        {pieceError && <p className="analysis-error" id="piece-error-box">{pieceError}</p>}
+        {pieceError && <p className="analysis-error" id="piece-error-box" tabIndex={-1}>{pieceError}</p>}
       </div>
 
       {piece && <div className="piece-review" id="piece-review">
