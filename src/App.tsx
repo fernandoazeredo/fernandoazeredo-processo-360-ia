@@ -1600,13 +1600,13 @@ function BuyCreditsModal({config,balanceCents,onClose}:{config:WalletConfig;bala
         </button>)}
       </div>
       <small className="wallet-payment-note">O pagamento é realizado em ambiente seguro do provedor de pagamentos.</small>
-      <small className="wallet-payment-note"><b>Após pagar, envie o comprovante pelo WhatsApp. O crédito é lançado manualmente em até 24 horas.</b></small>
+      <small className="wallet-payment-note"><b>Após pagar, envie o comprovante para o suporte pelo WhatsApp. O crédito é lançado manualmente em até 24 horas.</b></small>
       <button
         className="wallet-whatsapp-button"
         type="button"
         onClick={()=>window.open(PAYMENT_PROOF_WHATSAPP_URL,'_blank','noopener,noreferrer')}
       >
-        Enviar comprovante de pagamento
+        Enviar comprovante para o suporte
       </button>
       {config.paymentInstructions && <small className="wallet-payment-note">{config.paymentInstructions}</small>}
     </section>
@@ -1624,13 +1624,13 @@ function WalletFundingPanel({config,missingCents}:{config:WalletConfig;missingCe
             Adicionar {formatBRL(item.value)}
           </button>)}</div>
       : <small>Os links de recarga ainda não foram configurados.</small>}
-    <small>Após pagar, envie o comprovante pelo WhatsApp. O crédito é lançado manualmente em até 24 horas.</small>
+    <small>Após pagar, envie o comprovante para o suporte pelo WhatsApp. O crédito é lançado manualmente em até 24 horas.</small>
     <button
       className="wallet-whatsapp-button compact"
       type="button"
       onClick={()=>window.open(PAYMENT_PROOF_WHATSAPP_URL,'_blank','noopener,noreferrer')}
     >
-      Enviar comprovante de pagamento
+      Enviar comprovante para o suporte
     </button>
     {config.paymentInstructions && <small>{config.paymentInstructions}</small>}
   </div>
