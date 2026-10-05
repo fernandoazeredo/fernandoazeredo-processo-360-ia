@@ -1579,6 +1579,10 @@ function walletPackages(config:WalletConfig) {
   return configured.length ? configured : fallback
 }
 
+const PAYMENT_PROOF_WHATSAPP_URL = 'https://wa.me/5521996157226?text=' + encodeURIComponent(
+  'Olá! Acabei de realizar o pagamento de créditos do Processo 360 IA. Segue o comprovante para conferência e liberação do saldo.'
+)
+
 function BuyCreditsModal({config,balanceCents,onClose}:{config:WalletConfig;balanceCents:number;onClose:()=>void}) {
   const packages = walletPackages(config)
   return <div className="wallet-modal-backdrop" role="dialog" aria-modal="true" aria-label="Comprar créditos">
@@ -1596,7 +1600,14 @@ function BuyCreditsModal({config,balanceCents,onClose}:{config:WalletConfig;bala
         </button>)}
       </div>
       <small className="wallet-payment-note">O pagamento é realizado em ambiente seguro do provedor de pagamentos.</small>
-      <small className="wallet-payment-note"><b>Após pagar, envie o comprovante para {config.supportContact?.trim() || '[contato]'}. O crédito é lançado manualmente em até 24 horas.</b></small>
+      <small className="wallet-payment-note"><b>Após pagar, envie o comprovante pelo WhatsApp. O crédito é lançado manualmente em até 24 horas.</b></small>
+      <button
+        className="wallet-whatsapp-button"
+        type="button"
+        onClick={()=>window.open(PAYMENT_PROOF_WHATSAPP_URL,'_blank','noopener,noreferrer')}
+      >
+        Enviar comprovante de pagamento
+      </button>
       {config.paymentInstructions && <small className="wallet-payment-note">{config.paymentInstructions}</small>}
     </section>
   </div>
@@ -1613,7 +1624,14 @@ function WalletFundingPanel({config,missingCents}:{config:WalletConfig;missingCe
             Adicionar {formatBRL(item.value)}
           </button>)}</div>
       : <small>Os links de recarga ainda não foram configurados.</small>}
-    <small>Após pagar, envie o comprovante para {config.supportContact?.trim() || '[contato]'}. O crédito é lançado manualmente em até 24 horas.</small>
+    <small>Após pagar, envie o comprovante pelo WhatsApp. O crédito é lançado manualmente em até 24 horas.</small>
+    <button
+      className="wallet-whatsapp-button compact"
+      type="button"
+      onClick={()=>window.open(PAYMENT_PROOF_WHATSAPP_URL,'_blank','noopener,noreferrer')}
+    >
+      Enviar comprovante de pagamento
+    </button>
     {config.paymentInstructions && <small>{config.paymentInstructions}</small>}
   </div>
 }
