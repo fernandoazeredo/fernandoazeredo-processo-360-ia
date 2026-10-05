@@ -23,6 +23,7 @@ async function recordAnalysisUsage(context: string, model: string, usage: any) {
       model,
       promptTokenCount: Number(usage.promptTokenCount || 0),
       candidatesTokenCount: Number(usage.candidatesTokenCount || 0),
+      thoughtsTokenCount: Number(usage.thoughtsTokenCount || 0),
       totalTokenCount: Number(usage.totalTokenCount || 0),
       createdAt: serverTimestamp()
     })
