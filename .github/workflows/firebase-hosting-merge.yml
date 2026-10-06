@@ -80,7 +80,7 @@ jobs:
         run: |
           npx --yes firebase-tools@latest deploy \
             --project processo-360-ia \
-            --only "functions:walletQuoteAnalysis,functions:walletQuotePiece,functions:walletChargeAnalysis,functions:walletChargePiece,functions:walletRefundCharge,functions:walletConsumeTestFailure,functions:adminSetWalletStatus,functions:adminAdjustWallet,functions:adminArmTestFailure,functions:adminDeleteWalletUser" \
+            --only "functions:walletQuoteAnalysis,functions:walletQuotePiece,functions:walletChargeAnalysis,functions:walletChargePiece,functions:walletRefundCharge,functions:walletConsumeTestFailure,functions:adminSetWalletStatus,functions:adminAdjustWallet,functions:adminArmTestFailure,functions:adminDeleteWalletUser,functions:adminPreviewWalletPricing,functions:adminConfirmWalletPricing" \
             --non-interactive
 
       - name: Deploy Hosting e regras do Firestore
