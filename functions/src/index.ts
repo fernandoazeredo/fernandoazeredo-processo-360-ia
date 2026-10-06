@@ -638,21 +638,34 @@ export const adminDeleteSubscriber = onCall(
 
 
 type WalletPricing = {
-  analysisMinimumCostCents: number
-  analysisCostPerPageCents: number
-  pieceCostCents: number
+  analysisMinimumPriceCents: number
+  analysisPricePerPageCents: number
+  piecePriceCents: number
   marginMultiplier: number
+  usdBrlRate: number
+  geminiInputUsdPerMillion: number
+  geminiOutputUsdPerMillion: number
+  geminiThinkingUsdPerMillion: number
 }
 
 async function readWalletPricing(): Promise<WalletPricing> {
   const snap = await db.collection('walletConfig').doc('main').get()
   const data = snap.exists ? snap.data() || {} : {}
 
+  const marginMultiplier = Math.max(1, Number(data.marginMultiplier || 3))
+  const legacyMinimum = Math.ceil(Math.max(0, Number(data.analysisMinimumCostCents || 100)) * marginMultiplier)
+  const legacyPerPage = Math.ceil(Math.max(0, Number(data.analysisCostPerPageCents || 10)) * marginMultiplier)
+  const legacyPiece = Math.ceil(Math.max(0, Number(data.pieceCostCents || 50)) * marginMultiplier)
+
   return {
-    analysisMinimumCostCents: Math.max(0, Number(data.analysisMinimumCostCents || 0)),
-    analysisCostPerPageCents: Math.max(0, Number(data.analysisCostPerPageCents || 0)),
-    pieceCostCents: Math.max(0, Number(data.pieceCostCents || 0)),
-    marginMultiplier: Math.max(1, Number(data.marginMultiplier || 3))
+    analysisMinimumPriceCents: Math.max(0, Number(data.analysisMinimumPriceCents || legacyMinimum || 300)),
+    analysisPricePerPageCents: Math.max(0, Number(data.analysisPricePerPageCents || legacyPerPage || 30)),
+    piecePriceCents: Math.max(0, Number(data.piecePriceCents || legacyPiece || 200)),
+    marginMultiplier,
+    usdBrlRate: Math.max(0.0001, Number(data.usdBrlRate || 5.5)),
+    geminiInputUsdPerMillion: Math.max(0, Number(data.geminiInputUsdPerMillion ?? 0.75)),
+    geminiOutputUsdPerMillion: Math.max(0, Number(data.geminiOutputUsdPerMillion ?? 3.75)),
+    geminiThinkingUsdPerMillion: Math.max(0, Number(data.geminiThinkingUsdPerMillion ?? 3.75))
   }
 }
 
@@ -660,15 +673,132 @@ function analysisPriceFromPages(pageCount: number, pricing: WalletPricing) {
   if (!Number.isFinite(pageCount) || pageCount < 1) {
     throw new HttpsError('invalid-argument', 'Quantidade de páginas inválida.')
   }
-  if (pricing.analysisMinimumCostCents <= 0 || pricing.analysisCostPerPageCents <= 0) {
+  if (pricing.analysisMinimumPriceCents <= 0 || pricing.analysisPricePerPageCents <= 0) {
     throw new HttpsError(
       'failed-precondition',
-      'WALLET_PRICING_NOT_CONFIGURED: configure o custo mínimo e o custo por página na Área ADM.'
+      'WALLET_PRICING_NOT_CONFIGURED: configure o preço mínimo e o preço por página na Área ADM.'
     )
   }
-  const minimumPriceCents = Math.ceil(pricing.analysisMinimumCostCents * pricing.marginMultiplier)
-  const pagePriceCents = Math.ceil(pageCount * pricing.analysisCostPerPageCents * pricing.marginMultiplier)
-  return Math.max(minimumPriceCents, pagePriceCents)
+  const pagePriceCents = Math.ceil(pageCount * pricing.analysisPricePerPageCents)
+  return Math.max(pricing.analysisMinimumPriceCents, pagePriceCents)
+}
+
+function usageCostUsd(item: FirebaseFirestore.DocumentData, pricing: WalletPricing) {
+  const input = Math.max(0, Number(item.promptTokenCount || 0))
+  const output = Math.max(0, Number(item.candidatesTokenCount || 0))
+  const thinking = Math.max(0, Number(item.thoughtsTokenCount || 0))
+  return (input / 1_000_000) * pricing.geminiInputUsdPerMillion
+    + (output / 1_000_000) * pricing.geminiOutputUsdPerMillion
+    + (thinking / 1_000_000) * pricing.geminiThinkingUsdPerMillion
+}
+
+function roundUpToTenCents(valueBrl: number) {
+  if (!Number.isFinite(valueBrl) || valueBrl <= 0) return 0
+  return Math.ceil(valueBrl * 10 - 1e-9) * 10
+}
+
+type UsageSession = {
+  uid: string
+  operation: string
+  startedAtMs: number
+  endedAtMs: number
+  costUsd: number
+}
+
+async function calculatePricingPreview(pricing: WalletPricing) {
+  const [usageSnap, ledgerSnap] = await Promise.all([
+    db.collection('aiUsage').orderBy('createdAt', 'desc').limit(100).get(),
+    db.collection('walletLedger').orderBy('createdAt', 'desc').limit(250).get()
+  ])
+
+  const usageRows = usageSnap.docs
+    .map(doc => ({ id: doc.id, ...doc.data() } as any))
+    .filter(item => ['analysis','piece'].includes(String(item.operation || '')))
+    .map(item => ({
+      ...item,
+      createdAtMs: Number(item.createdAt?.toMillis?.() || 0)
+    }))
+    .filter(item => item.createdAtMs > 0)
+    .sort((a,b) => a.createdAtMs - b.createdAtMs)
+
+  const sessions: UsageSession[] = []
+  const SESSION_GAP_MS = 10 * 60 * 1000
+  for (const item of usageRows) {
+    const uid = String(item.uid || '')
+    const operation = String(item.operation || '')
+    const last = sessions[sessions.length - 1]
+    const canJoin = last && last.uid === uid && last.operation === operation && item.createdAtMs - last.endedAtMs <= SESSION_GAP_MS
+    if (canJoin) {
+      last.endedAtMs = item.createdAtMs
+      last.costUsd += usageCostUsd(item, pricing)
+    } else {
+      sessions.push({
+        uid,
+        operation,
+        startedAtMs: item.createdAtMs,
+        endedAtMs: item.createdAtMs,
+        costUsd: usageCostUsd(item, pricing)
+      })
+    }
+  }
+
+  const ledgerRows = ledgerSnap.docs
+    .map(doc => ({ id: doc.id, ...doc.data() } as any))
+    .map(item => ({ ...item, createdAtMs: Number(item.createdAt?.toMillis?.() || 0) }))
+    .filter(item => item.createdAtMs > 0)
+
+  const analysisCostPerPageBrl: number[] = []
+  const pieceCostsBrl: number[] = []
+
+  for (const session of sessions) {
+    const costBrl = session.costUsd * pricing.usdBrlRate
+    if (session.operation === 'piece') {
+      pieceCostsBrl.push(costBrl)
+      continue
+    }
+
+    const candidates = ledgerRows
+      .filter(item => item.uid === session.uid && item.operation === 'analise_processo' && item.direction === 'debit')
+      .map(item => ({
+        row: item,
+        distance: Math.min(
+          Math.abs(item.createdAtMs - session.startedAtMs),
+          Math.abs(item.createdAtMs - session.endedAtMs)
+        )
+      }))
+      .filter(item => item.distance <= 20 * 60 * 1000)
+      .sort((a,b) => a.distance - b.distance)
+
+    const pageCount = Number(candidates[0]?.row?.metadata?.pageCount || 0)
+    if (pageCount > 0) analysisCostPerPageBrl.push(costBrl / pageCount)
+  }
+
+  const recentAnalysis = analysisCostPerPageBrl.slice(-10)
+  const recentPieces = pieceCostsBrl.slice(-10)
+  const avg = (values: number[]) => values.length ? values.reduce((sum,value)=>sum+value,0) / values.length : 0
+  const avgAnalysisCostPerPageBrl = avg(recentAnalysis)
+  const avgPieceCostBrl = avg(recentPieces)
+
+  return {
+    analysisSamples: recentAnalysis.length,
+    pieceSamples: recentPieces.length,
+    avgAnalysisCostPerPageBrl,
+    avgPieceCostBrl,
+    current: {
+      analysisMinimumPriceCents: pricing.analysisMinimumPriceCents,
+      analysisPricePerPageCents: pricing.analysisPricePerPageCents,
+      piecePriceCents: pricing.piecePriceCents
+    },
+    proposed: {
+      analysisMinimumPriceCents: Math.max(300, pricing.analysisMinimumPriceCents),
+      analysisPricePerPageCents: avgAnalysisCostPerPageBrl > 0
+        ? Math.max(1, roundUpToTenCents(avgAnalysisCostPerPageBrl * pricing.marginMultiplier))
+        : pricing.analysisPricePerPageCents,
+      piecePriceCents: avgPieceCostBrl > 0
+        ? Math.max(10, roundUpToTenCents(avgPieceCostBrl * pricing.marginMultiplier))
+        : pricing.piecePriceCents
+    }
+  }
 }
 
 async function chargeWallet(
@@ -758,11 +888,11 @@ export const walletQuotePiece = onCall(
     if (!request.auth) throw new HttpsError('unauthenticated', 'É necessário estar autenticado.')
 
     const pricing = await readWalletPricing()
-    if (pricing.pieceCostCents <= 0) {
-      throw new HttpsError('failed-precondition', 'WALLET_PRICING_NOT_CONFIGURED: configure o custo da peça na Área ADM.')
+    if (pricing.piecePriceCents <= 0) {
+      throw new HttpsError('failed-precondition', 'WALLET_PRICING_NOT_CONFIGURED: configure o preço da peça na Área ADM.')
     }
 
-    return { priceCents: Math.ceil(pricing.pieceCostCents * pricing.marginMultiplier) }
+    return { priceCents: pricing.piecePriceCents }
   }
 )
 
@@ -772,10 +902,10 @@ export const walletChargePiece = onCall(
     if (!request.auth) throw new HttpsError('unauthenticated', 'É necessário estar autenticado.')
 
     const pricing = await readWalletPricing()
-    if (pricing.pieceCostCents <= 0) {
-      throw new HttpsError('failed-precondition', 'WALLET_PRICING_NOT_CONFIGURED: configure o custo da peça na Área ADM.')
+    if (pricing.piecePriceCents <= 0) {
+      throw new HttpsError('failed-precondition', 'WALLET_PRICING_NOT_CONFIGURED: configure o preço da peça na Área ADM.')
     }
-    const priceCents = Math.ceil(pricing.pieceCostCents * pricing.marginMultiplier)
+    const priceCents = pricing.piecePriceCents
     const expectedPriceCents = Math.trunc(Number(request.data?.expectedPriceCents || 0))
     if (expectedPriceCents > 0 && expectedPriceCents !== priceCents) {
       throw new HttpsError('failed-precondition', 'WALLET_PRICE_CHANGED: o preço foi atualizado. Consulte novamente antes de confirmar.')
@@ -838,6 +968,42 @@ export const walletRefundCharge = onCall(
   }
 )
 
+
+export const adminPreviewWalletPricing = onCall(
+  { region: 'us-central1', cors: true },
+  async request => {
+    const callerEmail = String(request.auth?.token?.email || '').toLowerCase()
+    if (!request.auth || callerEmail !== 'fernandoazeredo64@gmail.com') {
+      throw new HttpsError('permission-denied', 'Apenas o administrador pode recalcular preços.')
+    }
+    const pricing = await readWalletPricing()
+    return calculatePricingPreview(pricing)
+  }
+)
+
+export const adminConfirmWalletPricing = onCall(
+  { region: 'us-central1', cors: true },
+  async request => {
+    const callerEmail = String(request.auth?.token?.email || '').toLowerCase()
+    if (!request.auth || callerEmail !== 'fernandoazeredo64@gmail.com') {
+      throw new HttpsError('permission-denied', 'Apenas o administrador pode confirmar preços.')
+    }
+    const pricing = await readWalletPricing()
+    const preview = await calculatePricingPreview(pricing)
+    await db.collection('walletConfig').doc('main').set({
+      analysisMinimumPriceCents: preview.proposed.analysisMinimumPriceCents,
+      analysisPricePerPageCents: preview.proposed.analysisPricePerPageCents,
+      piecePriceCents: preview.proposed.piecePriceCents,
+      pricingLastRecalculatedAt: FieldValue.serverTimestamp(),
+      pricingLastRecalculatedBy: callerEmail,
+      pricingLastAnalysisSamples: preview.analysisSamples,
+      pricingLastPieceSamples: preview.pieceSamples,
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: callerEmail
+    }, { merge: true })
+    return { success: true, ...preview.proposed }
+  }
+)
 
 export const adminSetWalletStatus = onCall(
   { region: 'us-central1', cors: true },
