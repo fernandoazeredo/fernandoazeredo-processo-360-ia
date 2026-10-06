@@ -768,7 +768,7 @@ function buildExportFileName(report: AnalysisReport) {
     ? 'lote único'
     : lotNumbers.map(n => `lote ${n}`).join(', ')
 
-  return `${processLabel} - ${loteLabel}`
+  return `${processLabel} - ${report.area} - ${report.perspective} - análise - ${loteLabel}`
 }
 
 function exportAnalysisAsPdf(report: AnalysisReport) {
@@ -831,12 +831,22 @@ ${styleNodes}
     display:none!important;
   }
   @media print{
+    @page{size:A4;margin:2cm 2cm 2.2cm 2cm}
     html,body{
       background:#fff!important;
       color:#111!important;
       -webkit-print-color-adjust:exact!important;
       print-color-adjust:exact!important;
+      font-family:"Times New Roman",Times,serif!important;
+      font-size:12pt!important;
+      line-height:1.5!important;
     }
+    .analysis-section-full,.analysis-grid article{break-inside:auto!important}
+    h1,h2,h3{break-after:avoid-page!important;page-break-after:avoid!important}
+    p{orphans:3;widows:3;text-align:justify!important}
+    .markdown-table{font-size:10pt!important;border-collapse:collapse!important;width:100%!important}
+    .markdown-table th,.markdown-table td{border:1px solid #aaa!important;padding:6px!important;vertical-align:top!important;text-align:left!important}
+    .timeline-item,.risk-item,.source-list>div{break-inside:avoid!important}
   }
 </style>
 </head>
@@ -1459,8 +1469,44 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
       <MarkdownBlock text={report.conclusionStrategy}/>
     </div>
 
+    {Array.isArray(report.factualFindings) && report.factualFindings.length>0 && <div className="analysis-section-full">
+      <h3>7. Matriz factual</h3>
+      <div className="markdown-table-wrap">
+        <table className="markdown-table factual-table">
+          <thead><tr><th>Classificação</th><th>Afirmação</th><th>Fonte</th><th>Trecho de suporte</th></tr></thead>
+          <tbody>{report.factualFindings.map((item,i)=><tr key={i}>
+            <td><b>{item.classification}</b></td><td>{item.statement}</td><td>{item.source}</td><td>{item.excerpt}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>
+    </div>}
+
+    {Array.isArray(report.calculations) && report.calculations.length>0 && <div className="analysis-section-full">
+      <h3>8. Cálculos derivados</h3>
+      <div className="markdown-table-wrap">
+        <table className="markdown-table">
+          <thead><tr><th>Descrição</th><th>Fórmula</th><th>Dados de origem</th><th>Resultado</th><th>Condição jurídica</th></tr></thead>
+          <tbody>{report.calculations.map((item,i)=><tr key={i}>
+            <td>{item.description}</td><td>{item.formula}</td><td>{item.inputs}</td><td>{item.result}</td><td>{item.legalCondition}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>
+    </div>}
+
+    {Array.isArray(report.pendingItems) && report.pendingItems.length>0 && <div className="analysis-section-full">
+      <h3>9. Pendências de confirmação</h3>
+      <div className="markdown-table-wrap">
+        <table className="markdown-table">
+          <thead><tr><th>Pendência</th><th>Motivo</th><th>Prova necessária</th></tr></thead>
+          <tbody>{report.pendingItems.map((item,i)=><tr key={i}>
+            <td>{item.item}</td><td>{item.reason}</td><td>{item.evidenceNeeded}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>
+    </div>}
+
     <div className="analysis-section-full sources-block">
-      <h3>7. Rastreabilidade dos lotes</h3>
+      <h3>10. Rastreabilidade dos lotes</h3>
       <div className="source-list">
         {report.sources.map((source,i)=>
           <div key={i}><b>Lote {source.lot}</b><span>Páginas {source.pages}</span><small>{source.note}</small></div>)}
