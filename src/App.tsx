@@ -406,6 +406,22 @@ function App() {
 
 
 
+  useEffect(()=>{
+    if(!appUser?.uid || analysis) return
+    try{
+      const raw=localStorage.getItem(`p360-last-analysis-${appUser.uid}`)
+      if(!raw) return
+      const saved=JSON.parse(raw)
+      if(saved?.report?.analysisId && saved?.report?.area && saved?.report?.perspective){
+        setAnalysis(saved.report as AnalysisReport)
+        setArea(saved.report.area as Area)
+        setPerspective(saved.report.perspective)
+      }
+    }catch(error){
+      console.warn('[Processo 360 IA] Não foi possível restaurar a última análise concluída.',error)
+    }
+  },[appUser?.uid])
+
   function changeArea(next: Area) {
     setArea(next)
     setPerspective(perspectives[next][0])
@@ -451,6 +467,17 @@ function App() {
         throw new Error(`ANALYSIS_PERSPECTIVE_MISMATCH: solicitado ${selectedArea}/${selectedPerspective}, recebido ${report.area}/${report.perspective}`)
       }
       setAnalysis(report)
+      try{
+        if(appUser?.uid){
+          localStorage.setItem(`p360-last-analysis-${appUser.uid}`,JSON.stringify({
+            report,
+            fileMeta:{name:file.name,size:file.size,lastModified:file.lastModified},
+            savedAt:new Date().toISOString()
+          }))
+        }
+      }catch(error){
+        console.warn('[Processo 360 IA] Não foi possível persistir a análise concluída.',error)
+      }
       window.setTimeout(() => {
         document.getElementById('analysis-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       }, 150)
