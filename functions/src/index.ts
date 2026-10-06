@@ -990,16 +990,21 @@ export const adminArmTestFailure = onCall(
       throw new HttpsError('permission-denied', 'Apenas o administrador pode ativar o modo de teste.')
     }
     const uid = String(request.data?.uid || '').trim()
+    const operation = String(request.data?.operation || 'analysis').trim().toLowerCase()
     if (!uid) throw new HttpsError('invalid-argument', 'UID não informado.')
+    if (!['analysis','piece'].includes(operation)) {
+      throw new HttpsError('invalid-argument', 'Operação de teste inválida.')
+    }
     const walletRef = db.collection('wallets').doc(uid)
     const snap = await walletRef.get()
     if (!snap.exists) throw new HttpsError('not-found', 'Carteira não encontrada.')
+    const field = operation === 'piece' ? 'forceNextPieceFailure' : 'forceNextAnalysisFailure'
     await walletRef.set({
-      forceNextAnalysisFailure: true,
-      forceNextAnalysisFailureSetAt: FieldValue.serverTimestamp(),
-      forceNextAnalysisFailureSetBy: callerEmail
+      [field]: true,
+      [`${field}SetAt`]: FieldValue.serverTimestamp(),
+      [`${field}SetBy`]: callerEmail
     }, { merge: true })
-    return { success: true }
+    return { success: true, operation }
   }
 )
 
@@ -1007,19 +1012,24 @@ export const walletConsumeTestFailure = onCall(
   { region: 'us-central1', cors: true },
   async request => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'É necessário estar autenticado.')
+    const operation = String(request.data?.operation || 'analysis').trim().toLowerCase()
+    if (!['analysis','piece'].includes(operation)) {
+      throw new HttpsError('invalid-argument', 'Operação de teste inválida.')
+    }
     const walletRef = db.collection('wallets').doc(request.auth.uid)
     return db.runTransaction(async tx => {
       const snap = await tx.get(walletRef)
       if (!snap.exists) throw new HttpsError('failed-precondition', 'Carteira não encontrada.')
       const wallet = snap.data() || {}
-      const forceFailure = wallet.forceNextAnalysisFailure === true
+      const field = operation === 'piece' ? 'forceNextPieceFailure' : 'forceNextAnalysisFailure'
+      const forceFailure = wallet[field] === true
       if (forceFailure) {
         tx.update(walletRef, {
-          forceNextAnalysisFailure: false,
-          forceNextAnalysisFailureConsumedAt: FieldValue.serverTimestamp()
+          [field]: false,
+          [`${field}ConsumedAt`]: FieldValue.serverTimestamp()
         })
       }
-      return { forceFailure }
+      return { forceFailure, operation }
     })
   }
 )
