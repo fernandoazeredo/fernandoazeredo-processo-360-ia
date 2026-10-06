@@ -899,7 +899,8 @@ async function ensureCurrentProductionBuild() {
 
 function pieceHasPending(piece: LegalPieceDraft) {
   const text = piece.sections.map(section => `${section.title}\n${section.content}`).join('\n')
-  return /⚠\s*REVISAR|\[(?:VALOR|RG|NÚMERO|NUMERO|CEP|CPF|CNPJ|ENDEREÇO|DATA|DADO A CONFIRMAR)[^\]]*\]/i.test(text)
+  return /⚠\s*REVISAR|\[(?:VALOR|RG|NÚMERO|NUMERO|CEP|CPF|CNPJ|ENDEREÇO|DATA|DADO A CONFIRMAR|REPRESENTAÇÃO PÚBLICA A CONFIRMAR)[^\]]*\]/i.test(text)
+    || piece.validation.partiallyConfirmed > 0
     || piece.validation.unconfirmed > 0
     || piece.validation.conflicting > 0
 }
