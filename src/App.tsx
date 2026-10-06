@@ -925,6 +925,7 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
   // O PDF protocolável contém somente a peça jurídica. Metadados do Motor B,
   // validação, pontos pendentes e rastreabilidade permanecem exclusivamente na tela.
   const internalSectionPattern = /^(?:pontos?\s+pendentes?|pend[eê]ncias?|rastreabilidade(?:\s+factual)?|valida[cç][aã]o(?:\s+factual)?|auditoria(?:\s+interna)?|relat[oó]rio\s+interno|dados?\s+t[eé]cnicos?)\b/i
+  const seenSections = new Set<string>()
   const sections = piece.sections
     .filter(section => {
       const title = String(section.title || '').trim()
@@ -932,6 +933,9 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
       if (!title && !content) return false
       if (internalSectionPattern.test(title)) return false
       if (internalSectionPattern.test(content.split(/\r?\n/, 1)[0] || '')) return false
+      const signature = title.toLowerCase() + '|' + content.toLowerCase().replace(/\s+/g,' ').slice(0,240)
+      if (seenSections.has(signature)) return false
+      seenSections.add(signature)
       return true
     })
 
@@ -942,7 +946,7 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
   const pageHeight = 841.89
   const marginX = 56.7
   const marginTop = 56.7
-  const marginBottom = 56.7
+  const marginBottom = 72
   const bodySize = 12
   const headingSize = 12
   const titleSize = 14
@@ -1021,6 +1025,31 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
     }
   }
 
+  const drawJustifiedParagraph = (value:string) => {
+    const clean=normalizePdfText(value).trim()
+    if(!clean) return
+    const isList=/^(?:[-*•]|\d+[.)])\s+/.test(clean)
+    const lines=wrapLine(clean,regularFont,bodySize)
+    lines.forEach((line,index)=>{
+      ensureSpace(bodyLineHeight)
+      if(!line){ y-=bodyLineHeight; return }
+      const words=line.split(/\s+/)
+      const isLast=index===lines.length-1
+      if(isList || isLast || words.length<3){
+        page.drawText(line,{x:marginX,y,size:bodySize,font:regularFont,color:rgb(0,0,0)})
+      }else{
+        const wordsWidth=words.reduce((sum,word)=>sum+regularFont.widthOfTextAtSize(word,bodySize),0)
+        const gap=(textWidth-wordsWidth)/(words.length-1)
+        let x=marginX
+        words.forEach((word,wordIndex)=>{
+          page.drawText(word,{x,y,size:bodySize,font:regularFont,color:rgb(0,0,0)})
+          x+=regularFont.widthOfTextAtSize(word,bodySize)+(wordIndex<words.length-1?gap:0)
+        })
+      }
+      y-=bodyLineHeight
+    })
+  }
+
   drawWrapped('RASCUNHO DE PEÇA PROCESSUAL - Revisão jurídica obrigatória antes do protocolo.', boldFont, 10, 15, { centered: true })
   if (pieceHasPending(piece)) {
     drawWrapped('Há pendências factuais ou campos que exigem confirmação.', boldFont, 9, 14, { centered: true })
@@ -1036,7 +1065,7 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
     const content = normalizePdfText(section.content).trim()
 
     if (title) {
-      ensureSpace(headingLineHeight * 2)
+      ensureSpace(headingLineHeight + bodyLineHeight * 3)
       drawWrapped(title, boldFont, headingSize, headingLineHeight)
       y -= 4
     }
@@ -1044,7 +1073,7 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
     if (content) {
       const paragraphs = content.split(/\n{2,}/)
       for (const paragraph of paragraphs) {
-        drawWrapped(paragraph, regularFont, bodySize, bodyLineHeight)
+        drawJustifiedParagraph(paragraph)
         y -= 7
       }
     }
@@ -1067,6 +1096,19 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
       y -= 6
     }
   }
+
+  const pageCount=pdf.getPageCount()
+  pdf.getPages().forEach((pdfPage,index)=>{
+    const footer=(report.processNumber || 'Processo') + ' · Página ' + (index+1) + ' de ' + pageCount
+    const footerWidth=regularFont.widthOfTextAtSize(footer,8)
+    pdfPage.drawText(footer,{
+      x:Math.max(marginX,(pageWidth-footerWidth)/2),
+      y:28,
+      size:8,
+      font:regularFont,
+      color:rgb(.35,.35,.35)
+    })
+  })
 
   pdf.setTitle(piece.title)
   pdf.setSubject(piece.pieceType)
@@ -1098,11 +1140,11 @@ function exportPieceAsWord(report: AnalysisReport, piece: LegalPieceDraft) {
     : ''
 
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>
-    body{font-family:Arial,sans-serif;font-size:12pt;line-height:1.5;color:#111;margin:2.5cm}
+    body{font-family:"Times New Roman",Times,serif;font-size:12pt;line-height:1.5;color:#111;margin:2.5cm;text-align:justify}
     h1{text-align:center;font-size:14pt;margin:0 0 20pt}
-    h2{font-size:12pt;margin:18pt 0 8pt;border-bottom:1px solid #bbb;padding-bottom:4pt}
+    h2{font-size:12pt;margin:18pt 0 8pt;border-bottom:1px solid #bbb;padding-bottom:4pt;text-align:left;page-break-after:avoid}
     .warning{font-size:10pt;border:1px solid #bbb;padding:8pt;margin-bottom:18pt}
-    section{margin-bottom:12pt}
+    section{margin-bottom:12pt} ul,ol,table{text-align:left} p{orphans:3;widows:3}
   </style></head><body><div class="p360-print-warning">${escapeHtml(banner)}</div><h1>${escapeHtml(piece.title)}</h1>${sections}${audit}</body></html>`
 
   const blob = new Blob(['\ufeff', html], { type: 'application/msword;charset=utf-8' })
