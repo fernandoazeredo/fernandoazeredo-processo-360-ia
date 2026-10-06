@@ -18,6 +18,7 @@ export type WalletRecord = {
   createdAt?: any
   updatedAt?: any
   forceNextAnalysisFailure?: boolean
+  forceNextPieceFailure?: boolean
   lastStatusChangedAt?: any
   lastStatusChangedBy?: string
   lastStatusFrom?: WalletStatus
@@ -119,7 +120,13 @@ export async function chargePiece(pieceType?: string, processNumber?: string, ex
 
 export async function consumeForcedAnalysisFailure(): Promise<boolean> {
   const call = httpsCallable(requireFunctions(), 'walletConsumeTestFailure')
-  const result = await call({})
+  const result = await call({ operation: 'analysis' })
+  return Boolean((result.data as any)?.forceFailure)
+}
+
+export async function consumeForcedPieceFailure(): Promise<boolean> {
+  const call = httpsCallable(requireFunctions(), 'walletConsumeTestFailure')
+  const result = await call({ operation: 'piece' })
   return Boolean((result.data as any)?.forceFailure)
 }
 
