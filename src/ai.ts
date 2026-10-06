@@ -14,6 +14,9 @@ export type AnalysisReport = {
   globalAnalysis: string
   risks: Array<{ item: string; level: string; basis: string }>
   conclusionStrategy: string
+  factualFindings: Array<{ classification: 'FATO DOCUMENTADO' | 'ALEGAÇÃO DE PARTE' | 'PONTO CONTROVERTIDO' | 'INFERÊNCIA' | 'INFORMAÇÃO AUSENTE'; statement: string; source: string; excerpt: string }>
+  calculations: Array<{ description: string; formula: string; inputs: string; result: string; legalCondition: string }>
+  pendingItems: Array<{ item: string; reason: string; evidenceNeeded: string }>
   sources: Array<{ lot: number; pages: string; note: string }>
 }
 
