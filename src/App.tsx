@@ -877,7 +877,7 @@ function buildPieceFileName(report: AnalysisReport, pieceType: string) {
   const process = report.processNumber && report.processNumber !== 'Informação não constante nos dados fornecidos'
     ? report.processNumber
     : `processo-${report.analysisId.slice(0, 8)}`
-  return `${process} - ${pieceType}`.replace(/[\\/:*?"<>|]/g, '-').trim()
+  return `${process} - ${report.area} - ${report.perspective} - ${pieceType}`.replace(/[\\/:*?"<>|]/g, '-').trim()
 }
 
 async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) {
@@ -984,10 +984,11 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
     }
   }
 
+  drawWrapped('RASCUNHO DE PEÇA PROCESSUAL - Revisão jurídica obrigatória antes do protocolo.', boldFont, 10, 15, { centered: true })
   if (pieceHasPending(piece)) {
-    drawWrapped('RASCUNHO DE PEÇA PROCESSUAL - Há pendências que exigem revisão jurídica antes do protocolo.', boldFont, 10, 15, { centered: true })
-    y -= 10
+    drawWrapped('Há pendências factuais ou campos que exigem confirmação.', boldFont, 9, 14, { centered: true })
   }
+  y -= 10
 
   // Título da peça, sem prompt, modelo, build ou qualquer outro dado técnico.
   drawWrapped(piece.title, boldFont, titleSize, 20, { centered: true })
@@ -1013,6 +1014,23 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
     y -= 5
   }
 
+  if (piece.claims.length) {
+    newPage()
+    drawWrapped('ANEXO - AUDITORIA FACTUAL DA MINUTA', boldFont, titleSize, 20, { centered: true })
+    y -= 8
+    drawWrapped('Este anexo registra o status factual e as referências utilizadas pelo validador. A peça permanece rascunho sujeito a revisão jurídica.', regularFont, 10, 15)
+    y -= 8
+    for (const claim of piece.claims) {
+      const status = String(claim.status || 'NÃO CONFIRMADA')
+      const reference = String(claim.sourceReference || 'Referência não informada')
+      const treatment = String(claim.treatment || '')
+      drawWrapped(`[${status}] ${claim.text}`, boldFont, 10, 15)
+      drawWrapped(`Fonte: ${reference}`, regularFont, 9, 14)
+      if (treatment) drawWrapped(`Tratamento: ${treatment}`, regularFont, 9, 14)
+      y -= 6
+    }
+  }
+
   pdf.setTitle(piece.title)
   pdf.setSubject(piece.pieceType)
   pdf.setCreator('Processo 360 IA')
@@ -1032,11 +1050,15 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
 }
 
 function exportPieceAsWord(report: AnalysisReport, piece: LegalPieceDraft) {
-  const banner = 'RASCUNHO DE PEÇA PROCESSUAL — Há pendências que exigem revisão jurídica antes do protocolo.'
+  const banner = 'RASCUNHO DE PEÇA PROCESSUAL — REVISÃO JURÍDICA OBRIGATÓRIA ANTES DO PROTOCOLO.'
   const sections = piece.sections
     .filter(section => section.title.trim() || section.content.trim())
     .map(section => `<section><h2>${escapeHtml(section.title)}</h2><div>${escapeHtml(normalizeWordSignature(section.content)).replace(/\n/g, '<br>')}</div></section>`)
     .join('')
+
+  const audit = piece.claims.length
+    ? `<hr><h1>ANEXO — AUDITORIA FACTUAL DA MINUTA</h1><p>Este anexo registra status factual e referências do validador.</p>${piece.claims.map(claim=>`<section><b>[${escapeHtml(claim.status)}] ${escapeHtml(claim.text)}</b><br>Fonte: ${escapeHtml(claim.sourceReference||'Referência não informada')}${claim.treatment?`<br>Tratamento: ${escapeHtml(claim.treatment)}`:''}</section>`).join('')}`
+    : ''
 
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>
     body{font-family:Arial,sans-serif;font-size:12pt;line-height:1.5;color:#111;margin:2.5cm}
@@ -1044,7 +1066,7 @@ function exportPieceAsWord(report: AnalysisReport, piece: LegalPieceDraft) {
     h2{font-size:12pt;margin:18pt 0 8pt;border-bottom:1px solid #bbb;padding-bottom:4pt}
     .warning{font-size:10pt;border:1px solid #bbb;padding:8pt;margin-bottom:18pt}
     section{margin-bottom:12pt}
-  </style></head><body><div class="p360-print-warning">${escapeHtml(banner)}</div><h1>${escapeHtml(piece.title)}</h1>${sections}</body></html>`
+  </style></head><body><div class="p360-print-warning">${escapeHtml(banner)}</div><h1>${escapeHtml(piece.title)}</h1>${sections}${audit}</body></html>`
 
   const blob = new Blob(['\ufeff', html], { type: 'application/msword;charset=utf-8' })
   const url = URL.createObjectURL(blob)
