@@ -22,7 +22,17 @@ type WalletConfig = {
   analysisMinimumCostCents: number
   analysisCostPerPageCents: number
   pieceCostCents: number
+  analysisMinimumPriceCents?: number
+  analysisPricePerPageCents?: number
+  piecePriceCents?: number
   marginMultiplier: number
+  usdBrlRate?: number
+  geminiInputUsdPerMillion?: number
+  geminiOutputUsdPerMillion?: number
+  geminiThinkingUsdPerMillion?: number
+  pricingLastRecalculatedAt?: any
+  pricingLastAnalysisSamples?: number
+  pricingLastPieceSamples?: number
   package1Cents: number
   package1Url: string
   package2Cents: number
@@ -285,7 +295,7 @@ function App() {
   const [quoteBusy, setQuoteBusy] = useState(false)
   const [quoteError, setQuoteError] = useState('')
   const [walletLedger, setWalletLedger] = useState<WalletLedgerEntry[]>([])
-  const [walletConfig, setWalletConfig] = useState<WalletConfig>({analysisMinimumCostCents:0,analysisCostPerPageCents:0,pieceCostCents:0,marginMultiplier:3,package1Cents:4000,package1Url:'https://payment-link-v3.ton.com.br/pl_L4oBjJNOkKyEJLGCrvCjO31nA9pG78db',package2Cents:8000,package2Url:'https://payment-link-v3.ton.com.br/pl_4n9ELgN872OXmzD9cyT1RMvDdBbxzGaj',package3Cents:12000,package3Url:'https://payment-link-v3.ton.com.br/pl_1wy7Jor82XxB8OEULRIqGdGALMQKzY4N',paymentInstructions:'',lowBalanceWarningCents:1000,supportContact:''})
+  const [walletConfig, setWalletConfig] = useState<WalletConfig>({analysisMinimumCostCents:100,analysisCostPerPageCents:10,pieceCostCents:50,analysisMinimumPriceCents:300,analysisPricePerPageCents:30,piecePriceCents:200,marginMultiplier:3,usdBrlRate:5.5,geminiInputUsdPerMillion:0.75,geminiOutputUsdPerMillion:3.75,geminiThinkingUsdPerMillion:3.75,package1Cents:4000,package1Url:'https://payment-link-v3.ton.com.br/pl_L4oBjJNOkKyEJLGCrvCjO31nA9pG78db',package2Cents:8000,package2Url:'https://payment-link-v3.ton.com.br/pl_4n9ELgN872OXmzD9cyT1RMvDdBbxzGaj',package3Cents:12000,package3Url:'https://payment-link-v3.ton.com.br/pl_1wy7Jor82XxB8OEULRIqGdGALMQKzY4N',paymentInstructions:'',lowBalanceWarningCents:1000,supportContact:''})
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
@@ -555,7 +565,7 @@ function App() {
             <button className="buy-credits-button" type="button" onClick={()=>setWalletTopupOpen(true)}><CreditCard size={17}/> Comprar créditos</button>
           </div>
           {(() => {
-            const minimum=Math.ceil(Number(walletConfig.analysisMinimumCostCents||0)*Number(walletConfig.marginMultiplier||3))
+            const minimum=Number(walletConfig.analysisMinimumPriceCents||Math.ceil(Number(walletConfig.analysisMinimumCostCents||0)*Number(walletConfig.marginMultiplier||3)))
             return minimum>0 && (wallet?.balanceCents||0)<minimum
               ? <div className="wallet-low-warning compact">Saldo abaixo do valor mínimo de uma análise: {formatBRL(wallet?.balanceCents||0)}.</div>
               : null
@@ -1670,6 +1680,9 @@ function WalletManager({user,onLogout,serviceDb,serviceFunctions}:{user:User;onL
   const [filter,setFilter]=useState('')
   const [error,setError]=useState('')
   const [savingConfig,setSavingConfig]=useState(false)
+  const [pricingPreview,setPricingPreview]=useState<any|null>(null)
+  const [pricingBusy,setPricingBusy]=useState(false)
+  const [pricingMessage,setPricingMessage]=useState('')
   const [adjustingUid,setAdjustingUid]=useState<string|null>(null)
   const [testArmingUid,setTestArmingUid]=useState<string|null>(null)
   const [testMessage,setTestMessage]=useState('')
@@ -1679,10 +1692,17 @@ function WalletManager({user,onLogout,serviceDb,serviceFunctions}:{user:User;onL
   const [adjustmentValue,setAdjustmentValue]=useState('')
   const [adjustmentReason,setAdjustmentReason]=useState('')
   const [config,setConfig]=useState<WalletConfig>({
-    analysisMinimumCostCents:0,
-    analysisCostPerPageCents:0,
-    pieceCostCents:0,
+    analysisMinimumCostCents:100,
+    analysisCostPerPageCents:10,
+    pieceCostCents:50,
+    analysisMinimumPriceCents:300,
+    analysisPricePerPageCents:30,
+    piecePriceCents:200,
     marginMultiplier:3,
+    usdBrlRate:5.5,
+    geminiInputUsdPerMillion:0.75,
+    geminiOutputUsdPerMillion:3.75,
+    geminiThinkingUsdPerMillion:3.75,
     package1Cents:4000,package1Url:'https://payment-link-v3.ton.com.br/pl_L4oBjJNOkKyEJLGCrvCjO31nA9pG78db',
     package2Cents:8000,package2Url:'https://payment-link-v3.ton.com.br/pl_4n9ELgN872OXmzD9cyT1RMvDdBbxzGaj',
     package3Cents:12000,package3Url:'https://payment-link-v3.ton.com.br/pl_1wy7Jor82XxB8OEULRIqGdGALMQKzY4N',
@@ -1825,6 +1845,40 @@ function WalletManager({user,onLogout,serviceDb,serviceFunctions}:{user:User;onL
     }
   }
 
+  async function previewPricing(){
+    if(!serviceFunctions) return
+    setPricingBusy(true)
+    setError('')
+    setPricingMessage('')
+    try{
+      const call=httpsCallable(serviceFunctions,'adminPreviewWalletPricing')
+      const result=await call({})
+      setPricingPreview(result.data as any)
+    }catch(err){
+      console.error(err)
+      setError('Não foi possível calcular a prévia dos preços.')
+    }finally{
+      setPricingBusy(false)
+    }
+  }
+
+  async function confirmPricing(){
+    if(!serviceFunctions || !pricingPreview) return
+    setPricingBusy(true)
+    setError('')
+    try{
+      const call=httpsCallable(serviceFunctions,'adminConfirmWalletPricing')
+      await call({})
+      setPricingPreview(null)
+      setPricingMessage('Novos preços confirmados e publicados.')
+    }catch(err){
+      console.error(err)
+      setError('Não foi possível confirmar os novos preços.')
+    }finally{
+      setPricingBusy(false)
+    }
+  }
+
   const visible=items.filter(item=>{
     const q=filter.trim().toLowerCase()
     if(!q) return true
@@ -1852,32 +1906,50 @@ function WalletManager({user,onLogout,serviceDb,serviceFunctions}:{user:User;onL
 
     <form className="subscription-config-form" onSubmit={saveConfig}>
       <div className="form-title"><CreditCard size={18}/><b>Preços e recargas</b></div>
-      <p className="muted">Estes valores são administrativos. O usuário verá somente o preço final da operação.</p>
-      {(config.analysisMinimumCostCents<=0 || config.analysisCostPerPageCents<=0 || config.pieceCostCents<=0) &&
-        <div className="admin-price-warning">Atenção: há preço zerado. Enquanto isso, o cliente verá “Serviço temporariamente indisponível”.</div>}
+      <p className="muted">Os preços publicados só mudam quando você confirma um recálculo. A margem padrão é 3× sobre o custo médio real do Gemini.</p>
       <div className="wallet-formula-note">
-        <b>Fórmula da análise:</b> preço final = maior valor entre (custo mínimo × margem) e (número de páginas × custo por página × margem).
-        <br/>
-        <span>Margem aplicada automaticamente: <b>{config.marginMultiplier||3}×</b>. Exemplo com 60 páginas: 60 × {formatBRL(config.analysisCostPerPageCents||0)} × {config.marginMultiplier||3} = {formatBRL(60*(config.analysisCostPerPageCents||0)*(config.marginMultiplier||3))}; mínimo de venda = {formatBRL((config.analysisMinimumCostCents||0)*(config.marginMultiplier||3))}.</span>
-        <strong className="analysis-example-price">Preço atual do exemplo (60 páginas): {formatBRL(Math.max((config.analysisMinimumCostCents||0)*(config.marginMultiplier||3),60*(config.analysisCostPerPageCents||0)*(config.marginMultiplier||3)))}</strong>
+        <b>Preços publicados agora</b>
+        <span>Análise: mínimo <b>{formatBRL(Number(config.analysisMinimumPriceCents||300))}</b> · por página <b>{formatBRL(Number(config.analysisPricePerPageCents||30))}</b></span>
+        <span>Peça jurídica: <b>{formatBRL(Number(config.piecePriceCents||200))}</b></span>
+        <small>O recálculo usa os últimos registros reais do Uso de IA, converte o custo para reais, aplica a margem e arredonda para cima em R$ 0,10.</small>
       </div>
       <div className="admin-form-grid">
-        <label>Custo mínimo da análise (centavos)
-          <input type="number" min="0" value={config.analysisMinimumCostCents} onChange={e=>setConfig({...config,analysisMinimumCostCents:Number(e.target.value)||0})}/>
+        <label>Cotação USD/BRL
+          <input type="number" min="0.01" step="0.01" value={Number(config.usdBrlRate||5.5)} onChange={e=>setConfig({...config,usdBrlRate:Number(e.target.value)||0})}/>
         </label>
-        <label>Custo por página (centavos)
-          <input type="number" min="0" step="0.01" value={config.analysisCostPerPageCents} onChange={e=>setConfig({...config,analysisCostPerPageCents:Number(e.target.value)||0})}/>
+        <label>Margem
+          <input type="number" min="1" step="0.1" value={Number(config.marginMultiplier||3)} onChange={e=>setConfig({...config,marginMultiplier:Number(e.target.value)||3})}/>
         </label>
       </div>
       <div className="admin-form-grid">
-        <label>Custo da peça jurídica (centavos)
-          <input type="number" min="0" value={config.pieceCostCents} onChange={e=>setConfig({...config,pieceCostCents:Number(e.target.value)||0})}/>
+        <label>Gemini — entrada (US$ / 1M tokens)
+          <input type="number" min="0" step="0.01" value={Number(config.geminiInputUsdPerMillion??0.75)} onChange={e=>setConfig({...config,geminiInputUsdPerMillion:Number(e.target.value)||0})}/>
         </label>
-        <label>Margem automática
-          <input type="number" value={config.marginMultiplier||3} readOnly />
+        <label>Gemini — saída (US$ / 1M tokens)
+          <input type="number" min="0" step="0.01" value={Number(config.geminiOutputUsdPerMillion??3.75)} onChange={e=>setConfig({...config,geminiOutputUsdPerMillion:Number(e.target.value)||0})}/>
         </label>
       </div>
-      <small>Preço fixo da peça = custo da peça × {config.marginMultiplier||3}. Preço atual: {formatBRL((config.pieceCostCents||0)*(config.marginMultiplier||3))}.</small>
+      <div className="admin-form-grid">
+        <label>Gemini — raciocínio (US$ / 1M tokens)
+          <input type="number" min="0" step="0.01" value={Number(config.geminiThinkingUsdPerMillion??3.75)} onChange={e=>setConfig({...config,geminiThinkingUsdPerMillion:Number(e.target.value)||0})}/>
+        </label>
+        <label>Mínimo da análise (R$)
+          <input type="number" value={(Number(config.analysisMinimumPriceCents||300)/100).toFixed(2)} readOnly />
+        </label>
+      </div>
+      <div className="form-actions">
+        <button type="submit" className="secondary-button compact" disabled={savingConfig}><Save size={17}/>{savingConfig?'Salvando...':'Salvar parâmetros'}</button>
+        <button type="button" className="primary-button compact" disabled={pricingBusy} onClick={previewPricing}>{pricingBusy?'Calculando...':'Recalcular preços'}</button>
+      </div>
+      {pricingPreview && <div className="wallet-formula-note">
+        <b>Prévia — nada foi alterado ainda</b>
+        <span>Amostras: {pricingPreview.analysisSamples||0} análise(s) · {pricingPreview.pieceSamples||0} peça(s)</span>
+        <span>Análise por página: atual <b>{formatBRL(Number(pricingPreview.current?.analysisPricePerPageCents||0))}</b> → novo <b>{formatBRL(Number(pricingPreview.proposed?.analysisPricePerPageCents||0))}</b></span>
+        <span>Peça: atual <b>{formatBRL(Number(pricingPreview.current?.piecePriceCents||0))}</b> → novo <b>{formatBRL(Number(pricingPreview.proposed?.piecePriceCents||0))}</b></span>
+        <span>Custo médio observado: análise/página <b>{new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(pricingPreview.avgAnalysisCostPerPageBrl||0))}</b> · peça <b>{new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(pricingPreview.avgPieceCostBrl||0))}</b></span>
+        <button type="button" className="primary-button compact" disabled={pricingBusy} onClick={confirmPricing}>Confirmar novos preços</button>
+      </div>}
+      {pricingMessage&&<p className="admin-test-message">{pricingMessage}</p>}
 
       {[1,2,3].map(index=>{
         const valueKey=`package${index}Cents` as 'package1Cents'
@@ -1902,7 +1974,6 @@ function WalletManager({user,onLogout,serviceDb,serviceFunctions}:{user:User;onL
             <label>Orientação ao usuário
         <input value={config.paymentInstructions||''} onChange={e=>setConfig({...config,paymentInstructions:e.target.value})} placeholder="Ex.: Após o pagamento, o saldo será liberado."/>
       </label>
-      <button className="primary-button compact" disabled={savingConfig}><Save size={17}/>{savingConfig?'Salvando...':'Salvar configuração'}</button>
     </form>
 
     <div className="subscriber-toolbar">
@@ -2059,13 +2130,21 @@ function AdminModal({user,onUser,onClose,onViewAsClient}:{user:User|null;onUser:
 
 function AIUsageManager({serviceDb}:{serviceDb:any}) {
   const [items,setItems]=useState<AIUsageEntry[]>([])
+  const [config,setConfig]=useState<WalletConfig>({
+    analysisMinimumCostCents:100,analysisCostPerPageCents:10,pieceCostCents:50,
+    analysisMinimumPriceCents:300,analysisPricePerPageCents:30,piecePriceCents:200,
+    marginMultiplier:3,usdBrlRate:5.5,geminiInputUsdPerMillion:0.75,
+    geminiOutputUsdPerMillion:3.75,geminiThinkingUsdPerMillion:3.75,
+    package1Cents:4000,package1Url:'',package2Cents:8000,package2Url:'',package3Cents:12000,package3Url:'',
+    lowBalanceWarningCents:1000
+  })
   const [loading,setLoading]=useState(true)
   const [error,setError]=useState('')
 
   useEffect(()=>{
     if(!serviceDb){ setLoading(false); setError('Firestore não configurado.'); return }
     const q=query(collection(serviceDb,'aiUsage'),orderBy('createdAt','desc'),limit(100))
-    return onSnapshot(q,snap=>{
+    const unsubUsage=onSnapshot(q,snap=>{
       setItems(snap.docs.map(d=>({id:d.id,...d.data()} as AIUsageEntry)))
       setLoading(false)
     },err=>{
@@ -2073,34 +2152,52 @@ function AIUsageManager({serviceDb}:{serviceDb:any}) {
       setError('Não foi possível carregar os registros de tokens.')
       setLoading(false)
     })
+    const unsubConfig=onSnapshot(doc(serviceDb,'walletConfig','main'),snap=>{
+      if(snap.exists()) setConfig(prev=>({...prev,...snap.data()} as WalletConfig))
+    })
+    return ()=>{unsubUsage();unsubConfig()}
   },[serviceDb])
+
+  const inputRate=Number(config.geminiInputUsdPerMillion??0.75)
+  const outputRate=Number(config.geminiOutputUsdPerMillion??3.75)
+  const thinkingRate=Number(config.geminiThinkingUsdPerMillion??3.75)
+  const usdBrl=Number(config.usdBrlRate||5.5)
+  const costUsd=(item:AIUsageEntry)=>
+    Number(item.promptTokenCount||0)/1_000_000*inputRate+
+    Number(item.candidatesTokenCount||0)/1_000_000*outputRate+
+    Number(item.thoughtsTokenCount||0)/1_000_000*thinkingRate
 
   const promptTokens=items.reduce((sum,item)=>sum+Number(item.promptTokenCount||0),0)
   const outputTokens=items.reduce((sum,item)=>sum+Number(item.candidatesTokenCount||0),0)
   const thinkingTokens=items.reduce((sum,item)=>sum+Number(item.thoughtsTokenCount||0),0)
   const totalTokens=items.reduce((sum,item)=>sum+Number(item.totalTokenCount||0),0)
+  const totalCostUsd=items.reduce((sum,item)=>sum+costUsd(item),0)
+  const totalCostBrl=totalCostUsd*usdBrl
 
   return <section className="ai-usage-admin">
     <div className="admin-header">
       <div>
         <span className="admin-badge"><BrainCircuit/> Uso de IA</span>
-        <h2>Tokens registrados</h2>
-        <p className="muted">Últimos 100 registros gravados pelo Gemini para análises e peças.</p>
+        <h2>Tokens e custo registrado</h2>
+        <p className="muted">Últimos 100 registros. Custos calculados com os parâmetros atuais do ADM.</p>
       </div>
     </div>
     {loading ? <p>Carregando...</p> : error ? <p className="error">{error}</p> : <>
       <div className="subscriber-summary ai-usage-summary">
         <span><b>{items.length}</b><small>Registros</small></span>
-        <span><b>{promptTokens.toLocaleString('pt-BR')}</b><small>Tokens de entrada</small></span>
-        <span><b>{outputTokens.toLocaleString('pt-BR')}</b><small>Tokens de saída</small></span>
-        <span><b>{thinkingTokens.toLocaleString('pt-BR')}</b><small>Tokens de raciocínio</small></span>
-        <span><b>{totalTokens.toLocaleString('pt-BR')}</b><small>Tokens totais</small></span>
+        <span><b>{promptTokens.toLocaleString('pt-BR')}</b><small>Entrada</small></span>
+        <span><b>{outputTokens.toLocaleString('pt-BR')}</b><small>Saída</small></span>
+        <span><b>{thinkingTokens.toLocaleString('pt-BR')}</b><small>Raciocínio</small></span>
+        <span><b>{totalTokens.toLocaleString('pt-BR')}</b><small>Total tokens</small></span>
+        <span><b>US$ {totalCostUsd.toFixed(4)}</b><small>Custo acumulado</small></span>
+        <span><b>{new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(totalCostBrl)}</b><small>Custo acumulado em R$</small></span>
       </div>
+      <p className="muted">Parâmetros: entrada US$ {inputRate.toFixed(2)}/1M · saída US$ {outputRate.toFixed(2)}/1M · raciocínio US$ {thinkingRate.toFixed(2)}/1M · USD/BRL {usdBrl.toFixed(2)}.</p>
       <div className="subscriber-table-wrap">
         <table className="subscriber-table ai-usage-table">
-          <thead><tr><th>Data</th><th>Operação</th><th>Modelo</th><th>Entrada</th><th>Saída</th><th>Raciocínio</th><th>Total</th><th>Contexto</th></tr></thead>
+          <thead><tr><th>Data</th><th>Operação</th><th>Modelo</th><th>Entrada</th><th>Saída</th><th>Raciocínio</th><th>Total</th><th>Custo US$</th><th>Custo R$</th><th>Contexto</th></tr></thead>
           <tbody>
-            {items.map(item=><tr key={item.id}>
+            {items.map(item=>{const usd=costUsd(item);return <tr key={item.id}>
               <td>{item.createdAt?.toDate?.().toLocaleString('pt-BR') || '—'}</td>
               <td>{item.operation==='analysis'?'Análise':item.operation==='piece'?'Peça':item.operation}</td>
               <td>{item.model||'—'}</td>
@@ -2108,9 +2205,11 @@ function AIUsageManager({serviceDb}:{serviceDb:any}) {
               <td>{Number(item.candidatesTokenCount||0).toLocaleString('pt-BR')}</td>
               <td>{Number(item.thoughtsTokenCount||0).toLocaleString('pt-BR')}</td>
               <td><b>{Number(item.totalTokenCount||0).toLocaleString('pt-BR')}</b></td>
+              <td>US$ {usd.toFixed(4)}</td>
+              <td>{new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(usd*usdBrl)}</td>
               <td>{item.context||'—'}</td>
-            </tr>)}
-            {items.length===0&&<tr><td colSpan={8}>Nenhum registro de token encontrado.</td></tr>}
+            </tr>})}
+            {items.length===0&&<tr><td colSpan={10}>Nenhum registro de token encontrado.</td></tr>}
           </tbody>
         </table>
       </div>
