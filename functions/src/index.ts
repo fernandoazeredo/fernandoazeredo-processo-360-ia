@@ -713,7 +713,15 @@ async function calculatePricingPreview(pricing: WalletPricing) {
 
   const usageRows = usageSnap.docs
     .map(doc => ({ id: doc.id, ...doc.data() } as any))
-    .filter(item => ['analysis','piece'].includes(String(item.operation || '')))
+    .filter(item => {
+      const operation=String(item.operation || '')
+      if (!['analysis','piece'].includes(operation)) return false
+      if (operation==='piece') {
+        const context=String(item.context || '')
+        return /geração do rascunho|validação factual|revisão jurídica final/i.test(context)
+      }
+      return true
+    })
     .map(item => ({
       ...item,
       createdAtMs: Number(item.createdAt?.toMillis?.() || 0)
