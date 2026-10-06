@@ -6,7 +6,7 @@ import { adminAuth, adminDb, adminFunctions, auth, db, firebaseConfigured, funct
 import { httpsCallable } from 'firebase/functions'
 import { analyzeUploadedProcess } from './ai'
 import type { AnalysisReport } from './ai'
-import { confirmClaimInOriginal, generateLegalPiece, pieceTypeOptions, suggestPieceType } from './pieces'
+import { confirmClaimInOriginal, generateLegalPiece, pieceTypeOptions, revalidateLegalPiece, suggestPieceType } from './pieces'
 import type { LegalPieceDraft, PieceClaim, ProfessionalProfile } from './pieces'
 import { chargeAnalysis, chargePiece, consumeForcedAnalysisFailure, consumeForcedPieceFailure, formatBRL, quoteAnalysis, quotePiece, refundCharge } from './wallet'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
@@ -1135,6 +1135,8 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
   const [profileEditing, setProfileEditing] = useState(false)
   const [pieceQuoteCents, setPieceQuoteCents] = useState(piecePriceCents)
   const [pieceQuoteError, setPieceQuoteError] = useState('')
+  const [pieceValidationStale,setPieceValidationStale]=useState(false)
+  const [pieceRevalidating,setPieceRevalidating]=useState(false)
 
   useEffect(()=>{
     try{
@@ -1303,6 +1305,7 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
         originalFile || undefined
       )
       setPiece(generated)
+      setPieceValidationStale(false)
       setPieceStage('Rascunho validado')
       window.setTimeout(() => document.getElementById('piece-review')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
     } catch (error: any) {
@@ -1340,6 +1343,30 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
         sectionIndex === index ? { ...section, content: value } : section
       )
     } : current)
+    setPieceValidationStale(true)
+    setConfirmation({})
+  }
+
+  async function handleRevalidateEditedPiece(){
+    if(!piece || !originalFile || pieceRevalidating) return
+    setPieceRevalidating(true)
+    setPieceError('')
+    try{
+      const revalidated=await revalidateLegalPiece(
+        report,
+        piece,
+        originalFile,
+        requiresPrivateProfessional(report.area,report.perspective) ? professionalProfile : undefined
+      )
+      setPiece(revalidated)
+      setPieceValidationStale(false)
+      setPieceStage('Peça editada revalidada contra o documento original')
+    }catch(error:any){
+      console.error('[Processo 360 IA] Falha na revalidação após edição.',error)
+      setPieceError('A peça foi editada, mas a nova validação não foi concluída. Revise novamente antes de exportar.')
+    }finally{
+      setPieceRevalidating(false)
+    }
   }
 
   async function handleConfirmClaim(claim: PieceClaim) {
@@ -1503,12 +1530,16 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
             <h2>{piece.title}</h2>
           </div>
           <div className="piece-actions no-print" data-ui-only="true">
-            <button onClick={() => exportPieceAsWord(report, piece)}><Download size={17}/> Exportar Word</button>
-            <button onClick={() => exportPieceAsPdf(report, piece)}><Download size={17}/> Exportar PDF</button>
+            {pieceValidationStale && <button className="secondary-button compact" disabled={pieceRevalidating || !originalFile} onClick={handleRevalidateEditedPiece}>
+              <ShieldCheck size={17}/> {pieceRevalidating?'Revalidando...':'Revalidar alterações'}
+            </button>}
+            <button disabled={pieceValidationStale} onClick={() => exportPieceAsWord(report, piece)}><Download size={17}/> Exportar Word (.doc)</button>
+            <button disabled={pieceValidationStale} onClick={() => exportPieceAsPdf(report, piece)}><Download size={17}/> Exportar PDF</button>
           </div>
         </div>
 
         <div className="piece-validation-panel no-print" data-ui-only="true">
+          {pieceValidationStale && <p className="analysis-warning"><b>Validação desatualizada:</b> a peça foi editada. Revalide contra o PDF original antes de exportar.</p>}
           <div className="validation-counts">
             <span><CheckCircle2 size={16}/> {piece.validation.confirmed} confirmadas</span>
             <span>{piece.validation.partiallyConfirmed} parcialmente confirmadas</span>
