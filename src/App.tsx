@@ -8,7 +8,7 @@ import { analyzeUploadedProcess } from './ai'
 import type { AnalysisReport } from './ai'
 import { confirmClaimInOriginal, generateLegalPiece, pieceTypeOptions, suggestPieceType } from './pieces'
 import type { LegalPieceDraft, PieceClaim, ProfessionalProfile } from './pieces'
-import { chargeAnalysis, chargePiece, consumeForcedAnalysisFailure, formatBRL, quoteAnalysis, quotePiece, refundCharge } from './wallet'
+import { chargeAnalysis, chargePiece, consumeForcedAnalysisFailure, consumeForcedPieceFailure, formatBRL, quoteAnalysis, quotePiece, refundCharge } from './wallet'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import type { WalletRecord, WalletStatus } from './wallet'
 
@@ -1179,6 +1179,9 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
       if (!isAdmin) {
         const charge = await chargePiece(pieceType, report.processNumber, pieceQuoteCents)
         chargeId = charge.chargeId
+        if (await consumeForcedPieceFailure()) {
+          throw new Error('TEST_FORCED_PIECE_FAILURE')
+        }
       }
       window.setTimeout(() => setPieceStage('Validando fatos contra o relatório consolidado'), 900)
       const generated = await generateLegalPiece(report, pieceType, professionalProfile)
@@ -1774,15 +1777,16 @@ function WalletManager({user,onLogout,serviceDb,serviceFunctions}:{user:User;onL
     }
   }
 
-  async function armTestFailure(item:WalletRecord){
+  async function armTestFailure(item:WalletRecord, operation:'analysis'|'piece'){
     if(!serviceFunctions) return
-    setTestArmingUid(item.uid)
+    setTestArmingUid(`${item.uid}:${operation}`)
     setError('')
     setTestMessage('')
     try{
       const call=httpsCallable(serviceFunctions,'adminArmTestFailure')
-      await call({uid:item.uid})
-      setTestMessage(`Modo de teste armado para ${item.email}: a próxima análise será cobrada e falhará imediatamente, acionando o estorno automático.`)
+      await call({uid:item.uid,operation})
+      const label=operation==='piece' ? 'peça' : 'análise'
+      setTestMessage(`Modo de teste armado para ${item.email}: a próxima ${label} será cobrada e falhará imediatamente, acionando o estorno automático.`)
     }catch(err){
       console.error(err)
       setError('Não foi possível ativar o teste de estorno.')
@@ -1928,8 +1932,11 @@ function WalletManager({user,onLogout,serviceDb,serviceFunctions}:{user:User;onL
                 <button className="sub-action deactivate" onClick={()=>changeStatus(item,'inativo')}>Desativar</button>
                 <button className="sub-action block" onClick={()=>changeStatus(item,'bloqueado')}>Bloquear</button>
                 <button className="sub-action" disabled={adjustingUid===item.uid} onClick={()=>openAdjustBalance(item)}>{adjustingUid===item.uid?'Ajustando...':'Ajustar saldo'}</button>
-                <button className={`sub-action ${item.forceNextAnalysisFailure?'test-armed':''}`} disabled={testArmingUid===item.uid || item.forceNextAnalysisFailure===true} onClick={()=>armTestFailure(item)}>
-                  {testArmingUid===item.uid ? 'Armando teste...' : item.forceNextAnalysisFailure ? 'Estorno armado ✓' : 'Testar estorno'}
+                <button className={`sub-action ${item.forceNextAnalysisFailure?'test-armed':''}`} disabled={testArmingUid===`${item.uid}:analysis` || item.forceNextAnalysisFailure===true} onClick={()=>armTestFailure(item,'analysis')}>
+                  {testArmingUid===`${item.uid}:analysis` ? 'Armando teste...' : item.forceNextAnalysisFailure ? 'Estorno análise armado ✓' : 'Testar estorno análise'}
+                </button>
+                <button className={`sub-action ${item.forceNextPieceFailure?'test-armed':''}`} disabled={testArmingUid===`${item.uid}:piece` || item.forceNextPieceFailure===true} onClick={()=>armTestFailure(item,'piece')}>
+                  {testArmingUid===`${item.uid}:piece` ? 'Armando teste...' : item.forceNextPieceFailure ? 'Estorno peça armado ✓' : 'Testar estorno peça'}
                 </button>
                 <button className="sub-action delete" onClick={()=>removeWalletUser(item)}><Trash2 size={14}/> Apagar</button>
               </div>
