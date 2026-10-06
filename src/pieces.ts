@@ -9,7 +9,7 @@ const PIECE_MODEL = 'gemini-3.8-flash'
 const PIECE_FALLBACK_MODELS = [PIECE_MODEL, 'gemini-3.5-flash', 'gemini-3.5-flash-lite'] as const
 const REQUEST_TIMEOUT_MS = 90_000
 const PLACEHOLDER = '[DADO A CONFIRMAR]'
-const MOTOR_B_LOCAL_VERSION = 8
+const MOTOR_B_LOCAL_VERSION = 9
 
 async function recordPieceUsage(context: string, model: string, usage: any) {
   if (!db || !auth?.currentUser || !usage) return
@@ -92,7 +92,7 @@ export function pieceTypeOptions(area: string, perspective: string) {
       Reclamante: ['Petição Inicial', 'Réplica / Manifestação', 'Petição / Manifestação'],
       Reclamada: ['Contestação', 'Contestação / Defesa', 'Petição / Manifestação']
     },
-    Cível: { Autor: ['Petição Inicial', 'Petição / Manifestação'], Réu: ['Contestação', 'Petição / Manifestação'] },
+    Cível: { Autor: ['Petição Inicial', 'Réplica / Manifestação', 'Petição / Manifestação'], Réu: ['Contestação', 'Petição / Manifestação'] },
     Criminal: {
       Acusação: ['Denúncia', 'Petição / Manifestação'],
       Defesa: ['Defesa Prévia / Resposta à Acusação', 'Petição / Manifestação'],
@@ -100,9 +100,9 @@ export function pieceTypeOptions(area: string, perspective: string) {
       Querelante: ['Petição / Manifestação']
     },
     Ambiental: { 'Autuado / Réu': ['Defesa / Impugnação', 'Petição / Manifestação'], 'Órgão Ambiental / MP': ['Petição / Manifestação'] },
-    Tributário: { Contribuinte: ['Defesa / Impugnação', 'Petição / Manifestação'], 'Fazenda Pública': ['Petição de Execução', 'Petição / Manifestação'] },
+    Tributário: { Contribuinte: ['Defesa / Impugnação', 'Embargos à Execução Fiscal', 'Petição / Manifestação'], 'Fazenda Pública': ['Petição de Execução', 'Impugnação aos Embargos', 'Petição / Manifestação'] },
     Administrativo: { Administrado: ['Defesa / Recurso', 'Petição / Manifestação'], 'Administração Pública': ['Petição / Manifestação'] },
-    Previdenciário: { Segurado: ['Petição Inicial', 'Petição / Manifestação'], INSS: ['Contestação', 'Petição / Manifestação'] },
+    Previdenciário: { Segurado: ['Petição Inicial', 'Réplica / Manifestação', 'Quesitos Periciais', 'Petição / Manifestação'], INSS: ['Contestação', 'Quesitos Periciais', 'Petição / Manifestação'] },
     Consumidor: { Consumidor: ['Petição Inicial', 'Petição / Manifestação'], 'Fornecedor / Empresa': ['Contestação', 'Petição / Manifestação'] },
     Família: { Requerente: ['Petição Inicial', 'Petição / Manifestação'], Requerido: ['Contestação', 'Petição / Manifestação'] },
     Empresarial: { 'Parte Autora': ['Petição Inicial', 'Petição / Manifestação'], 'Parte Ré': ['Contestação', 'Petição / Manifestação'] }
@@ -231,11 +231,14 @@ async function generateJson(prompt: string, schema: any, context: string, conten
       const model = getGenerativeModel(aiClient, {
         model: modelName,
         systemInstruction: [
-          'PROCESSO 360 IA — MOTOR B V8.',
-          'Nunca invente fatos, datas, valores, documentos, decisões, números, pessoas ou eventos.',
-          'Confronte narrativa com prova documental específica; não repita erro do resumo quando documento estruturado o contradisser.',
-          'Rastreabilidade técnica pertence ao painel de auditoria, nunca ao corpo exportável da peça.',
-          'Diferencie rigorosamente fato verificável de tese jurídica.'
+          'PROCESSO 360 IA — MOTOR B V9 — INTEGRIDADE FACTUAL.',
+          'Nunca invente fatos, datas, valores, documentos, decisões, números, pessoas, juntadas, cumprimento de decisões, regularizações, treinamentos ou resultados periciais.',
+          'A existência de uma alegação confirma somente que ela foi alegada; não confirma que seu conteúdo seja verdadeiro.',
+          'Separe fato documentado, alegação, ponto controvertido, inferência, cálculo derivado e conclusão jurídica.',
+          'Confronte narrativa com prova documental específica; não repita erro do relatório quando o documento original o contradisser.',
+          'Ausência de informação não é prova de inexistência. Redija de forma condicional quando a confirmação documental faltar.',
+          'Nunca escreva como certeza no corpo algo que será tratado como pendência ou não confirmado na auditoria.',
+          'Rastreabilidade técnica pertence ao painel/anexo de auditoria, não deve ser confundida com narrativa factual da peça.'
         ].join('\n'),
         generationConfig: { responseMimeType: 'application/json', responseSchema: schema, maxOutputTokens: 16384 }
       })
@@ -327,8 +330,18 @@ function ensureProvisionalCauseReviewMarker(sections: PieceSection[]) {
   })
 }
 
-function applyDeterministicPieceFields(sections: PieceSection[], professionalProfile: ProfessionalProfile | undefined, pieceDate: string) {
-  const profile = professionalProfile || { name: '', oab: '', address: '', email: '' }
+function usesPublicRepresentation(area: string, perspective: string) {
+  return (area === 'Criminal' && perspective === 'Acusação')
+    || (area === 'Ambiental' && /Órgão Ambiental|MP/i.test(perspective))
+    || (area === 'Tributário' && /Fazenda Pública/i.test(perspective))
+    || (area === 'Administrativo' && /Administração Pública/i.test(perspective))
+    || (area === 'Previdenciário' && perspective === 'INSS')
+}
+
+function applyDeterministicPieceFields(sections: PieceSection[], professionalProfile: ProfessionalProfile | undefined, pieceDate: string, publicRepresentation = false) {
+  const profile = publicRepresentation
+    ? { name: '[REPRESENTAÇÃO PÚBLICA A CONFIRMAR]', oab: '', address: '', email: '' }
+    : (professionalProfile || { name: '', oab: '', address: '', email: '' })
   const replacements: Array<[RegExp, string]> = [
     [/\[(?:NOME DO )?ADVOGADO(?:\(A\))?\]/gi, profile.name],
     [/\[OAB(?:\/UF)?\]/gi, profile.oab],
@@ -374,7 +387,7 @@ function applyDeterministicPieceFields(sections: PieceSection[], professionalPro
   return cleanSections(filled)
 }
 
-export async function generateLegalPiece(report: AnalysisReport, pieceType: string, professionalProfile?: ProfessionalProfile): Promise<LegalPieceDraft> {
+export async function generateLegalPiece(report: AnalysisReport, pieceType: string, professionalProfile?: ProfessionalProfile, originalFile?: File): Promise<LegalPieceDraft> {
   if (/réplica|replica/i.test(pieceType) && !hasDefenseInRecord(report)) {
     throw new Error('PIECE_REPLICA_WITHOUT_DEFENSE')
   }
@@ -385,7 +398,10 @@ export async function generateLegalPiece(report: AnalysisReport, pieceType: stri
   const currentDate = new Intl.DateTimeFormat('pt-BR').format(new Date())
   const isInitialPiece = /petição inicial/i.test(pieceType)
   const pieceDate = isInitialPiece ? inferInitialFilingDate(report) : currentDate
-  const professional = professionalProfile ? JSON.stringify(professionalProfile, null, 2) : 'PROFISSIONAL NÃO CADASTRADO'
+  const publicRepresentation = usesPublicRepresentation(report.area, report.perspective)
+  const professional = publicRepresentation
+    ? 'REPRESENTAÇÃO PÚBLICA: não reutilize assinatura privada. Identifique o órgão/cargo somente se constar dos autos; caso contrário use [REPRESENTAÇÃO PÚBLICA A CONFIRMAR].'
+    : (professionalProfile ? JSON.stringify(professionalProfile, null, 2) : 'PROFISSIONAL NÃO CADASTRADO')
 
   const [basePromptDoc, specificPromptDoc, validatorPromptDoc, reviewerPromptDoc] = await Promise.all([
     loadMotorBPrompt(report.area, report.perspective, MOTOR_B_PURPOSES.base, MOTOR_B_BASE_GLOBAL),
@@ -394,12 +410,13 @@ export async function generateLegalPiece(report: AnalysisReport, pieceType: stri
     loadMotorBPrompt(report.area, report.perspective, MOTOR_B_PURPOSES.reviewer, MOTOR_B_REVIEWER)
   ])
 
-  const draftPrompt = `${basePromptDoc.content}\n\n${specificPromptDoc.content}\n\nÁREA: ${report.area}\nPERSPECTIVA: ${report.perspective}\nTIPO SOLICITADO: ${pieceType}\nFASE PROCESSUAL INFERIDA: ${phase}\nDATA ATUAL DO SISTEMA: ${currentDate}\nDATA A UTILIZAR NA PEÇA: ${pieceDate}\nREGRA DE DATA: em Petição Inicial, use a data de ajuizamento/distribuição expressamente identificada; se ela não estiver identificada, preserve [DATA]. Nunca use a data atual como se fosse a data histórica de ajuizamento.\n\n[DADOS_PROFISSIONAIS_DO_ADVOGADO]\n${professional}\n\n[DADOS_CONSOLIDADOS_DO_PROCESSO]\n${source}\n\n[DIAGNOSTICO_JURIDICO]\n${diagnostic}\n\nINSTRUÇÃO DE SAÍDA: JSON do schema. A peça em sections deve estar LIMPA, sem referências de lote/página/folha e sem avisos internos do sistema. Use a DATA A UTILIZAR NA PEÇA no fecho e os DADOS PROFISSIONAIS no bloco de assinatura; em Petição Inicial nunca substitua a data histórica de ajuizamento pela data atual. Não substitua dados existentes por placeholders.`
+  const draftPrompt = `${basePromptDoc.content}\n\n${specificPromptDoc.content}\n\nÁREA: ${report.area}\nPERSPECTIVA: ${report.perspective}\nTIPO SOLICITADO: ${pieceType}\nFASE PROCESSUAL INFERIDA: ${phase}\nDATA ATUAL DO SISTEMA: ${currentDate}\nDATA A UTILIZAR NA PEÇA: ${pieceDate}\nREGRA DE DATA: em Petição Inicial, use a data de ajuizamento/distribuição expressamente identificada; se ela não estiver identificada, preserve [DATA]. Nunca use a data atual como se fosse a data histórica de ajuizamento.\n\n[DADOS_PROFISSIONAIS_DO_ADVOGADO]\n${professional}\n\n[DADOS_CONSOLIDADOS_DO_PROCESSO]\n${source}\n\n[DIAGNOSTICO_JURIDICO]\n${diagnostic}\n\nINSTRUÇÃO DE INTEGRIDADE FACTUAL: a perspectiva define argumentação, não os acontecimentos. Não converta alegação em fato. Frases como "cumpriu", "juntou", "preservou", "regularizou", "não realizou", "restou comprovado" e equivalentes só podem ser categóricas com suporte documental específico; sem suporte, use formulação condicional/controvertida.
+INSTRUÇÃO DE SAÍDA: JSON do schema. A peça em sections deve estar LIMPA, sem referências de lote/página/folha e sem avisos internos do sistema. Use a DATA A UTILIZAR NA PEÇA no fecho e os DADOS PROFISSIONAIS no bloco de assinatura; em Petição Inicial nunca substitua a data histórica de ajuizamento pela data atual. Não substitua dados existentes por placeholders.`
 
   const draftResult = await generateJson(draftPrompt, draftSchema, 'geração do rascunho especializado v3')
   const rawSections = cleanSections(Array.isArray(draftResult.parsed.sections) ? draftResult.parsed.sections.map((item: any) => ({ title: String(item.title || ''), content: String(item.content || '') })) : [])
 
-  const validationPrompt = `${validatorPromptDoc.content}\n\nFASE PROCESSUAL INFERIDA: ${phase}\nDATA ATUAL DO SISTEMA: ${currentDate}\nDATA A UTILIZAR NA PEÇA: ${pieceDate}\nREGRA DE DATA: em Petição Inicial, use a data de ajuizamento/distribuição expressamente identificada; se ela não estiver identificada, preserve [DATA]. Nunca use a data atual como se fosse a data histórica de ajuizamento.\n\n[DADOS_PROFISSIONAIS_DO_ADVOGADO]\n${professional}\n\n[DADOS_CONSOLIDADOS_DO_PROCESSO]\n${source}\n\n[DIAGNOSTICO_JURIDICO]\n${diagnostic}\n\n[MINUTA_GERADA]\n${JSON.stringify(rawSections, null, 2)}\n\nINSTRUÇÃO: claims guarda a auditoria e sourceReference. correctedSections deve permanecer limpa e exportável.`
+  const validationPrompt = `${validatorPromptDoc.content}\n\nFASE PROCESSUAL INFERIDA: ${phase}\nDATA ATUAL DO SISTEMA: ${currentDate}\nDATA A UTILIZAR NA PEÇA: ${pieceDate}\nREGRA DE DATA: em Petição Inicial, use a data de ajuizamento/distribuição expressamente identificada; se ela não estiver identificada, preserve [DATA]. Nunca use a data atual como se fosse a data histórica de ajuizamento.\n\n[DADOS_PROFISSIONAIS_DO_ADVOGADO]\n${professional}\n\n[DADOS_CONSOLIDADOS_DO_PROCESSO]\n${source}\n\n[DIAGNOSTICO_JURIDICO]\n${diagnostic}\n\n[MINUTA_GERADA]\n${JSON.stringify(rawSections, null, 2)}\n\nINSTRUÇÃO: esta é a primeira validação. claims deve cobrir TODAS as afirmações materiais, não apenas nomes/datas/valores. A existência de uma alegação não confirma seu conteúdo. Se a fonte específica não estiver identificada, marque NÃO CONFIRMADA ou PARCIALMENTE CONFIRMADA e reescreva de modo condicional. claims guarda a auditoria e sourceReference. correctedSections deve permanecer limpa e exportável.`
   const validationResult = await generateJson(validationPrompt, validationSchema, 'validação factual v3')
 
   const claims: PieceClaim[] = Array.isArray(validationResult.parsed.claims) ? validationResult.parsed.claims.map((item: any, index: number) => ({
@@ -418,39 +435,151 @@ export async function generateLegalPiece(report: AnalysisReport, pieceType: stri
   const reviewed = Array.isArray(reviewResult.parsed.sections)
     ? reviewResult.parsed.sections.map((item: any) => ({ title: String(item.title || ''), content: String(item.content || '') }))
     : factSafeSections
-  const safeSections = ensureProvisionalCauseReviewMarker(applyDeterministicPieceFields(applyDefenseSafeguards(hardenCorrectedSections(reviewed, claims), pieceType), professionalProfile, pieceDate))
+
+  let finalClaims = claims
+  let finalSections = reviewed
+  let finalValidationModel = reviewResult.model
+
+  if (originalFile) {
+    const originalAttachment = await buildValidationAttachment(originalFile, claims)
+    const finalValidationPrompt = `${validatorPromptDoc.content}
+
+[VALIDAÇÃO FINAL CONTRA O DOCUMENTO ORIGINAL]
+ÁREA: ${report.area}
+PERSPECTIVA: ${report.perspective}
+TIPO: ${pieceType}
+
+[MINUTA APÓS REVISÃO]
+${JSON.stringify(reviewed, null, 2)}
+
+[CLAIMS DA PRIMEIRA VALIDAÇÃO]
+${JSON.stringify(claims, null, 2)}
+
+REGRAS:
+1. Revalide novamente todas as afirmações materiais APÓS as alterações do revisor.
+2. Use o PDF original anexado como fonte primária. O relatório consolidado não substitui o documento original.
+3. Confirmar que uma parte alegou algo não confirma que o conteúdo alegado seja verdadeiro.
+4. Não transforme ausência de informação em prova de inexistência.
+5. Se o PDF anexado for apenas um recorte de páginas referenciadas, não confirme fato que dependa de página não presente.
+6. Toda afirmação material categórica sem suporte específico deve ser marcada NÃO CONFIRMADA/PARCIALMENTE CONFIRMADA e reescrita de modo condicional.
+7. correctedSections deve refletir exatamente essa validação final.`
+
+    const finalValidationResult = await generateJson(
+      finalValidationPrompt,
+      validationSchema,
+      'validação factual final no documento original v9',
+      [{ inlineData: { data: bytesToBase64(originalAttachment.bytes), mimeType: 'application/pdf' } }]
+    )
+
+    finalClaims = Array.isArray(finalValidationResult.parsed.claims)
+      ? finalValidationResult.parsed.claims.map((item: any, index: number) => ({
+          id: String(item.id || `claim-final-${index + 1}`),
+          text: String(item.text || ''),
+          type: String(item.type || 'fato'),
+          status: item.status as ClaimStatus,
+          sourceReference: String(item.sourceReference || ''),
+          treatment: String(item.treatment || '')
+        }))
+      : claims
+    finalSections = Array.isArray(finalValidationResult.parsed.correctedSections)
+      ? finalValidationResult.parsed.correctedSections.map((item: any) => ({ title: String(item.title || ''), content: String(item.content || '') }))
+      : reviewed
+    finalValidationModel = finalValidationResult.model || reviewResult.model
+  } else {
+    finalClaims = claims.map(item => item.status === 'CONFIRMADA'
+      ? { ...item, status: 'PARCIALMENTE CONFIRMADA' as ClaimStatus, treatment: `${item.treatment || ''} Documento original não disponível na validação final.`.trim() }
+      : item)
+  }
+
+  const safeSections = ensureProvisionalCauseReviewMarker(
+    applyDeterministicPieceFields(
+      applyDefenseSafeguards(hardenCorrectedSections(finalSections, finalClaims), pieceType),
+      publicRepresentation ? undefined : professionalProfile,
+      pieceDate,
+      publicRepresentation
+    )
+  )
 
   const promptVersion = [
-    `motor-b-v8:base-${basePromptDoc.source}-v${basePromptDoc.version}`,
+    `motor-b-v9:base-${basePromptDoc.source}-v${basePromptDoc.version}`,
     `piece-${specificPromptDoc.source}-v${specificPromptDoc.version}`,
     `validator-${validatorPromptDoc.source}-v${validatorPromptDoc.version}`,
-    `reviewer-${reviewerPromptDoc.source}-v${reviewerPromptDoc.version}`
+    `reviewer-${reviewerPromptDoc.source}-v${reviewerPromptDoc.version}`,
+    originalFile ? 'final-original-v9' : 'final-original-unavailable'
   ].join('+')
 
   return {
     pieceType,
     title: cleanExportableText(String(reviewResult.parsed.title || draftResult.parsed.title || pieceType)),
     sections: safeSections,
-    claims,
-    validation: countValidation(claims),
-    model: reviewResult.model || validationResult.model || draftResult.model,
+    claims: finalClaims,
+    validation: countValidation(finalClaims),
+    model: finalValidationModel || validationResult.model || draftResult.model,
     promptVersion
   }
 }
 
-function extractPageRange(reference: string, pageCount: number) {
-  const refs = String(reference || '')
-  const range = refs.match(/p(?:á|a)ginas?\s*(\d+)\s*[-–a]\s*(\d+)/i)
-  const single = refs.match(/(?:p(?:á|a)gina|p\.?)[\s:]*(\d+)/i)
-  let start: number | null = null
-  let end: number | null = null
-  if (range) { start = Number(range[1]); end = Number(range[2]) }
-  else if (single) { start = Number(single[1]); end = Number(single[1]) }
-  if (!start || !end || start < 1) return null
-  start = Math.max(1, Math.min(start, pageCount))
-  end = Math.max(start, Math.min(end, pageCount))
-  if (end - start > 4) end = start + 4
-  return { start, end }
+function extractPageIndexes(reference: string, pageCount: number) {
+  const refs = String(reference || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const indexes = new Set<number>()
+
+  const rangeRegex = /paginas?\s*(\d+)\s*(?:-|–|a)\s*(\d+)/gi
+  let rangeMatch: RegExpExecArray | null
+  while ((rangeMatch = rangeRegex.exec(refs))) {
+    let start = Math.max(1, Math.min(Number(rangeMatch[1]), pageCount))
+    let end = Math.max(start, Math.min(Number(rangeMatch[2]), pageCount))
+    if (end - start > 12) end = start + 12
+    for (let page = start; page <= end; page += 1) indexes.add(page - 1)
+  }
+
+  const pageListMatch = refs.match(/paginas?\s+([\d,; e]+)(?=$|\]|\)|\.|\n)/i)
+  if (pageListMatch) {
+    for (const token of pageListMatch[1].match(/\d+/g) || []) {
+      const page = Number(token)
+      if (page >= 1 && page <= pageCount) indexes.add(page - 1)
+    }
+  }
+
+  const singleRegex = /(?:pagina|p\.)\s*[:#]?\s*(\d+)/gi
+  let singleMatch: RegExpExecArray | null
+  while ((singleMatch = singleRegex.exec(refs))) {
+    const page = Number(singleMatch[1])
+    if (page >= 1 && page <= pageCount) indexes.add(page - 1)
+  }
+
+  return [...indexes].sort((a,b)=>a-b)
+}
+
+async function buildValidationAttachment(file: File, claims: PieceClaim[]) {
+  const sourceBytes = await file.arrayBuffer()
+  const source = await PDFDocument.load(sourceBytes, { ignoreEncryption: true })
+  const pageCount = source.getPageCount()
+
+  if (file.size <= 8 * 1024 * 1024 && pageCount <= 60) {
+    return { bytes: new Uint8Array(sourceBytes), pages: `1-${pageCount}`, complete: true }
+  }
+
+  const selected = new Set<number>()
+  for (const claim of claims) {
+    for (const index of extractPageIndexes(claim.sourceReference, pageCount)) selected.add(index)
+  }
+
+  // Para PDFs extensos, a validação final usa somente páginas efetivamente referenciadas.
+  // Sem referência, não inventamos confirmação: incluímos no máximo as 6 primeiras páginas
+  // para identificação básica e o validador deve manter o restante como pendente.
+  if (!selected.size) {
+    for (let i = 0; i < Math.min(6, pageCount); i += 1) selected.add(i)
+  }
+
+  const indexes = [...selected].sort((a,b)=>a-b).slice(0, 24)
+  const target = await PDFDocument.create()
+  const pages = await target.copyPages(source, indexes)
+  pages.forEach(page => target.addPage(page))
+  return {
+    bytes: new Uint8Array(await target.save()),
+    pages: indexes.map(index=>index+1).join(', '),
+    complete: indexes.length === pageCount
+  }
 }
 
 function bytesToBase64(bytes: Uint8Array) {
@@ -463,17 +592,30 @@ function bytesToBase64(bytes: Uint8Array) {
 export async function confirmClaimInOriginal(file: File, claim: PieceClaim): Promise<{ status: string; evidence: string; pages: string; note: string }> {
   const sourceBytes = await file.arrayBuffer()
   const source = await PDFDocument.load(sourceBytes, { ignoreEncryption: true })
-  const range = extractPageRange(claim.sourceReference, source.getPageCount())
-  if (!range) throw new Error('PIECE_TARGETED_SOURCE_NOT_AVAILABLE')
+  const indexes = extractPageIndexes(claim.sourceReference, source.getPageCount())
+  if (!indexes.length) throw new Error('PIECE_TARGETED_SOURCE_NOT_AVAILABLE')
+
   const target = await PDFDocument.create()
-  const indexes = Array.from({ length: range.end - range.start + 1 }, (_, index) => range.start - 1 + index)
-  const pages = await target.copyPages(source, indexes)
+  const pages = await target.copyPages(source, indexes.slice(0, 12))
   pages.forEach(page => target.addPage(page))
   const bytes = new Uint8Array(await target.save())
-  const prompt = `CONFIRMAÇÃO PONTUAL NO DOCUMENTO ORIGINAL.\nFATO: ${claim.text}\nREFERÊNCIA: ${claim.sourceReference}\nAnalise SOMENTE o PDF anexado. Informe CONFIRMADO, NÃO LOCALIZADO ou DIVERGENTE. Não extrapole.`
-  const result = await generateJson(prompt, confirmationSchema, 'confirmação pontual no original', [{ inlineData: { data: bytesToBase64(bytes), mimeType: 'application/pdf' } }])
+  const pageLabel = indexes.slice(0, 12).map(index=>index+1).join(', ')
+  const prompt = `CONFIRMAÇÃO PONTUAL NO DOCUMENTO ORIGINAL.
+AFIRMAÇÃO: ${claim.text}
+REFERÊNCIA INFORMADA: ${claim.sourceReference}
+PÁGINAS EFETIVAMENTE ANEXADAS: ${pageLabel}
+
+Analise SOMENTE o PDF anexado.
+- A existência de uma alegação confirma apenas que ela foi alegada; não confirma o conteúdo.
+- Não transforme ausência de informação em prova de inexistência.
+- Informe CONFIRMADO somente com suporte específico.
+- Informe NÃO LOCALIZADO quando o suporte não estiver nas páginas.
+- Informe DIVERGENTE quando o documento contrariar a afirmação.`
+  const result = await generateJson(prompt, confirmationSchema, 'confirmação pontual no original v9', [{ inlineData: { data: bytesToBase64(bytes), mimeType: 'application/pdf' } }])
   return {
-    status: String(result.parsed.status || 'NÃO LOCALIZADO'), evidence: String(result.parsed.evidence || ''),
-    pages: String(result.parsed.pages || `${range.start}-${range.end}`), note: String(result.parsed.note || '')
+    status: String(result.parsed.status || 'NÃO LOCALIZADO'),
+    evidence: String(result.parsed.evidence || ''),
+    pages: String(result.parsed.pages || pageLabel),
+    note: String(result.parsed.note || '')
   }
 }
