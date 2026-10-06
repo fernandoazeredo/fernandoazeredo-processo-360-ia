@@ -135,16 +135,17 @@ function parseCurrencyInput(raw:string) {
 function scrollToAlert(id:string) {
   const reveal = () => {
     const target=document.getElementById(id)
-    if(!target) return false
+    if(!target) return
     target.scrollIntoView({behavior:'smooth',block:'center',inline:'nearest'})
     target.focus({preventScroll:true})
-    return true
   }
 
-  window.requestAnimationFrame(() => {
-    if(reveal()) return
-    window.setTimeout(reveal,80)
-  })
+  // O alerta é renderizado após a atualização do estado. Repetimos a tentativa
+  // por um curto período para cobrir celulares/navegadores que concluem o layout
+  // depois do primeiro frame.
+  window.requestAnimationFrame(reveal)
+  window.setTimeout(reveal,120)
+  window.setTimeout(reveal,320)
 }
 
 const stages = [
