@@ -398,6 +398,87 @@ function applyDefenseSafeguards(sections: PieceSection[], pieceType: string) {
   })))
 }
 
+function criticalAssertionsFromSections(sections: PieceSection[]) {
+  const pattern = /(primariedade|sem antecedentes|junta(?:-se)? aos autos|juntou aos autos|acosta(?:ndo)? aos autos|cumpr(?:iu|imento|ida|ido)|preserv(?:ou|ado|ação)|manteve\s+(?:intact|intocad)|regulariz(?:ou|ado)|restou demonstrad|comprovou-se|comprovad[oa]|perícia[^.]{0,100}(?:confirmou|comprovou|ratificará|demonstrará)|decorrido o prazo|tempestiv[ao]|efetivação da baixa|retirada do gravame)/i
+  const results: string[] = []
+  for (const section of sections) {
+    const sentences = String(section.content || '').split(/(?<=[.!?;])\s+|\n+/)
+    for (const sentence of sentences) {
+      const clean = sentence.trim()
+      if (clean.length >= 18 && pattern.test(clean)) results.push(clean.slice(0, 700))
+    }
+  }
+  return Array.from(new Set(results)).slice(0, 24)
+}
+
+async function applyCriticalFactualGate(
+  report: AnalysisReport,
+  pieceType: string,
+  sections: PieceSection[],
+  claims: PieceClaim[],
+  originalFile: File,
+  validatorPromptDoc: LoadedPrompt
+): Promise<{ sections: PieceSection[]; claims: PieceClaim[]; model?: string }> {
+  const critical = criticalAssertionsFromSections(sections)
+  if (!critical.length) return { sections, claims }
+
+  const attachment = await buildValidationAttachment(originalFile, claims)
+  const prompt = `${validatorPromptDoc.content}
+
+[BARREIRA FACTUAL CRÍTICA — V9]
+ÁREA: ${report.area}
+PERSPECTIVA: ${report.perspective}
+TIPO: ${pieceType}
+
+[MINUTA A CONFERIR]
+${JSON.stringify(sections, null, 2)}
+
+[AFIRMAÇÕES CRÍTICAS DETECTADAS PELO SISTEMA]
+${JSON.stringify(critical, null, 2)}
+
+[CLAIMS ATUAIS — NÃO SÃO FONTE DE VERDADE]
+${JSON.stringify(claims, null, 2)}
+
+Use SOMENTE o PDF original anexado como fonte primária.
+
+REGRAS OBRIGATÓRIAS:
+1. Confira individualmente TODAS as afirmações críticas listadas.
+2. Para cada uma, gere claim específico. CONFIRMADA/CORRIGIDA exige sourceReference com página e treatment com trecho curto de suporte do PDF.
+3. A mera alegação de uma parte confirma apenas que a alegação existe, não o conteúdo alegado.
+4. "Junta aos autos", "acosta", "cumpriu", "preservou", "regularizou", "primariedade", "sem antecedentes", "tempestiva", "decurso de prazo", "perícia confirmou/demonstrará" e equivalentes NÃO podem permanecer categóricos sem suporte documental específico.
+5. Se a prova não estiver no PDF anexado, reescreva a frase de modo condicional, como pedido, alegação ou pendência; ou remova a afirmação.
+6. Não invente documento a ser juntado, cumprimento de decisão, evento posterior, certidão, antecedentes, resultado pericial ou confirmação técnica.
+7. correctedSections deve conter a peça integral já corrigida, não apenas os trechos alterados.
+8. Se houver dúvida, prefira PARCIALMENTE CONFIRMADA ou NÃO CONFIRMADA e linguagem conservadora.`
+
+  const result = await generateJson(
+    prompt,
+    validationSchema,
+    'barreira factual crítica v9',
+    [{ inlineData: { data: bytesToBase64(attachment.bytes), mimeType: 'application/pdf' } }]
+  )
+
+  const nextClaims: PieceClaim[] = Array.isArray(result.parsed.claims)
+    ? result.parsed.claims.map((item: any, index: number) => ({
+        id: String(item.id || `claim-gate-${index + 1}`),
+        text: String(item.text || ''),
+        type: String(item.type || 'fato crítico'),
+        status: item.status as ClaimStatus,
+        sourceReference: String(item.sourceReference || ''),
+        treatment: String(item.treatment || '')
+      }))
+    : claims
+
+  const nextSections: PieceSection[] = Array.isArray(result.parsed.correctedSections)
+    ? result.parsed.correctedSections.map((item: any) => ({
+        title: String(item.title || ''),
+        content: String(item.content || '')
+      }))
+    : sections
+
+  return { sections: nextSections, claims: nextClaims, model: result.model }
+}
+
 function ensureProvisionalCauseReviewMarker(sections: PieceSection[]) {
   return sections.map(section => {
     const content = String(section.content || '').replace(
@@ -569,6 +650,20 @@ REGRAS:
       : item)
   }
 
+  if (originalFile) {
+    const gated = await applyCriticalFactualGate(
+      report,
+      pieceType,
+      finalSections,
+      finalClaims,
+      originalFile,
+      validatorPromptDoc
+    )
+    finalSections = gated.sections
+    finalClaims = gated.claims
+    finalValidationModel = gated.model || finalValidationModel
+  }
+
   const safeSections = ensureProvisionalCauseReviewMarker(
     applyDeterministicPieceFields(
       applyDefenseSafeguards(hardenCorrectedSections(finalSections, finalClaims), pieceType),
@@ -663,9 +758,18 @@ REGRAS OBRIGATÓRIAS:
       }))
     : piece.sections
 
+  const gated = await applyCriticalFactualGate(
+    report,
+    piece.pieceType,
+    corrected,
+    claims,
+    originalFile,
+    validatorPromptDoc
+  )
+
   const safeSections = ensureProvisionalCauseReviewMarker(
     applyDeterministicPieceFields(
-      applyDefenseSafeguards(hardenCorrectedSections(corrected, claims), piece.pieceType),
+      applyDefenseSafeguards(hardenCorrectedSections(gated.sections, gated.claims), piece.pieceType),
       publicRepresentation ? undefined : professionalProfile,
       pieceDate,
       publicRepresentation
@@ -675,9 +779,9 @@ REGRAS OBRIGATÓRIAS:
   return {
     ...piece,
     sections: safeSections,
-    claims,
-    validation: countValidation(claims),
-    model: result.model || piece.model,
+    claims: gated.claims,
+    validation: countValidation(gated.claims),
+    model: gated.model || result.model || piece.model,
     promptVersion: `${piece.promptVersion}+manual-revalidation-v9`
   }
 }
