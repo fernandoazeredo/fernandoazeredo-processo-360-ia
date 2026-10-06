@@ -683,7 +683,7 @@ function analysisPriceFromPages(pageCount: number, pricing: WalletPricing) {
   return Math.max(pricing.analysisMinimumPriceCents, pagePriceCents)
 }
 
-function usageCostUsd(item: FirebaseFirestore.DocumentData, pricing: WalletPricing) {
+function usageCostUsd(item: any, pricing: WalletPricing) {
   const input = Math.max(0, Number(item.promptTokenCount || 0))
   const output = Math.max(0, Number(item.candidatesTokenCount || 0))
   const thinking = Math.max(0, Number(item.thoughtsTokenCount || 0))
