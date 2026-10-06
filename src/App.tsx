@@ -1079,6 +1079,16 @@ function exportPieceAsWord(report: AnalysisReport, piece: LegalPieceDraft) {
   URL.revokeObjectURL(url)
 }
 
+function requiresPrivateProfessional(area:string,perspective:string){
+  return !(
+    (area==='Criminal' && perspective==='Acusação') ||
+    (area==='Ambiental' && /Órgão Ambiental|MP/i.test(perspective)) ||
+    (area==='Tributário' && /Fazenda Pública/i.test(perspective)) ||
+    (area==='Administrativo' && /Administração Pública/i.test(perspective)) ||
+    (area==='Previdenciário' && perspective==='INSS')
+  )
+}
+
 function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletBalanceCents, onRecharge, user}:{report:AnalysisReport;originalFile:File|null;isAdmin:boolean;piecePriceCents:number;walletBalanceCents:number;onRecharge:()=>void;user:User}) {
   const [pieceOpen, setPieceOpen] = useState(false)
   const [pieceType, setPieceType] = useState(() => suggestPieceType(report.area, report.perspective))
@@ -1098,6 +1108,38 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
   const [profileEditing, setProfileEditing] = useState(false)
   const [pieceQuoteCents, setPieceQuoteCents] = useState(piecePriceCents)
   const [pieceQuoteError, setPieceQuoteError] = useState('')
+
+  useEffect(()=>{
+    try{
+      const raw=localStorage.getItem(`p360-piece-${user.uid}-${report.analysisId}`)
+      if(raw){
+        const saved=JSON.parse(raw)
+        if(saved?.piece?.pieceType && saved?.analysisId===report.analysisId){
+          setPiece(saved.piece as LegalPieceDraft)
+          setPieceType(saved.piece.pieceType)
+          setPieceOpen(true)
+        }
+      }
+    }catch(error){
+      console.warn('[Processo 360 IA] Não foi possível restaurar a peça concluída.',error)
+    }
+  },[report.analysisId,user.uid])
+
+  useEffect(()=>{
+    if(!piece) return
+    try{
+      localStorage.setItem(`p360-piece-${user.uid}-${report.analysisId}`,JSON.stringify({
+        analysisId:report.analysisId,
+        area:report.area,
+        perspective:report.perspective,
+        fileName:report.fileName,
+        promptVersion:piece.promptVersion,
+        piece
+      }))
+    }catch(error){
+      console.warn('[Processo 360 IA] Não foi possível persistir a peça concluída.',error)
+    }
+  },[piece,report.analysisId,user.uid])
 
   useEffect(() => {
     if (!pieceOpen) return
@@ -1196,7 +1238,7 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
   async function handleGeneratePiece() {
     setPieceError('')
     setPiece(null)
-    if (!professionalProfile.name.trim() || !professionalProfile.oab.trim()) {
+    if (requiresPrivateProfessional(report.area,report.perspective) && (!professionalProfile.name.trim() || !professionalProfile.oab.trim())) {
       setPieceError('Cadastre o nome do advogado e a OAB antes de gerar a peça. Assim o sistema não criará assinatura com campos em branco.')
       return
     }
@@ -1208,15 +1250,31 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
     setPieceStage('Estruturando e redigindo o rascunho')
     let chargeId = ''
     try {
+      let currentPiecePrice = pieceQuoteCents
       if (!isAdmin) {
-        const charge = await chargePiece(pieceType, report.processNumber, pieceQuoteCents)
+        const freshQuote = await quotePiece()
+        currentPiecePrice = freshQuote.priceCents
+        setPieceQuoteCents(currentPiecePrice)
+        if (walletBalanceCents < currentPiecePrice) {
+          throw new Error('WALLET_INSUFFICIENT')
+        }
+        if (pieceQuoteCents > 0 && currentPiecePrice !== pieceQuoteCents) {
+          setPieceError(`O preço da peça foi atualizado para ${formatBRL(currentPiecePrice)}. Confira o novo valor e clique novamente em Gerar Rascunho.`)
+          return
+        }
+        const charge = await chargePiece(pieceType, report.processNumber, currentPiecePrice)
         chargeId = charge.chargeId
         if (await consumeForcedPieceFailure()) {
           throw new Error('TEST_FORCED_PIECE_FAILURE')
         }
       }
-      window.setTimeout(() => setPieceStage('Validando fatos contra o relatório consolidado'), 900)
-      const generated = await generateLegalPiece(report, pieceType, professionalProfile)
+      window.setTimeout(() => setPieceStage('Validando novamente contra o documento original'), 900)
+      const generated = await generateLegalPiece(
+        report,
+        pieceType,
+        requiresPrivateProfessional(report.area,report.perspective) ? professionalProfile : undefined,
+        originalFile || undefined
+      )
       setPiece(generated)
       setPieceStage('Rascunho validado')
       window.setTimeout(() => document.getElementById('piece-review')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
