@@ -519,6 +519,91 @@ REGRAS:
   }
 }
 
+
+export async function revalidateLegalPiece(
+  report: AnalysisReport,
+  piece: LegalPieceDraft,
+  originalFile: File,
+  professionalProfile?: ProfessionalProfile
+): Promise<LegalPieceDraft> {
+  const validatorPromptDoc = await loadMotorBPrompt(
+    report.area,
+    report.perspective,
+    MOTOR_B_PURPOSES.validator,
+    MOTOR_B_VALIDATOR
+  )
+  const attachment = await buildValidationAttachment(originalFile, piece.claims)
+  const publicRepresentation = usesPublicRepresentation(report.area, report.perspective)
+  const currentDate = new Intl.DateTimeFormat('pt-BR').format(new Date())
+  const pieceDate = /petição inicial/i.test(piece.pieceType) ? inferInitialFilingDate(report) : currentDate
+
+  const prompt = `${validatorPromptDoc.content}
+
+[REVALIDAÇÃO APÓS EDIÇÃO MANUAL]
+ÁREA: ${report.area}
+PERSPECTIVA: ${report.perspective}
+TIPO: ${piece.pieceType}
+
+[MINUTA EDITADA]
+${JSON.stringify(piece.sections, null, 2)}
+
+[VALIDAÇÃO ANTERIOR — APENAS REFERÊNCIA, NÃO FONTE DE VERDADE]
+${JSON.stringify(piece.claims, null, 2)}
+
+REGRAS OBRIGATÓRIAS:
+1. A edição manual INVALIDOU a validação anterior.
+2. Reavalie todas as afirmações materiais da versão editada contra o PDF original anexado.
+3. Não confirme fato apenas porque estava confirmado antes ou porque consta do relatório da IA.
+4. Para CONFIRMADA, sourceReference deve indicar página(s) e treatment deve incluir um trecho curto de suporte do documento.
+5. Se o trecho não estiver disponível nas páginas anexadas, use NÃO CONFIRMADA ou PARCIALMENTE CONFIRMADA.
+6. Alegação de parte deve permanecer alegação; sua existência não comprova seu conteúdo.
+7. correctedSections deve conter exatamente a versão revalidada, com linguagem condicional onde faltar prova.
+8. Não crie fato novo, documento, juntada, cumprimento, depoimento, preservação, perícia ou evento posterior.`
+
+  const result = await generateJson(
+    prompt,
+    validationSchema,
+    'revalidação factual após edição v9',
+    [{ inlineData: { data: bytesToBase64(attachment.bytes), mimeType: 'application/pdf' } }]
+  )
+
+  const claims: PieceClaim[] = Array.isArray(result.parsed.claims)
+    ? result.parsed.claims.map((item: any, index: number) => ({
+        id: String(item.id || `claim-revalidado-${index + 1}`),
+        text: String(item.text || ''),
+        type: String(item.type || 'fato'),
+        status: item.status as ClaimStatus,
+        sourceReference: String(item.sourceReference || ''),
+        treatment: String(item.treatment || '')
+      }))
+    : piece.claims
+
+  const corrected = Array.isArray(result.parsed.correctedSections)
+    ? result.parsed.correctedSections.map((item: any) => ({
+        title: String(item.title || ''),
+        content: String(item.content || '')
+      }))
+    : piece.sections
+
+  const safeSections = ensureProvisionalCauseReviewMarker(
+    applyDeterministicPieceFields(
+      applyDefenseSafeguards(hardenCorrectedSections(corrected, claims), piece.pieceType),
+      publicRepresentation ? undefined : professionalProfile,
+      pieceDate,
+      publicRepresentation
+    )
+  )
+
+  return {
+    ...piece,
+    sections: safeSections,
+    claims,
+    validation: countValidation(claims),
+    model: result.model || piece.model,
+    promptVersion: `${piece.promptVersion}+manual-revalidation-v9`
+  }
+}
+
 function extractPageIndexes(reference: string, pageCount: number) {
   const refs = String(reference || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   const indexes = new Set<number>()
