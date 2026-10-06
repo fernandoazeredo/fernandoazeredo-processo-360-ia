@@ -42,6 +42,9 @@ export type GeminiAnalysisReport = {
   globalAnalysis: string
   risks: Array<{ item: string; level: 'Alta' | 'Média' | 'Baixa'; basis: string }>
   conclusionStrategy: string
+  factualFindings: Array<{ classification: 'FATO DOCUMENTADO' | 'ALEGAÇÃO DE PARTE' | 'PONTO CONTROVERTIDO' | 'INFERÊNCIA' | 'INFORMAÇÃO AUSENTE'; statement: string; source: string; excerpt: string }>
+  calculations: Array<{ description: string; formula: string; inputs: string; result: string; legalCondition: string }>
+  pendingItems: Array<{ item: string; reason: string; evidenceNeeded: string }>
   sources: Array<{ lot: number; pages: string; note: string }>
 }
 
@@ -77,6 +80,12 @@ type LotExtraction = {
   favorablePoints: string[]
   adversePoints: string[]
   unresolvedQuestions: string[]
+  factualRecords: Array<{
+    classification: 'FATO DOCUMENTADO' | 'ALEGAÇÃO DE PARTE' | 'PONTO CONTROVERTIDO' | 'INFERÊNCIA' | 'INFORMAÇÃO AUSENTE'
+    statement: string
+    sourcePage: string
+    sourceExcerpt: string
+  }>
 }
 
 type ResumeState = {
@@ -150,7 +159,13 @@ const extractionSchema = Schema.object({
     proceduralIssues: Schema.array({ items: Schema.string() }),
     favorablePoints: Schema.array({ items: Schema.string() }),
     adversePoints: Schema.array({ items: Schema.string() }),
-    unresolvedQuestions: Schema.array({ items: Schema.string() })
+    unresolvedQuestions: Schema.array({ items: Schema.string() }),
+    factualRecords: Schema.array({ items: Schema.object({ properties: {
+      classification: Schema.enumString({ enum: ['FATO DOCUMENTADO', 'ALEGAÇÃO DE PARTE', 'PONTO CONTROVERTIDO', 'INFERÊNCIA', 'INFORMAÇÃO AUSENTE'] }),
+      statement: Schema.string(),
+      sourcePage: Schema.string(),
+      sourceExcerpt: Schema.string()
+    } }) })
   }
 })
 
@@ -182,6 +197,24 @@ const reportSchema = Schema.object({
       })
     }),
     conclusionStrategy: Schema.string(),
+    factualFindings: Schema.array({ items: Schema.object({ properties: {
+      classification: Schema.enumString({ enum: ['FATO DOCUMENTADO', 'ALEGAÇÃO DE PARTE', 'PONTO CONTROVERTIDO', 'INFERÊNCIA', 'INFORMAÇÃO AUSENTE'] }),
+      statement: Schema.string(),
+      source: Schema.string(),
+      excerpt: Schema.string()
+    } }) }),
+    calculations: Schema.array({ items: Schema.object({ properties: {
+      description: Schema.string(),
+      formula: Schema.string(),
+      inputs: Schema.string(),
+      result: Schema.string(),
+      legalCondition: Schema.string()
+    } }) }),
+    pendingItems: Schema.array({ items: Schema.object({ properties: {
+      item: Schema.string(),
+      reason: Schema.string(),
+      evidenceNeeded: Schema.string()
+    } }) }),
     sources: Schema.array({
       items: Schema.object({
         properties: {
@@ -555,7 +588,8 @@ function isValidLotExtraction(value: any): value is LotExtraction {
     Array.isArray(value.proceduralIssues) &&
     Array.isArray(value.favorablePoints) &&
     Array.isArray(value.adversePoints) &&
-    Array.isArray(value.unresolvedQuestions)
+    Array.isArray(value.unresolvedQuestions) &&
+    Array.isArray(value.factualRecords)
   )
 }
 
@@ -594,6 +628,7 @@ Mantenha referências de página/peça sempre que identificáveis.
 - Em timeline, use data exata apenas quando ela estiver expressamente identificada. Se a data exata não constar, use em date exatamente "Informação não constante nos dados fornecidos". Quando o contexto permitir estabelecer com segurança uma posição relativa, registre no event ou reference "Inferência cronológica: ..." e indique o evento/data que sustenta essa ordenação.
 - Em monetaryValues, TRANSCREVA literalmente todos os valores expressamente identificados, especialmente TRCT/verbas rescisórias, valor da causa e valor de cada pedido. Em extratos de FGTS, preserve competência por competência: mês/ano, valor literal quando houver, situação documental identificável e referência. Não agregue meses distintos quando o documento individualizar competências. Confira dígito por dígito antes de responder. Para cada valor, informe natureza e referência. NÃO some, subtraia, estime, arredonde, complete nem crie 'diferença' entre dois valores. Uma diferença monetária só pode entrar em claims se estiver expressamente formulada como pedido/alegação no documento. Se a leitura de um algarismo estiver duvidosa, registre a dúvida em unresolvedQuestions em vez de escolher um valor.
 - Em qualifications, extraia e preserve separadamente a qualificação encontrada de cada parte e advogado: papel processual, nome, estado civil, CPF/CNPJ, endereço, nome do advogado e OAB. Se o estado civil constar literalmente (por exemplo, solteiro/solteira, casado/casada, divorciado/divorciada, viúvo/viúva), preencha civilStatus exatamente com esse dado; se não constar, use "Informação não constante nos dados fornecidos". Não descarte esses dados por não serem necessários ao resumo do lote.
+- Em factualRecords, registre TODA afirmação material relevante usando obrigatoriamente uma das classificações: FATO DOCUMENTADO, ALEGAÇÃO DE PARTE, PONTO CONTROVERTIDO, INFERÊNCIA ou INFORMAÇÃO AUSENTE. Para cada registro informe sourcePage com a página original e sourceExcerpt com trecho curto literal ou síntese muito próxima da fonte. Não use "FATO DOCUMENTADO" para o conteúdo de mera alegação unilateral.
 - Em claims, catalogue cada pedido ou pretensão separadamente quando isso for possível, preservando o vínculo com os respectivos valores, fundamentos, provas e decisões encontrados no lote.
 - Se houver súmula, OJ, precedente ou entendimento jurisprudencial expressamente citado no lote ou nos prompts jurídicos fornecidos, preserve a referência com exatidão. Não crie nem complete referência jurisprudencial ausente.
 O JSON deve respeitar exatamente o schema solicitado.
@@ -691,6 +726,9 @@ function isValidReport(value: any): value is GeminiAnalysisReport {
     typeof value.globalAnalysis === 'string' &&
     Array.isArray(value.risks) &&
     typeof value.conclusionStrategy === 'string' &&
+    Array.isArray(value.factualFindings) &&
+    Array.isArray(value.calculations) &&
+    Array.isArray(value.pendingItems) &&
     Array.isArray(value.sources)
   )
 }
@@ -803,14 +841,17 @@ REGRAS OBRIGATÓRIAS:
 - Não invente fatos, páginas, documentos, datas, valores ou precedentes.
 - Quando faltar informação necessária, use exatamente: "Informação não constante nos dados fornecidos".
 - Em risks.level use exclusivamente Alta, Média ou Baixa.
-- Em risks.basis, justifique cada risco com elementos concretos dos lotes: prova existente ou ausente, distribuição do ônus probatório, decisão já proferida, contradição, documento faltante e exposição monetária expressamente identificada. Não crie percentual numérico de êxito ou condenação.
+- Em risks.basis, identifique expressamente DE QUEM é o risco, QUAL resultado adverso está sendo avaliado e QUAL documento/controvérsia o sustenta. Não crie percentual numérico de êxito ou condenação.
+- Em factualFindings, consolide os factualRecords dos lotes preservando a classificação, a fonte e um trecho curto de suporte. Perspectiva não pode alterar a classificação factual.
+- Em pendingItems, liste informação material ainda não comprovada, a razão da pendência e qual prova seria necessária.
+- Em calculations, inclua somente cálculos realmente úteis e verificáveis. Mostre descrição, fórmula, dados de entrada, resultado e condição jurídica. Se o cálculo depender de reconhecimento jurídico (por exemplo, abatimento controvertido), diga isso em legalCondition e não trate o resultado como crédito/débito reconhecido.
 - Na linha do tempo final, não invente datas. Quando um evento não tiver data exata, mantenha em date exatamente "Informação não constante nos dados fornecidos" e utilize relações temporais inferidas apenas quando sustentadas pelos lotes, identificando-as expressamente como "Inferência cronológica".
 - Em claimsEvidenceDecisions, consolide separadamente o valor da causa e o valor de cada pedido quando constarem dos lotes, eliminando duplicidades e preservando a referência documental. Não estime quantias ausentes. NUNCA crie pedido de diferença monetária por comparação aritmética entre TRCT, inicial ou outro documento: o pedido deve existir expressamente em claims.
 - Em parties, consolide TODAS as qualifications extraídas dos lotes, preservando nome, estado civil, CPF/CNPJ, endereço e advogado/OAB. Não troque dado encontrado por 'Informação não constante'.
 - VALORES DO TRCT: trate o valor impresso no documento como transcrição documental, não como resultado de cálculo. Se lotes trouxerem valores conflitantes para o mesmo campo, exponha a divergência e não invente um terceiro valor nem uma diferença.\n- VALORES DERIVADOS: cálculos verificáveis são permitidos quando juridicamente úteis, mas devem ser rotulados como "Cálculo derivado", com fórmula, valores de entrada e premissas. O resultado não pode ser apresentado como valor literal do PDF nem substituir principal, multa, juros, saldo ou valor da causa.
 - Ao mencionar legislação, súmulas, OJs ou jurisprudência, utilize somente referências específicas presentes nos lotes ou nos prompts jurídicos publicados. Não invente número, tribunal, enunciado ou precedente. Se a referência específica não estiver disponível, exponha a questão jurídica sem fabricar citação.
 - Em conclusionStrategy, além da conclusão jurídica, apresente de 2 a 3 próximos passos práticos e objetivos coerentes com a perspectiva informada, vinculando cada ação a uma lacuna, prova, pedido ou risco identificado nos lotes (por exemplo: juntar documento já mencionado, requerer prova/perícia pertinente ou impugnar ponto documentalmente identificado). Não recomende medida sem suporte nos dados processados.
-- Entregue exatamente as 8 seções representadas no JSON.
+- Entregue todos os campos estruturados do JSON. factualFindings, calculations e pendingItems são obrigatórios, ainda que algum deles seja array vazio.
 - Em processNumber, use o valor consolidado já determinado pelo sistema a partir do número mais frequente entre os lotes válidos. Em caso de empate, prevalece o valor que apareceu primeiro. Se nenhum lote tiver essa informação, use exatamente: "Informação não constante nos dados fornecidos".
 - O valor consolidado já determinado pelo sistema é: "${consolidatedProcessNumber}".
 - Em sources, haverá uma entrada por lote efetivamente considerado.
