@@ -164,9 +164,87 @@ function specificPiecePrompt(area: string, perspective: string, pieceType: strin
   if (area === 'Trabalhista' && perspective === 'Reclamante' && /petição inicial|réplica|manifestação/i.test(pieceType)) {
     return { purpose: MOTOR_B_PURPOSES.trabalhistaReclamante, fallback: MOTOR_B_TRABALHISTA_RECLAMANTE }
   }
+
+  const common = `
+PROCESSO 360 IA — MOTOR B V9 — ${area.toUpperCase()} / ${perspective.toUpperCase()}
+TIPO SOLICITADO: ${pieceType}
+
+A perspectiva altera a tese e a estratégia, nunca a base factual. Não transforme alegação em fato, recomendação em acontecimento ocorrido nem ausência de informação em prova negativa. Toda afirmação material categórica exige suporte documental específico. Sem suporte, use linguagem condicional e registre a pendência. Identifique a fase processual antes de estruturar pedidos e não declare tempestividade sem os marcos necessários. Não preencha foro, vara, representante ou assinatura por inferência. Em representação pública, use fecho institucional compatível e não reutilize OAB privada.
+`.trim()
+
+  const rules: Record<string,string> = {
+    Criminal: `
+CRIMINAL:
+- Não inferir primariedade sem certidão/registro de antecedentes.
+- Não inferir ausência de flagrante apenas pela ausência de apreensão.
+- Não inventar conteúdo de câmera, depoimento futuro, testemunho ainda não prestado ou pedido que não tenha suporte.
+- Absolvição sumária exige enquadramento em hipótese legal pertinente; insuficiência probatória genérica não deve ser tratada automaticamente como art. 397 do CPP.
+- Distinguir falta de justa causa, absolvição sumária e absolvição após instrução.
+- Na Acusação/MP, usar representação institucional efetivamente identificada nos autos.`,
+    Ambiental: `
+AMBIENTAL:
+- Distinguir responsabilidade administrativa sancionadora de responsabilidade civil ambiental.
+- Localização/proximidade da fábrica não comprova nexo causal.
+- Paralisação de produção, tubulação de terceiro e origem do efluente permanecem alegação/hipótese conforme a fonte.
+- Não inventar procedimento administrativo, ponto de coleta, lançamento contínuo ou resultado de perícia.
+- Pedidos de prova técnica devem investigar a origem sem antecipar conclusão.`,
+    Tributário: `
+TRIBUTÁRIO:
+- Separar principal, multa, juros, total, depósito e valor da causa.
+- Não deslocar pagamento entre competências sem prova. Pagamento de R$ 10.000,00 com alocação controvertida deve permanecer controvertido.
+- Abatimentos e saldos derivados devem mostrar fórmula e ser condicionados ao reconhecimento jurídico da imputação do pagamento.
+- Distinguir ausência de efeito suspensivo dos embargos da suspensão da exigibilidade por depósito integral, quando juridicamente pertinente.
+- Não afirmar requisitos/capitulação da CDA sem acesso aos campos correspondentes.`,
+    Administrativo: `
+ADMINISTRATIVO:
+- Identificar o ente e verificar se a legislação aplicável é municipal/estadual/federal; não aplicar automaticamente a Lei 9.784/1999 a Município.
+- Se houver referência à Lei 9.784/1999, explicitar eventual aplicação subsidiária e a base fornecida.
+- Protocolo de renovação não equivale a licença vigente.
+- Não atribuir automaticamente pendência documental à empresa sem fonte.
+- Distinguir campo de motivação vazio, conteúdo desconhecido e nulidade efetivamente reconhecida.
+- Não concluir nulidade insanável ou regularidade integral sem suporte suficiente.`,
+    Previdenciário: `
+PREVIDENCIÁRIO:
+- Avaliar incapacidade em relação à atividade habitual e às exigências concretas da função.
+- Capacidade para tarefa leve não equivale automaticamente à capacidade para movimentar caixas de 20 kg.
+- Separar DID, DII, DER, DIB e DCB; não criar datas automáticas.
+- Não antecipar conclusão pericial.
+- Abatimentos de salários/remunerações dependem de fundamento jurídico e dados do período; não usar fórmula genérica sem suporte.
+- Na perspectiva INSS, usar representação institucional, não assinatura privada.`,
+    Consumidor: `
+CONSUMIDOR:
+- Não afirmar cumprimento/descumprimento de liminar sem prova posterior específica.
+- Não inventar termo de comodato, relatório de triagem, prova de serial ou documento não disponível.
+- Divergência de serial permanece controvérsia até comprovação.
+- Recebimento postal não prova, sozinho, identidade do aparelho.
+- Baixa provisória de negativação não equivale a decisão definitiva sobre a dívida.
+- Ordem de exibição não significa automaticamente inversão do ônus da prova.`,
+    Família: `
+FAMÍLIA:
+- Planilha de despesas não equivale a recibos/comprovantes.
+- Amostra curta de holerites não permite afirmar com certeza habitualidade ou excepcionalidade de horas extras.
+- Transferência de R$ 500,00 sem finalidade identificada permanece controvertida.
+- Não inventar acordo de material escolar ou destinação alimentar comprovada.
+- Distinguir pedido, alimentos provisórios e oferta.
+- Capacidade dos dois genitores, necessidades da criança e cuidados cotidianos devem ser analisados sem presumir fatos ausentes.`,
+    Empresarial: `
+EMPRESARIAL:
+- Cláusula contratual que prevê treinamento não comprova sua realização nem sua ausência.
+- Não inventar juntada de planilha, logs, procuração, preservação concluída ou falha técnica comprovada.
+- Preservação para eventual perícia não equivale a perícia realizada.
+- A origem da duplicidade dos 120 itens permanece controvertida sem prova técnica.
+- Distinguir disponibilização do módulo, aceite e cumprimento integral.
+- Não antecipar o que eventual perícia demonstrará.`,
+    Cível: `
+CÍVEL:
+- Identifique contrato, inadimplemento, prova do fato constitutivo/impeditivo e fase processual sem presumir documentos.
+- Não transforme alegação de dano, pagamento, entrega ou mora em fato comprovado sem suporte específico.
+- Réplica só deve ser sugerida quando houver defesa efetivamente apresentada.`
+  }
+
   return {
-    purpose: 'Motor B — Peça Jurídica Genérica',
-    fallback: 'Elabore a peça solicitada com técnica jurídica, fidelidade factual e texto exportável limpo. Mantenha rastreabilidade exclusivamente no painel de auditoria.'
+    purpose: `Motor B — ${area} — ${perspective} — ${pieceType}`,
+    fallback: `${common}\n\n${rules[area] || 'Aplique rigor factual, fase processual correta, representação compatível e pedidos limitados ao suporte documental.'}`
   }
 }
 
