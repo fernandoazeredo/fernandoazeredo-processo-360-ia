@@ -14,6 +14,7 @@ import type { WalletRecord, WalletStatus } from './wallet'
 
 const ADMIN_EMAIL = 'fernandoazeredo64@gmail.com'
 const APP_BUILD = String(import.meta.env.VITE_APP_BUILD || 'dev')
+const APP_RELEASE_LABEL = String(import.meta.env.VITE_RELEASE_LABEL || '')
 
 type Area = 'Trabalhista' | 'Cível' | 'Criminal' | 'Ambiental' | 'Tributário' | 'Administrativo' | 'Previdenciário' | 'Consumidor' | 'Família' | 'Empresarial'
 type PromptArea = Area | 'Global'
@@ -569,6 +570,7 @@ function App() {
           <img className="logo-dark" src="/assets/logo-processo-360-ia-dark.svg" alt="Processo 360 IA" />
         </div>
         <div className="topbar-actions">
+          {APP_RELEASE_LABEL && <span className="client-preview-badge">{APP_RELEASE_LABEL} · {APP_BUILD.slice(0,8)}</span>}
           <span className="signed-user">{appUser.displayName || appUser.email || 'Usuário'}</span>
           {(appUser.email !== ADMIN_EMAIL || adminClientView) && adminClientView && <span className="client-preview-badge">Visualização do cliente</span>}
           <button className="icon-button" onClick={() => setDark(!dark)} aria-label="Alternar tema">
