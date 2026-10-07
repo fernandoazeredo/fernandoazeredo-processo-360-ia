@@ -143,6 +143,21 @@ function parseCurrencyInput(raw:string) {
   return Number(normalized)
 }
 
+function simpleClaimStatus(status:string) {
+  const map:Record<string,string> = {
+    'CONFIRMADA':'Confirmado',
+    'PARCIALMENTE CONFIRMADA':'Confirmado parcialmente',
+    'NÃO CONFIRMADA':'Não confirmado',
+    'CORRIGIDA':'Corrigido',
+    'CONFLITANTE':'Divergente'
+  }
+  return map[status] || status
+}
+
+function cleanClientTimelineText(value:string) {
+  return String(value || '').replace(/\bInferência cronológica\s*:\s*/gi,'')
+}
+
 function scrollToAlert(id:string) {
   const reveal = () => {
     const target=document.getElementById(id)
@@ -587,7 +602,7 @@ function App() {
               <h2>Créditos disponíveis</h2>
               <button className="wallet-info-button" type="button" aria-label="Informações sobre créditos" onClick={()=>setWalletInfoOpen(true)}>i</button>
             </div>
-            <p>Seus créditos são usados para pagar pelos serviços da API Gemini antes do uso deles. Os créditos não são reembolsáveis e não expiram mensalmente. O saldo pode levar alguns minutos para refletir uma recarga, um uso ou um ajuste administrativo.</p>
+            <p>Seus créditos são usados para pagar pelos serviços de IA antes do uso deles. Os créditos não são reembolsáveis e não expiram mensalmente. O saldo pode levar alguns minutos para refletir uma recarga, um uso ou um ajuste administrativo.</p>
           </div>
           <div className="wallet-compact-actions">
             <span>Saldo <b>{formatBRL(wallet?.balanceCents||0)}</b></span>
@@ -731,7 +746,7 @@ function App() {
           <div className="live-progress">
             <strong>{progress}%</strong>
             <div className="progress-track"><i style={{width:`${progress}%`}} /></div>
-            <span>{processingStage}...</span>
+            <span>{appUser.email===ADMIN_EMAIL && !adminClientView ? `${processingStage}...` : 'Analisando seu processo…'}</span>
             <small>Processos extensos podem levar vários minutos. Não feche esta janela.</small>
           </div>
         </div>
@@ -1539,8 +1554,8 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
         ? <div className="timeline-list">{report.timeline.map((item,i)=>
             <div className="timeline-item" key={i}>
               <strong>{item.date || 'Data não identificada'}</strong>
-              <span>{item.event}</span>
-              <small>{item.reference}</small>
+              <span>{cleanClientTimelineText(item.event)}</span>
+              <small>{cleanClientTimelineText(item.reference)}</small>
             </div>)}</div>
         : <p>Nenhum evento cronológico estruturado foi retornado.</p>}
     </div>
@@ -1602,13 +1617,13 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
       </div>
     </div>}
 
-    <div className="analysis-section-full sources-block">
+    {isAdmin && <div className="analysis-section-full sources-block">
       <h3>10. Rastreabilidade dos lotes</h3>
       <div className="source-list">
         {report.sources.map((source,i)=>
           <div key={i}><b>Lote {source.lot}</b><span>Páginas {source.pages}</span><small>{source.note}</small></div>)}
       </div>
-    </div>
+    </div>}
 
     {pieceOpen && <section className="piece-module" id="piece-module">
       <div className="piece-controls no-print" data-ui-only="true">
@@ -1719,14 +1734,14 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
             {piece.claims.map(claim =>
               <article className={`piece-claim status-${claim.status.toLowerCase().replace(/\s+/g,'-')}`} key={claim.id}>
                 <div className="piece-claim-top">
-                  <strong>{claim.status}</strong>
+                  <strong>{simpleClaimStatus(claim.status)}</strong>
                   <span>{claim.type}</span>
                 </div>
                 <p>{claim.text}</p>
-                <small><b>Origem:</b> {claim.sourceReference || 'Sem referência específica'}</small>
-                {claim.treatment && <small><b>Tratamento:</b> {claim.treatment}</small>}
-                <button onClick={() => handleConfirmClaim(claim)} disabled={confirmingClaim === claim.id}>
-                  <Search size={15}/> {confirmingClaim === claim.id ? 'Confirmando...' : 'Confirmar este fato no documento original'}
+                <small><b>Referência no processo:</b> {claim.sourceReference || 'Sem referência específica'}</small>
+                {claim.treatment && <small><b>Como foi tratado:</b> {claim.treatment}</small>}
+                <button className="icon-button" title="Conferir no documento original" aria-label="Conferir no documento original" onClick={() => handleConfirmClaim(claim)} disabled={confirmingClaim === claim.id}>
+                  <Search size={15}/>
                 </button>
                 {confirmation[claim.id] && <div className="piece-confirm-result">{confirmation[claim.id]}</div>}
               </article>)}

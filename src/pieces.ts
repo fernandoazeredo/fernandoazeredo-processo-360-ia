@@ -87,7 +87,12 @@ export function suggestPieceType(area: string, perspective: string) {
 
 export function suggestPieceTypeForReport(report: AnalysisReport) {
   const phase = inferProceduralPhase(report)
-  if (report.area === 'Criminal' && /INSTRUÇÃO ENCERRADA/.test(phase)) return 'Alegações Finais'
+  if (/INSTRUÇÃO ENCERRADA/.test(phase) && ['Criminal','Consumidor','Tributário'].includes(report.area)) {
+    return 'Memoriais / Alegações Finais'
+  }
+  if (report.area === 'Tributário' && /EMBARGOS JÁ OPOSTOS/.test(phase)) {
+    return 'Memoriais / Alegações Finais'
+  }
   return suggestPieceType(report.area, report.perspective)
 }
 
@@ -106,10 +111,10 @@ export function pieceTypeOptions(area: string, perspective: string) {
       Querelante: ['Petição / Manifestação']
     },
     Ambiental: { 'Autuado / Réu': ['Defesa / Impugnação', 'Petição / Manifestação'], 'Órgão Ambiental / MP': ['Petição / Manifestação'] },
-    Tributário: { Contribuinte: ['Defesa / Impugnação', 'Embargos à Execução Fiscal', 'Petição / Manifestação'], 'Fazenda Pública': ['Petição de Execução', 'Impugnação aos Embargos', 'Petição / Manifestação'] },
+    Tributário: { Contribuinte: ['Defesa / Impugnação', 'Embargos à Execução Fiscal', 'Memoriais / Alegações Finais', 'Petição / Manifestação'], 'Fazenda Pública': ['Petição de Execução', 'Impugnação aos Embargos', 'Memoriais / Alegações Finais', 'Petição / Manifestação'] },
     Administrativo: { Administrado: ['Defesa / Recurso', 'Petição / Manifestação'], 'Administração Pública': ['Petição / Manifestação'] },
     Previdenciário: { Segurado: ['Petição Inicial', 'Réplica / Manifestação', 'Quesitos Periciais', 'Petição / Manifestação'], INSS: ['Contestação', 'Quesitos Periciais', 'Petição / Manifestação'] },
-    Consumidor: { Consumidor: ['Petição Inicial', 'Petição / Manifestação'], 'Fornecedor / Empresa': ['Contestação', 'Petição / Manifestação'] },
+    Consumidor: { Consumidor: ['Petição Inicial', 'Memoriais / Alegações Finais', 'Petição / Manifestação'], 'Fornecedor / Empresa': ['Contestação', 'Memoriais / Alegações Finais', 'Petição / Manifestação'] },
     Família: { Requerente: ['Petição Inicial', 'Petição / Manifestação'], Requerido: ['Contestação', 'Petição / Manifestação'] },
     Empresarial: { 'Parte Autora': ['Petição Inicial', 'Petição / Manifestação'], 'Parte Ré': ['Contestação', 'Petição / Manifestação'] }
   }
@@ -298,8 +303,12 @@ function hasDefenseInRecord(report: AnalysisReport) {
 function inferProceduralPhase(report: AnalysisReport) {
   const haystack = `${report.executiveSummary}\n${report.claimsEvidenceDecisions}\n${report.globalAnalysis}\n${report.timeline.map(item => `${item.event} ${item.reference}`).join('\n')}`.toLowerCase()
   const hasProcessNumber = Boolean(report.processNumber && !/informação não constante/i.test(report.processNumber))
-  if (report.area === 'Criminal' && /(?:instrução|instrucao)[^\.\n]{0,100}(?:encerrad|concluíd|concluid)|(?:encerrad|concluíd|concluid)[^\.\n]{0,100}(?:instrução|instrucao)|alegações finais|alegacoes finais|memoriais|art\.\s*403\b/.test(haystack)) {
-    return 'INSTRUÇÃO ENCERRADA — fase de Alegações Finais / memoriais'
+  const instructionClosed = /(?:instrução|instrucao)[^\.\n]{0,120}(?:encerrad|concluíd|concluid)|(?:encerrad|concluíd|concluid)[^\.\n]{0,120}(?:instrução|instrucao)|alegações finais|alegacoes finais|memoriais|razões finais|razoes finais|art\.\s*403\b/.test(haystack)
+  if (instructionClosed) {
+    return 'INSTRUÇÃO ENCERRADA — fase de Memoriais / Alegações Finais'
+  }
+  if (report.area === 'Tributário' && /embargos[^\.\n]{0,100}(?:opost|ajuizad|apresentad)|(?:opost|ajuizad|apresentad)[^\.\n]{0,100}embargos/.test(haystack)) {
+    return 'EMBARGOS JÁ OPOSTOS — identificar fase posterior antes de nova defesa inicial'
   }
   if (/contestação|defesa apresentada|audiência|sentença|decisão|réplica|manifestação do reclamante/.test(haystack)) return 'PROCESSO EM CURSO — identificar o último ato antes de escolher a próxima peça'
   if (hasProcessNumber) return 'PROCESSO APARENTEMENTE JÁ AJUIZADO — confirmar fase antes de gerar nova petição inicial'
