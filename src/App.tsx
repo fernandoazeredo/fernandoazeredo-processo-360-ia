@@ -1192,6 +1192,11 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
   const [pieceQuoteError, setPieceQuoteError] = useState('')
   const [pieceValidationStale,setPieceValidationStale]=useState(false)
   const [pieceRevalidating,setPieceRevalidating]=useState(false)
+  const [revalidationOriginalFile,setRevalidationOriginalFile]=useState<File|null>(originalFile)
+
+  useEffect(()=>{
+    if(originalFile) setRevalidationOriginalFile(originalFile)
+  },[originalFile])
 
   useEffect(()=>{
     try{
@@ -1421,15 +1426,43 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
     setConfirmation({})
   }
 
+  async function requestOriginalPdfForRevalidation():Promise<File|null>{
+    return await new Promise(resolve=>{
+      const input=document.createElement('input')
+      input.type='file'
+      input.accept='application/pdf,.pdf'
+      input.style.display='none'
+      input.onchange=()=>{
+        const selected=input.files?.[0] || null
+        input.remove()
+        if(!selected){ resolve(null); return }
+        if(report.fileName && selected.name !== report.fileName){
+          setPieceError(`Selecione o PDF original desta análise: ${report.fileName}. O arquivo escolhido foi ${selected.name}.`)
+          resolve(null)
+          return
+        }
+        setRevalidationOriginalFile(selected)
+        resolve(selected)
+      }
+      document.body.appendChild(input)
+      input.click()
+    })
+  }
+
   async function handleRevalidateEditedPiece(){
-    if(!piece || !originalFile || pieceRevalidating) return
-    setPieceRevalidating(true)
+    if(!piece || pieceRevalidating) return
     setPieceError('')
+    const validationFile=originalFile || revalidationOriginalFile || await requestOriginalPdfForRevalidation()
+    if(!validationFile){
+      setPieceError('Para revalidar após atualizar a página, selecione novamente o PDF original do processo. A edição permanece salva e nenhuma nova cobrança será feita.')
+      return
+    }
+    setPieceRevalidating(true)
     try{
       const revalidated=await revalidateLegalPiece(
         report,
         piece,
-        originalFile,
+        validationFile,
         requiresPrivateProfessional(report.area,report.perspective) ? professionalProfile : undefined
       )
       setPiece(revalidated)
@@ -1640,7 +1673,7 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
             <h2>{piece.title}</h2>
           </div>
           <div className="piece-actions no-print" data-ui-only="true">
-            {pieceValidationStale && <button className="secondary-button compact" disabled={pieceRevalidating || !originalFile} onClick={handleRevalidateEditedPiece}>
+            {pieceValidationStale && <button className="secondary-button compact" disabled={pieceRevalidating} onClick={handleRevalidateEditedPiece}>
               <ShieldCheck size={17}/> {pieceRevalidating?'Revalidando...':'Revalidar alterações'}
             </button>}
             <button disabled={pieceValidationStale} onClick={() => exportPieceAsWord(report, piece)}><Download size={17}/> Exportar Word (.doc)</button>
