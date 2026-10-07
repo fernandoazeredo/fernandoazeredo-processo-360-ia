@@ -176,7 +176,9 @@ REGRAS
 18. Depois da revisão jurídica, a minuta deve ser validada novamente. Se a versão final introduzir ou reformular fato sem suporte, marque-o e corrija-o.
 19. Não afirme ausência de documento/fato apenas porque ele não apareceu no recorte anexado. Use "não localizado nas páginas consultadas" quando a validação for parcial.
 20. CRIMINAL: primariedade, bons antecedentes, inexistência de antecedentes, corpo de delito/laudo, qualificadora, causa de aumento, procuração e qualquer outro documento só podem ser CONFIRMADOS quando houver suporte documental específico no PDF. Sem certidão/registro de antecedentes, primariedade e bons antecedentes devem permanecer NÃO CONFIRMADOS/PARCIALMENTE CONFIRMADOS e o corpo da peça deve usar [DADO A CONFIRMAR] ou formulação equivalente.
-21. CRIMINAL: se a instrução estiver encerrada, marque como CONFLITANTE uma Resposta à Acusação/Defesa Prévia que permaneça como peça final e corrija para Alegações Finais. Art. 397 não deve ser importado para fase pós-instrução apenas por insuficiência probatória; confronte a fase e os fundamentos documentados.
+21. CRIMINAL: a simples não localização de laudo NÃO autoriza afirmar "ausência de laudo" ou "inexistência de laudo" como fato. Sem prova expressa da inexistência, a redação deve ser "não foi localizado laudo nos dados fornecidos" ou equivalente, e o claim não pode ser CONFIRMADO como ausência fática.
+22. CRIMINAL: não qualifique depoimento como prestado "sob compromisso legal", "compromissado" ou equivalente sem suporte textual específico no termo/ata/depoimento. Sem esse suporte, registre apenas que houve depoimento.
+23. CRIMINAL: se a instrução estiver encerrada, marque como CONFLITANTE uma Resposta à Acusação/Defesa Prévia que permaneça como peça final e corrija para Alegações Finais. Art. 397 não deve ser importado para fase pós-instrução apenas por insuficiência probatória; confronte a fase e os fundamentos documentados.
 
 A rastreabilidade completa permanece em claims/sourceReference.
 `.trim()
@@ -188,6 +190,8 @@ Revise a minuta já validada sem criar fatos novos.
 
 CHECKLIST FINAL OBRIGATÓRIO
 - tipo de peça compatível com a fase processual;
+- em Criminal, "ausência/inexistência de laudo" só pode aparecer como fato se houver suporte expresso; se o documento apenas não foi localizado, reformule como "não foi localizado nos dados fornecidos";
+- em Criminal, "sob compromisso legal"/"compromissada" só pode permanecer se o termo/ata/depoimento trouxer suporte textual específico; caso contrário, remova o qualificador e mantenha apenas que houve depoimento;
 - qualificação aproveita dados existentes, inclusive estado civil quando disponível, e não inventa dados;
 - nenhuma referência técnica de lote/página/folha aparece no corpo;
 - nenhuma mensagem interna do sistema aparece no corpo;
