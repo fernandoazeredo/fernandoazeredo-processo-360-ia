@@ -1751,9 +1751,9 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
             <h3>Rastreabilidade factual</h3>
             {piece.claims.map(claim =>
               <div className="piece-trace-row" key={`print-${claim.id}`}>
-                <p><strong>{claim.status}</strong> — {claim.text}</p>
-                <p><b>Origem:</b> {claim.sourceReference || 'Sem referência específica'}</p>
-                {claim.treatment && <p><b>Tratamento:</b> {claim.treatment}</p>}
+                <p><strong>{simpleClaimStatus(claim.status)}</strong> — {claim.text}</p>
+                <p><b>Referência no processo:</b> {claim.sourceReference || 'Sem referência específica'}</p>
+                {claim.treatment && <p><b>Como foi tratado:</b> {claim.treatment}</p>}
               </div>)}
           </section>
         </>}
