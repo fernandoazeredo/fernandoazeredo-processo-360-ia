@@ -87,7 +87,7 @@ export function suggestPieceType(area: string, perspective: string) {
 
 export function suggestPieceTypeForReport(report: AnalysisReport) {
   const phase = inferProceduralPhase(report)
-  if (/INSTRUÇÃO ENCERRADA/.test(phase) && ['Criminal','Consumidor','Tributário'].includes(report.area)) {
+  if (/INSTRUÇÃO ENCERRADA|CONCLUSO PARA SENTENÇA/.test(phase) && ['Criminal','Consumidor','Tributário','Família'].includes(report.area)) {
     return 'Memoriais / Alegações Finais'
   }
   if (report.area === 'Tributário' && /EMBARGOS JÁ OPOSTOS/.test(phase)) {
@@ -115,7 +115,7 @@ export function pieceTypeOptions(area: string, perspective: string) {
     Administrativo: { Administrado: ['Defesa / Recurso', 'Petição / Manifestação'], 'Administração Pública': ['Petição / Manifestação'] },
     Previdenciário: { Segurado: ['Petição Inicial', 'Réplica / Manifestação', 'Quesitos Periciais', 'Petição / Manifestação'], INSS: ['Contestação', 'Quesitos Periciais', 'Petição / Manifestação'] },
     Consumidor: { Consumidor: ['Petição Inicial', 'Memoriais / Alegações Finais', 'Petição / Manifestação'], 'Fornecedor / Empresa': ['Contestação', 'Memoriais / Alegações Finais', 'Petição / Manifestação'] },
-    Família: { Requerente: ['Petição Inicial', 'Petição / Manifestação'], Requerido: ['Contestação', 'Petição / Manifestação'] },
+    Família: { Requerente: ['Petição Inicial', 'Memoriais / Alegações Finais', 'Petição / Manifestação'], Requerido: ['Contestação', 'Memoriais / Alegações Finais', 'Petição / Manifestação'] },
     Empresarial: { 'Parte Autora': ['Petição Inicial', 'Petição / Manifestação'], 'Parte Ré': ['Contestação', 'Petição / Manifestação'] }
   }
   return Array.from(new Set([suggested, ...(byArea[area]?.[perspective] || ['Petição / Manifestação'])]))
@@ -306,6 +306,9 @@ function inferProceduralPhase(report: AnalysisReport) {
   const instructionClosed = /(?:instrução|instrucao)[^\.\n]{0,120}(?:encerrad|concluíd|concluid)|(?:encerrad|concluíd|concluid)[^\.\n]{0,120}(?:instrução|instrucao)|alegações finais|alegacoes finais|memoriais|razões finais|razoes finais|art\.\s*403\b/.test(haystack)
   if (instructionClosed) {
     return 'INSTRUÇÃO ENCERRADA — fase de Memoriais / Alegações Finais'
+  }
+  if (/conclus(?:o|os|a|as)[^\.\n]{0,80}(?:sentença|sentenca)|(?:sentença|sentenca)[^\.\n]{0,80}conclus(?:o|os|a|as)/.test(haystack)) {
+    return 'CONCLUSO PARA SENTENÇA — fase compatível com Memoriais / Alegações Finais'
   }
   if (report.area === 'Tributário' && /embargos[^\.\n]{0,100}(?:opost|ajuizad|apresentad)|(?:opost|ajuizad|apresentad)[^\.\n]{0,100}embargos/.test(haystack)) {
     return 'EMBARGOS JÁ OPOSTOS — identificar fase posterior antes de nova defesa inicial'
