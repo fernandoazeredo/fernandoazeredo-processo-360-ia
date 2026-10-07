@@ -1,6 +1,8 @@
 name: Preview Firebase Hosting
 
-on: pull_request
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
 
 permissions:
   checks: write
@@ -9,14 +11,55 @@ permissions:
 
 jobs:
   build-and-preview:
-    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+
       - uses: actions/setup-node@v5
         with:
           node-version: 22
+
+      - name: Autenticar no Google Cloud para App Check
+        id: google_auth
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PROCESSO_360_IA }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+
+      - name: Criar token App Check exclusivo do Preview
+        shell: bash
+        env:
+          ACCESS_TOKEN: ${{ steps.google_auth.outputs.access_token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          APP_RESOURCE="projects/685012306915/apps/1:685012306915:web:e9c441be57f15b41ee6ed6"
+          API_BASE="https://firebaseappcheck.googleapis.com/v1"
+          DISPLAY_NAME="preview-pr-${PR_NUMBER}"
+
+          # Revoga tokens anteriores deste mesmo PR para manter somente um token de Preview válido.
+          curl -fsS             -H "Authorization: Bearer ${ACCESS_TOKEN}"             "${API_BASE}/${APP_RESOURCE}/debugTokens?pageSize=100"             -o "$RUNNER_TEMP/appcheck-debug-list.json"
+
+          jq -r --arg name "${DISPLAY_NAME}" '.debugTokens[]? | select(.displayName == $name) | .name'             "$RUNNER_TEMP/appcheck-debug-list.json" | while read -r token_name; do
+              [ -z "$token_name" ] && continue
+              curl -fsS -X DELETE                 -H "Authorization: Bearer ${ACCESS_TOKEN}"                 "${API_BASE}/${token_name}"
+            done
+
+          DEBUG_TOKEN="$(node -e "console.log(require('crypto').randomUUID())")"
+
+          jq -n --arg displayName "${DISPLAY_NAME}" --arg token "${DEBUG_TOKEN}"             '{displayName:$displayName,token:$token}' > "$RUNNER_TEMP/appcheck-debug-create.json"
+
+          curl -fsS -X POST             -H "Authorization: Bearer ${ACCESS_TOKEN}"             -H "Content-Type: application/json"             "${API_BASE}/${APP_RESOURCE}/debugTokens"             --data-binary @"$RUNNER_TEMP/appcheck-debug-create.json"             -o "$RUNNER_TEMP/appcheck-debug-created.json"
+
+          jq -e --arg name "${DISPLAY_NAME}" '.displayName == $name'             "$RUNNER_TEMP/appcheck-debug-created.json" >/dev/null
+
+          echo "APPCHECK_DEBUG_TOKEN=${DEBUG_TOKEN}" >> "$GITHUB_ENV"
+          echo "::add-mask::${DEBUG_TOKEN}"
+
       - run: npm install
+
       - run: npm run build
         env:
           VITE_FIREBASE_API_KEY: "AIzaSyDj9w8tjTqYubxGc3oOEoXAvlX5J70aQPU"
@@ -27,6 +70,8 @@ jobs:
           VITE_FIREBASE_APP_ID: "1:685012306915:web:e9c441be57f15b41ee6ed6"
           VITE_APP_BUILD: ${{ github.event.pull_request.head.sha }}
           VITE_RELEASE_LABEL: "V9"
+          VITE_APPCHECK_DEBUG_TOKEN: ${{ env.APPCHECK_DEBUG_TOKEN }}
+
       - name: Deploy Firestore rules para teste anônimo
         shell: bash
         env:
@@ -50,7 +95,25 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PROCESSO_360_IA }}
           projectId: processo-360-ia
 
-      - name: Autorizar domínio do Preview no reCAPTCHA Enterprise
+      - name: Confirmar Preview V9 publicado
+        shell: bash
+        env:
+          PREVIEW_URL: ${{ steps.firebase_preview.outputs.details_url }}
+          BUILD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          echo "Preview: ${PREVIEW_URL}"
+          echo "V9 build: ${BUILD_SHA:0:8}"
+
+      - name: Remover credencial temporária
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-service-account.json"
+
+  cleanup-preview-token:
+    if: ${{ github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Autenticar no Google Cloud
         id: google_auth
         uses: google-github-actions/auth@v3
         with:
@@ -58,37 +121,20 @@ jobs:
           token_format: access_token
           access_token_scopes: https://www.googleapis.com/auth/cloud-platform
 
-      - name: Incluir Preview nos domínios permitidos do App Check
+      - name: Revogar token App Check do Preview encerrado
         shell: bash
         env:
           ACCESS_TOKEN: ${{ steps.google_auth.outputs.access_token }}
-          PREVIEW_URL: ${{ steps.firebase_preview.outputs.details_url }}
-          RECAPTCHA_KEY: "6Lc6ScstAAAAAIqfnEgXBICtkJtSbh6Wj7Cofwiz"
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
+          APP_RESOURCE="projects/685012306915/apps/1:685012306915:web:e9c441be57f15b41ee6ed6"
+          API_BASE="https://firebaseappcheck.googleapis.com/v1"
+          DISPLAY_NAME="preview-pr-${PR_NUMBER}"
 
-          PREVIEW_HOST="$(node -e "console.log(new URL(process.env.PREVIEW_URL).hostname)")"
-          KEY_URL="https://recaptchaenterprise.googleapis.com/v1/projects/processo-360-ia/keys/${RECAPTCHA_KEY}"
+          curl -fsS             -H "Authorization: Bearer ${ACCESS_TOKEN}"             "${API_BASE}/${APP_RESOURCE}/debugTokens?pageSize=100"             -o "$RUNNER_TEMP/appcheck-debug-list.json"
 
-          echo "Autorizando domínio temporário do Preview: ${PREVIEW_HOST}"
-
-          curl -fsS             -H "Authorization: Bearer ${ACCESS_TOKEN}"             "${KEY_URL}"             -o "$RUNNER_TEMP/recaptcha-key.json"
-
-          jq --arg host "${PREVIEW_HOST}" '
-            .webSettings.allowedDomains = ((.webSettings.allowedDomains // []) + [$host] | unique)
-            | {
-                name: .name,
-                displayName: .displayName,
-                webSettings: .webSettings
-              }
-          ' "$RUNNER_TEMP/recaptcha-key.json" > "$RUNNER_TEMP/recaptcha-key-patch.json"
-
-          curl -fsS -X PATCH             -H "Authorization: Bearer ${ACCESS_TOKEN}"             -H "Content-Type: application/json"             "${KEY_URL}?updateMask=webSettings.allowedDomains"             --data-binary @"$RUNNER_TEMP/recaptcha-key-patch.json"             -o "$RUNNER_TEMP/recaptcha-key-updated.json"
-
-          jq -e --arg host "${PREVIEW_HOST}" '.webSettings.allowedDomains | index($host) != null'             "$RUNNER_TEMP/recaptcha-key-updated.json" >/dev/null
-
-          echo "Domínio do Preview autorizado no reCAPTCHA Enterprise."
-
-      - name: Remover credencial temporária
-        if: always()
-        run: rm -f "$RUNNER_TEMP/firebase-service-account.json"
+          jq -r --arg name "${DISPLAY_NAME}" '.debugTokens[]? | select(.displayName == $name) | .name'             "$RUNNER_TEMP/appcheck-debug-list.json" | while read -r token_name; do
+              [ -z "$token_name" ] && continue
+              curl -fsS -X DELETE                 -H "Authorization: Bearer ${ACCESS_TOKEN}"                 "${API_BASE}/${token_name}"
+            done
