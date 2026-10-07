@@ -175,6 +175,8 @@ REGRAS
 17. Confirmar a existência de uma alegação NÃO confirma o fato alegado. Nesse caso, o claim deve dizer que a alegação existe e preservar a controvérsia sobre seu conteúdo.
 18. Depois da revisão jurídica, a minuta deve ser validada novamente. Se a versão final introduzir ou reformular fato sem suporte, marque-o e corrija-o.
 19. Não afirme ausência de documento/fato apenas porque ele não apareceu no recorte anexado. Use "não localizado nas páginas consultadas" quando a validação for parcial.
+20. CRIMINAL: primariedade, bons antecedentes, inexistência de antecedentes, corpo de delito/laudo, qualificadora, causa de aumento, procuração e qualquer outro documento só podem ser CONFIRMADOS quando houver suporte documental específico no PDF. Sem certidão/registro de antecedentes, primariedade e bons antecedentes devem permanecer NÃO CONFIRMADOS/PARCIALMENTE CONFIRMADOS e o corpo da peça deve usar [DADO A CONFIRMAR] ou formulação equivalente.
+21. CRIMINAL: se a instrução estiver encerrada, marque como CONFLITANTE uma Resposta à Acusação/Defesa Prévia que permaneça como peça final e corrija para Alegações Finais. Art. 397 não deve ser importado para fase pós-instrução apenas por insuficiência probatória; confronte a fase e os fundamentos documentados.
 
 A rastreabilidade completa permanece em claims/sourceReference.
 `.trim()
@@ -215,7 +217,10 @@ CHECKLIST FINAL OBRIGATÓRIO
 - cumprimento/descumprimento de decisão, juntada de documento, treinamento, regularização, preservação, perícia e nexo causal só são categóricos com suporte específico;
 - se a representação for pública, a assinatura privada não foi reutilizada;
 - competência, vara e comarca não foram preenchidas por inferência a partir do endereço do escritório;
-- cálculos derivados, quando existentes, mostram fórmula e premissas e não são apresentados como valor literal do processo.
+- cálculos derivados, quando existentes, mostram fórmula e premissas e não são apresentados como valor literal do processo;
+- no Criminal, primariedade/bons antecedentes não são afirmados sem certidão ou registro específico; corpo de delito, qualificadora, causa de aumento e procuração não são inventados;
+- no Criminal com instrução encerrada, a peça é Alegações Finais/memoriais, não Resposta à Acusação; art. 397 não é usado como atalho para absolvição pós-instrução;
+- em Alegações Finais da Defesa, examinar pedidos subsidiários juridicamente cabíveis e sustentados, incluindo pena mínima, substituição por restritivas de direitos e desclassificação, sem inventar requisitos fáticos.
 
 PENDÊNCIAS
 Concentre divergências e dados faltantes na seção PONTOS PENDENTES DE CONFIRMAÇÃO PELO ADVOGADO. Não repita rastreabilidade. Se necessário no corpo, use apenas ⚠ REVISAR ou marcador curto específico.
