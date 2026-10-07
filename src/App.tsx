@@ -534,23 +534,23 @@ function App() {
       } else if (message.includes('ANALYSIS_CANCELLED')) {
         setAnalysisError('')
       } else if (message.includes('GEMINI_CREDIT_DEPLETED')) {
-        setAnalysisError('O crédito/faturamento do provedor de IA não está disponível para concluir a análise. Regularize ou renove o crédito do Google/Firebase antes de tentar novamente.')
+        setAnalysisError(appUser?.email===ADMIN_EMAIL && !adminClientView ? 'O crédito/faturamento do provedor de IA não está disponível para concluir a análise.' : 'Não foi possível concluir. Tente novamente.')
       } else if (message.includes('GEMINI_BILLING_STATE_MISMATCH')) {
-        setAnalysisError('O Google retornou um estado de faturamento inconsistente para o projeto. Verifique o faturamento do Firebase/Google Cloud e tente novamente.')
+        setAnalysisError(appUser?.email===ADMIN_EMAIL && !adminClientView ? 'O Google retornou um estado de faturamento inconsistente para o projeto.' : 'Não foi possível concluir. Tente novamente.')
       } else if (message.includes('GEMINI_RATE_LIMIT')) {
-        setAnalysisError('O Gemini atingiu temporariamente um limite de requisições ou cota do serviço. Aguarde alguns instantes e tente novamente: os lotes já concluídos ficaram salvos para retomada automática.')
+        setAnalysisError(appUser?.email===ADMIN_EMAIL && !adminClientView ? 'O serviço de IA atingiu temporariamente um limite de requisições.' : 'Não foi possível concluir. Tente novamente.')
       } else if (message.includes('GEMINI_TEMPORARILY_BUSY')) {
-        setAnalysisError('O Gemini está temporariamente com alta demanda. Tente novamente mais tarde; os lotes concluídos ficaram salvos para retomada.')
+        setAnalysisError(appUser?.email===ADMIN_EMAIL && !adminClientView ? 'O serviço de IA está temporariamente com alta demanda.' : 'Não foi possível concluir. Tente novamente.')
       } else if (message.includes('GEMINI_REQUEST_TIMEOUT')) {
-        setAnalysisError('O Gemini não respondeu dentro do limite de 210 segundos. O lote em andamento não foi concluído; os lotes anteriores já finalizados permanecem salvos para retomada.')
+        setAnalysisError(appUser?.email===ADMIN_EMAIL && !adminClientView ? 'O serviço de IA excedeu o tempo limite desta tentativa.' : 'Não foi possível concluir. Tente novamente.')
       } else if (message.includes('GEMINI_PROJECT_CONFIGURATION')) {
-        setAnalysisError('A chamada ao Gemini foi recusada pela configuração do projeto Firebase/Google Cloud. Nenhum modelo alternativo incompatível será usado automaticamente.')
+        setAnalysisError(appUser?.email===ADMIN_EMAIL && !adminClientView ? 'A configuração do projeto recusou a chamada ao serviço de IA.' : 'Não foi possível concluir. Tente novamente.')
       } else if (message.includes('GEMINI_MODEL_UNAVAILABLE')) {
-        setAnalysisError('Nenhum dos modelos Gemini configurados respondeu corretamente nesta tentativa. Tente novamente mais tarde.')
+        setAnalysisError(appUser?.email===ADMIN_EMAIL && !adminClientView ? 'Nenhum dos modelos configurados respondeu corretamente nesta tentativa.' : 'Não foi possível concluir. Tente novamente.')
       } else if (message.includes('GEMINI_APP_CHECK_INVALID')) {
-        setAnalysisError('O Firebase App Check rejeitou a chamada ao Gemini. Recarregue a página e tente novamente.')
+        setAnalysisError(appUser?.email===ADMIN_EMAIL && !adminClientView ? 'O App Check rejeitou a chamada ao serviço de IA.' : 'Não foi possível concluir. Tente novamente.')
       } else if (message.includes('FIREBASE_AI_NOT_READY')) {
-        setAnalysisError('O Firebase AI Logic ainda não está configurado corretamente para o aplicativo.')
+        setAnalysisError(appUser?.email===ADMIN_EMAIL && !adminClientView ? 'O Firebase AI Logic ainda não está configurado corretamente.' : 'Não foi possível concluir. Tente novamente.')
       } else {
         setAnalysisError(refundConfirmed
           ? `Não foi possível concluir a análise. O valor de ${formatBRL(refundedCents)} foi devolvido ao seu saldo.`
@@ -721,7 +721,7 @@ function App() {
           </div>
         </details>}
 
-        {analysis && <AnalysisResult report={analysis} originalFile={file} isAdmin={appUser.email===ADMIN_EMAIL} piecePriceCents={Math.ceil((walletConfig.pieceCostCents||0)*(walletConfig.marginMultiplier||3))} walletBalanceCents={wallet?.balanceCents||0} onRecharge={()=>setWalletTopupOpen(true)} user={appUser} />}
+        {analysis && <AnalysisResult report={analysis} originalFile={file} isAdmin={appUser.email===ADMIN_EMAIL && !adminClientView} piecePriceCents={Math.ceil((walletConfig.pieceCostCents||0)*(walletConfig.marginMultiplier||3))} walletBalanceCents={wallet?.balanceCents||0} onRecharge={()=>setWalletTopupOpen(true)} user={appUser} />}
 
       </main>
 
@@ -1108,9 +1108,9 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
       const status = String(claim.status || 'NÃO CONFIRMADA')
       const reference = String(claim.sourceReference || 'Referência não informada')
       const treatment = String(claim.treatment || '')
-      drawWrapped(`[${status}] ${claim.text}`, boldFont, 10, 15)
-      drawWrapped(`Fonte: ${reference}`, regularFont, 9, 14)
-      if (treatment) drawWrapped(`Tratamento: ${treatment}`, regularFont, 9, 14)
+      drawWrapped(`${simpleClaimStatus(status)} — ${claim.text}`, boldFont, 10, 15)
+      drawWrapped(`Referência no processo: ${reference}`, regularFont, 9, 14)
+      if (treatment) drawWrapped(`Como foi tratado: ${treatment}`, regularFont, 9, 14)
       y -= 6
     }
   }
@@ -1154,7 +1154,7 @@ function exportPieceAsWord(report: AnalysisReport, piece: LegalPieceDraft) {
     .join('')
 
   const audit = piece.claims.length
-    ? `<hr><h1>ANEXO — AUDITORIA FACTUAL DA MINUTA</h1><p>Este anexo registra status factual e referências do validador.</p>${piece.claims.map(claim=>`<section><b>[${escapeHtml(claim.status)}] ${escapeHtml(claim.text)}</b><br>Fonte: ${escapeHtml(claim.sourceReference||'Referência não informada')}${claim.treatment?`<br>Tratamento: ${escapeHtml(claim.treatment)}`:''}</section>`).join('')}`
+    ? `<hr><h1>ANEXO — CONFERÊNCIA FACTUAL DA MINUTA</h1><p>Este anexo resume a conferência dos fatos e suas referências no processo.</p>${piece.claims.map(claim=>`<section><b>${escapeHtml(simpleClaimStatus(claim.status))} — ${escapeHtml(claim.text)}</b><br>Referência no processo: ${escapeHtml(claim.sourceReference||'Referência não informada')}${claim.treatment?`<br>Como foi tratado: ${escapeHtml(claim.treatment)}`:''}</section>`).join('')}`
     : ''
 
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>
