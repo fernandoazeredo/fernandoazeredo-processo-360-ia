@@ -755,6 +755,60 @@ function sanitizeDerivedQuantityMarkers(report: GeminiAnalysisReport) {
   return report
 }
 
+function sanitizeCriminalPrimacyClaims(report: GeminiAnalysisReport, lotResults: LotExtraction[], area: string) {
+  if (area !== 'Criminal') return report
+
+  const documentedSupport = lotResults.flatMap(lot => [
+    ...lot.evidence,
+    ...lot.factualRecords
+      .filter(record => record.classification === 'FATO DOCUMENTADO')
+      .flatMap(record => [record.statement, record.sourceExcerpt])
+  ]).join('\n')
+
+  const hasSpecificCertificate =
+    /certid(?:ão|ao|ões|oes)|folha\s+de\s+antecedentes|registro\s+de\s+antecedentes/i.test(documentedSupport) &&
+    /prim[aá]ri|primariedade|antecedentes/i.test(documentedSupport)
+
+  if (hasSpecificCertificate) return report
+
+  const safeStatement = 'O PDF afirma que o réu é primário, sem certidão anexada.'
+
+  const clean = (value: string) => String(value || '')
+    .replace(/[^.\n]*(?:certid(?:ão|ao|ões|oes))[^.\n]*(?:prim[aá]ri|primariedade|bons\s+antecedentes|antecedentes)[^.\n]*\.?/gi, safeStatement)
+    .replace(/[^.\n]*(?:primariedade(?:\s+t[eé]cnica)?\s+(?:documentada|comprovada)|bons\s+antecedentes\s+(?:documentados|comprovados))[^.\n]*\.?/gi, safeStatement)
+
+  report.executiveSummary = clean(report.executiveSummary)
+  report.claimsEvidenceDecisions = clean(report.claimsEvidenceDecisions)
+  report.globalAnalysis = clean(report.globalAnalysis)
+  report.conclusionStrategy = clean(report.conclusionStrategy)
+  report.timeline = report.timeline.map(item => ({ ...item, event: clean(item.event), reference: clean(item.reference) }))
+  report.risks = report.risks.map(item => ({ ...item, item: clean(item.item), basis: clean(item.basis) }))
+
+  report.factualFindings = report.factualFindings.map(item => {
+    const combined = `${item.statement} ${item.excerpt}`
+    if (!/(?:certid(?:ão|ao|ões|oes).*(?:prim[aá]ri|antecedentes)|primariedade(?:\s+t[eé]cnica)?\s+(?:documentada|comprovada)|bons\s+antecedentes\s+(?:documentados|comprovados))/i.test(combined)) {
+      return item
+    }
+    return {
+      ...item,
+      classification: 'ALEGAÇÃO DE PARTE' as const,
+      statement: safeStatement,
+      excerpt: 'Há afirmação de primariedade nos dados processados, mas não foi identificada certidão de antecedentes como suporte documental específico.'
+    }
+  })
+
+  const alreadyPending = report.pendingItems.some(item => /certid.*anteced|primariedade/i.test(`${item.item} ${item.reason} ${item.evidenceNeeded}`))
+  if (!alreadyPending) {
+    report.pendingItems.push({
+      item: 'Primariedade e bons antecedentes',
+      reason: 'Há afirmação de primariedade, mas não foi identificada certidão ou registro específico de antecedentes nos dados processados.',
+      evidenceNeeded: 'Certidão ou registro de antecedentes efetivamente anexado aos autos.'
+    })
+  }
+
+  return report
+}
+
 function getProcessNumberConsensus(lotResults: LotExtraction[]) {
   const missing = 'Informação não constante nos dados fornecidos'
   const values = lotResults
@@ -855,6 +909,7 @@ REGRAS OBRIGATÓRIAS:
 - Em processNumber, use o valor consolidado já determinado pelo sistema a partir do número mais frequente entre os lotes válidos. Em caso de empate, prevalece o valor que apareceu primeiro. Se nenhum lote tiver essa informação, use exatamente: "Informação não constante nos dados fornecidos".
 - O valor consolidado já determinado pelo sistema é: "${consolidatedProcessNumber}".
 - Em sources, haverá uma entrada por lote efetivamente considerado.
+- REGRA CRIMINAL DE PRIMARIEDADE: a frase de uma petição, depoimento ou outro texto dizendo que o réu é primário NÃO equivale a certidão. Só escreva "certidão de primariedade", "certidão de antecedentes", "primariedade documentada/comprovada" ou "bons antecedentes documentados/comprovados" se um documento específico dessa natureza estiver efetivamente catalogado como prova. Se os autos apenas afirmarem que o réu é primário, redija exatamente: "O PDF afirma que o réu é primário, sem certidão anexada."
 
 DADOS ESTRUTURADOS DE TODOS OS LOTES:
 ${JSON.stringify(lotResults)}
@@ -890,6 +945,7 @@ ${JSON.stringify(lotResults)}
   parsed.processNumber = consolidatedProcessNumber
   parsed.processNumberWarning = processNumberWarning
   sanitizeDerivedQuantityMarkers(parsed)
+  sanitizeCriminalPrimacyClaims(parsed, lotResults, area)
 
   parsed.sources = lots.map(lot => ({
     lot: lot.number,
