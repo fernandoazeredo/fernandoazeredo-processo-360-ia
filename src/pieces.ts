@@ -173,7 +173,7 @@ function specificPiecePrompt(area: string, perspective: string, pieceType: strin
 
   const common = `
 PROCESSO 360 IA — MOTOR B V9 — ${area.toUpperCase()} / ${perspective.toUpperCase()}
-TIPO SOLICITADO: ${effectivePieceType}
+TIPO SOLICITADO: ${pieceType}
 
 A perspectiva altera a tese e a estratégia, nunca a base factual. Não transforme alegação em fato, recomendação em acontecimento ocorrido nem ausência de informação em prova negativa. Toda afirmação material categórica exige suporte documental específico. Sem suporte, use linguagem condicional e registre a pendência. Identifique a fase processual antes de estruturar pedidos e não declare tempestividade sem os marcos necessários. Não preencha foro, vara, representante ou assinatura por inferência. Em representação pública, use fecho institucional compatível e não reutilize OAB privada.
 `.trim()
@@ -439,7 +439,7 @@ async function applyCriticalFactualGate(
 [BARREIRA FACTUAL CRÍTICA — V9]
 ÁREA: ${report.area}
 PERSPECTIVA: ${report.perspective}
-TIPO: ${effectivePieceType}
+TIPO: ${pieceType}
 
 [MINUTA A CONFERIR]
 ${JSON.stringify(sections, null, 2)}
