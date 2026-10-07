@@ -6,7 +6,7 @@ import { adminAuth, adminDb, adminFunctions, auth, db, firebaseConfigured, funct
 import { httpsCallable } from 'firebase/functions'
 import { analyzeUploadedProcess } from './ai'
 import type { AnalysisReport } from './ai'
-import { confirmClaimInOriginal, generateLegalPiece, pieceTypeOptions, revalidateLegalPiece, suggestPieceType } from './pieces'
+import { confirmClaimInOriginal, generateLegalPiece, pieceTypeOptions, revalidateLegalPiece, suggestPieceTypeForReport } from './pieces'
 import type { LegalPieceDraft, PieceClaim, ProfessionalProfile } from './pieces'
 import { chargeAnalysis, chargePiece, consumeForcedAnalysisFailure, consumeForcedPieceFailure, formatBRL, quoteAnalysis, quotePiece, refundCharge } from './wallet'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
@@ -1173,7 +1173,7 @@ function requiresPrivateProfessional(area:string,perspective:string){
 
 function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletBalanceCents, onRecharge, user}:{report:AnalysisReport;originalFile:File|null;isAdmin:boolean;piecePriceCents:number;walletBalanceCents:number;onRecharge:()=>void;user:User}) {
   const [pieceOpen, setPieceOpen] = useState(false)
-  const [pieceType, setPieceType] = useState(() => suggestPieceType(report.area, report.perspective))
+  const [pieceType, setPieceType] = useState(() => suggestPieceTypeForReport(report))
   const [piece, setPiece] = useState<LegalPieceDraft | null>(null)
   const [pieceBusy, setPieceBusy] = useState(false)
   const [pieceStage, setPieceStage] = useState('')
@@ -1201,6 +1201,7 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
         if(saved?.piece?.pieceType && saved?.analysisId===report.analysisId){
           setPiece(saved.piece as LegalPieceDraft)
           setPieceType(saved.piece.pieceType)
+          setPieceValidationStale(Boolean(saved.pieceValidationStale))
           setPieceOpen(true)
         }
       }
@@ -1218,12 +1219,13 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
         perspective:report.perspective,
         fileName:report.fileName,
         promptVersion:piece.promptVersion,
+        pieceValidationStale,
         piece
       }))
     }catch(error){
       console.warn('[Processo 360 IA] Não foi possível persistir a peça concluída.',error)
     }
-  },[piece,report.analysisId,user.uid])
+  },[piece,pieceValidationStale,report.analysisId,user.uid])
 
   useEffect(() => {
     if (!pieceOpen) return
@@ -1392,12 +1394,29 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
   }
 
   function updatePieceSection(index: number, value: string) {
-    setPiece(current => current ? {
-      ...current,
-      sections: current.sections.map((section, sectionIndex) =>
-        sectionIndex === index ? { ...section, content: value } : section
-      )
-    } : current)
+    setPiece(current => {
+      if (!current) return current
+      const next = {
+        ...current,
+        sections: current.sections.map((section, sectionIndex) =>
+          sectionIndex === index ? { ...section, content: value } : section
+        )
+      }
+      try {
+        localStorage.setItem(`p360-piece-${user.uid}-${report.analysisId}`, JSON.stringify({
+          analysisId: report.analysisId,
+          area: report.area,
+          perspective: report.perspective,
+          fileName: report.fileName,
+          promptVersion: next.promptVersion,
+          pieceValidationStale: true,
+          piece: next
+        }))
+      } catch (error) {
+        console.warn('[Processo 360 IA] Não foi possível salvar imediatamente a edição manual.', error)
+      }
+      return next
+    })
     setPieceValidationStale(true)
     setConfirmation({})
   }
