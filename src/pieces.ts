@@ -85,6 +85,12 @@ export function suggestPieceType(area: string, perspective: string) {
   return pieceMapping[area]?.[perspective] || 'Petição / Manifestação'
 }
 
+export function suggestPieceTypeForReport(report: AnalysisReport) {
+  const phase = inferProceduralPhase(report)
+  if (report.area === 'Criminal' && /INSTRUÇÃO ENCERRADA/.test(phase)) return 'Alegações Finais'
+  return suggestPieceType(report.area, report.perspective)
+}
+
 export function pieceTypeOptions(area: string, perspective: string) {
   const suggested = suggestPieceType(area, perspective)
   const byArea: Record<string, Record<string, string[]>> = {
@@ -94,8 +100,8 @@ export function pieceTypeOptions(area: string, perspective: string) {
     },
     Cível: { Autor: ['Petição Inicial', 'Réplica / Manifestação', 'Petição / Manifestação'], Réu: ['Contestação', 'Petição / Manifestação'] },
     Criminal: {
-      Acusação: ['Denúncia', 'Petição / Manifestação'],
-      Defesa: ['Defesa Prévia / Resposta à Acusação', 'Petição / Manifestação'],
+      Acusação: ['Denúncia', 'Alegações Finais', 'Petição / Manifestação'],
+      Defesa: ['Defesa Prévia / Resposta à Acusação', 'Alegações Finais', 'Petição / Manifestação'],
       'Assistente de acusação': ['Petição / Manifestação'],
       Querelante: ['Petição / Manifestação']
     },
@@ -167,7 +173,7 @@ function specificPiecePrompt(area: string, perspective: string, pieceType: strin
 
   const common = `
 PROCESSO 360 IA — MOTOR B V9 — ${area.toUpperCase()} / ${perspective.toUpperCase()}
-TIPO SOLICITADO: ${pieceType}
+TIPO SOLICITADO: ${effectivePieceType}
 
 A perspectiva altera a tese e a estratégia, nunca a base factual. Não transforme alegação em fato, recomendação em acontecimento ocorrido nem ausência de informação em prova negativa. Toda afirmação material categórica exige suporte documental específico. Sem suporte, use linguagem condicional e registre a pendência. Identifique a fase processual antes de estruturar pedidos e não declare tempestividade sem os marcos necessários. Não preencha foro, vara, representante ou assinatura por inferência. Em representação pública, use fecho institucional compatível e não reutilize OAB privada.
 `.trim()
@@ -175,10 +181,12 @@ A perspectiva altera a tese e a estratégia, nunca a base factual. Não transfor
   const rules: Record<string,string> = {
     Criminal: `
 CRIMINAL:
-- Não inferir primariedade sem certidão/registro de antecedentes.
+- Primariedade e bons antecedentes exigem certidão/registro de antecedentes efetivamente presente. Sem esse documento, NÃO afirmar que o acusado é primário ou possui bons antecedentes; usar [DADO A CONFIRMAR] quando o ponto for relevante. O validador nunca pode classificar essa afirmação como CONFIRMADA sem a certidão correspondente.
 - Não inferir ausência de flagrante apenas pela ausência de apreensão.
-- Não inventar conteúdo de câmera, depoimento futuro, testemunho ainda não prestado ou pedido que não tenha suporte.
+- Não inventar qualificadora, causa de aumento, laudo/corpo de delito, conteúdo de câmera, depoimento futuro, testemunho ainda não prestado, procuração anexa ou qualquer documento não localizado.
 - Absolvição sumária exige enquadramento em hipótese legal pertinente; insuficiência probatória genérica não deve ser tratada automaticamente como art. 397 do CPP.
+- Se a instrução estiver encerrada, Defesa Prévia / Resposta à Acusação é incompatível: produzir/sugerir Alegações Finais e fundamentar a absolvição conforme a fase, inclusive art. 386 quando pertinente aos dados, sem importar automaticamente o art. 397.
+- Em Alegações Finais da Defesa, quando juridicamente pertinentes aos fatos e à imputação documentada, examinar pedidos subsidiários de pena no mínimo legal, substituição por penas restritivas de direitos e desclassificação; não criar requisito fático ausente.
 - Distinguir falta de justa causa, absolvição sumária e absolvição após instrução.
 - Na Acusação/MP, usar representação institucional efetivamente identificada nos autos.`,
     Ambiental: `
@@ -288,6 +296,9 @@ function hasDefenseInRecord(report: AnalysisReport) {
 function inferProceduralPhase(report: AnalysisReport) {
   const haystack = `${report.executiveSummary}\n${report.claimsEvidenceDecisions}\n${report.globalAnalysis}\n${report.timeline.map(item => `${item.event} ${item.reference}`).join('\n')}`.toLowerCase()
   const hasProcessNumber = Boolean(report.processNumber && !/informação não constante/i.test(report.processNumber))
+  if (report.area === 'Criminal' && /(?:instrução|instrucao)[^\.\n]{0,100}(?:encerrad|concluíd|concluid)|(?:encerrad|concluíd|concluid)[^\.\n]{0,100}(?:instrução|instrucao)|alegações finais|alegacoes finais|memoriais|art\.\s*403\b/.test(haystack)) {
+    return 'INSTRUÇÃO ENCERRADA — fase de Alegações Finais / memoriais'
+  }
   if (/contestação|defesa apresentada|audiência|sentença|decisão|réplica|manifestação do reclamante/.test(haystack)) return 'PROCESSO EM CURSO — identificar o último ato antes de escolher a próxima peça'
   if (hasProcessNumber) return 'PROCESSO APARENTEMENTE JÁ AJUIZADO — confirmar fase antes de gerar nova petição inicial'
   return 'FASE PRÉ-PROCESSUAL OU NÃO IDENTIFICADA — confirmar antes do protocolo'
@@ -428,7 +439,7 @@ async function applyCriticalFactualGate(
 [BARREIRA FACTUAL CRÍTICA — V9]
 ÁREA: ${report.area}
 PERSPECTIVA: ${report.perspective}
-TIPO: ${pieceType}
+TIPO: ${effectivePieceType}
 
 [MINUTA A CONFERIR]
 ${JSON.stringify(sections, null, 2)}
@@ -553,9 +564,12 @@ export async function generateLegalPiece(report: AnalysisReport, pieceType: stri
   const source = reportToSource(report)
   const diagnostic = reportToDiagnostic(report)
   const phase = inferProceduralPhase(report)
-  const specific = specificPiecePrompt(report.area, report.perspective, pieceType)
+  const effectivePieceType = report.area === 'Criminal' && /INSTRUÇÃO ENCERRADA/.test(phase) && /Defesa Prévia|Resposta à Acusação|Denúncia/i.test(pieceType)
+    ? 'Alegações Finais'
+    : pieceType
+  const specific = specificPiecePrompt(report.area, report.perspective, effectivePieceType)
   const currentDate = new Intl.DateTimeFormat('pt-BR').format(new Date())
-  const isInitialPiece = /petição inicial/i.test(pieceType)
+  const isInitialPiece = /petição inicial/i.test(effectivePieceType)
   const pieceDate = isInitialPiece ? inferInitialFilingDate(report) : currentDate
   const publicRepresentation = usesPublicRepresentation(report.area, report.perspective)
   const professional = publicRepresentation
@@ -569,7 +583,7 @@ export async function generateLegalPiece(report: AnalysisReport, pieceType: stri
     loadMotorBPrompt(report.area, report.perspective, MOTOR_B_PURPOSES.reviewer, MOTOR_B_REVIEWER)
   ])
 
-  const draftPrompt = `${basePromptDoc.content}\n\n${specificPromptDoc.content}\n\nÁREA: ${report.area}\nPERSPECTIVA: ${report.perspective}\nTIPO SOLICITADO: ${pieceType}\nFASE PROCESSUAL INFERIDA: ${phase}\nDATA ATUAL DO SISTEMA: ${currentDate}\nDATA A UTILIZAR NA PEÇA: ${pieceDate}\nREGRA DE DATA: em Petição Inicial, use a data de ajuizamento/distribuição expressamente identificada; se ela não estiver identificada, preserve [DATA]. Nunca use a data atual como se fosse a data histórica de ajuizamento.\n\n[DADOS_PROFISSIONAIS_DO_ADVOGADO]\n${professional}\n\n[DADOS_CONSOLIDADOS_DO_PROCESSO]\n${source}\n\n[DIAGNOSTICO_JURIDICO]\n${diagnostic}\n\nINSTRUÇÃO DE INTEGRIDADE FACTUAL: a perspectiva define argumentação, não os acontecimentos. Não converta alegação em fato. Frases como "cumpriu", "juntou", "preservou", "regularizou", "não realizou", "restou comprovado" e equivalentes só podem ser categóricas com suporte documental específico; sem suporte, use formulação condicional/controvertida.
+  const draftPrompt = `${basePromptDoc.content}\n\n${specificPromptDoc.content}\n\nÁREA: ${report.area}\nPERSPECTIVA: ${report.perspective}\nTIPO SOLICITADO: ${effectivePieceType}\nFASE PROCESSUAL INFERIDA: ${phase}\nDATA ATUAL DO SISTEMA: ${currentDate}\nDATA A UTILIZAR NA PEÇA: ${pieceDate}\nREGRA DE DATA: em Petição Inicial, use a data de ajuizamento/distribuição expressamente identificada; se ela não estiver identificada, preserve [DATA]. Nunca use a data atual como se fosse a data histórica de ajuizamento.\n\n[DADOS_PROFISSIONAIS_DO_ADVOGADO]\n${professional}\n\n[DADOS_CONSOLIDADOS_DO_PROCESSO]\n${source}\n\n[DIAGNOSTICO_JURIDICO]\n${diagnostic}\n\nINSTRUÇÃO DE INTEGRIDADE FACTUAL: a perspectiva define argumentação, não os acontecimentos. Não converta alegação em fato. Frases como "cumpriu", "juntou", "preservou", "regularizou", "não realizou", "restou comprovado" e equivalentes só podem ser categóricas com suporte documental específico; sem suporte, use formulação condicional/controvertida.
 INSTRUÇÃO DE SAÍDA: JSON do schema. A peça em sections deve estar LIMPA, sem referências de lote/página/folha e sem avisos internos do sistema. Use a DATA A UTILIZAR NA PEÇA no fecho e os DADOS PROFISSIONAIS no bloco de assinatura; em Petição Inicial nunca substitua a data histórica de ajuizamento pela data atual. Não substitua dados existentes por placeholders.`
 
   const draftResult = await generateJson(draftPrompt, draftSchema, 'geração do rascunho especializado v3')
@@ -588,7 +602,7 @@ INSTRUÇÃO DE SAÍDA: JSON do schema. A peça em sections deve estar LIMPA, sem
     : rawSections
   const factSafeSections = hardenCorrectedSections(corrected, claims)
 
-  const reviewPrompt = `${reviewerPromptDoc.content}\n\nÁREA: ${report.area}\nPERSPECTIVA: ${report.perspective}\nTIPO: ${pieceType}\nFASE: ${phase}\nDATA ATUAL DO SISTEMA: ${currentDate}\nDATA A UTILIZAR NA PEÇA: ${pieceDate}\nREGRA DE DATA: em Petição Inicial, use a data de ajuizamento/distribuição expressamente identificada; se ela não estiver identificada, preserve [DATA]. Nunca use a data atual como se fosse a data histórica de ajuizamento.\n\n[DADOS_PROFISSIONAIS_DO_ADVOGADO]\n${professional}\n\n[DADOS_CONSOLIDADOS_DO_PROCESSO]\n${source}\n\n[DIAGNOSTICO_JURIDICO]\n${diagnostic}\n\n[VALIDACAO]\n${JSON.stringify({ claims, validation: countValidation(claims) }, null, 2)}\n\n[MINUTA_CORRIGIDA]\n${JSON.stringify(factSafeSections, null, 2)}\n\nINSTRUÇÃO: devolva title e sections. Não reinsira referências técnicas ou avisos internos.`
+  const reviewPrompt = `${reviewerPromptDoc.content}\n\nÁREA: ${report.area}\nPERSPECTIVA: ${report.perspective}\nTIPO: ${effectivePieceType}\nFASE: ${phase}\nDATA ATUAL DO SISTEMA: ${currentDate}\nDATA A UTILIZAR NA PEÇA: ${pieceDate}\nREGRA DE DATA: em Petição Inicial, use a data de ajuizamento/distribuição expressamente identificada; se ela não estiver identificada, preserve [DATA]. Nunca use a data atual como se fosse a data histórica de ajuizamento.\n\n[DADOS_PROFISSIONAIS_DO_ADVOGADO]\n${professional}\n\n[DADOS_CONSOLIDADOS_DO_PROCESSO]\n${source}\n\n[DIAGNOSTICO_JURIDICO]\n${diagnostic}\n\n[VALIDACAO]\n${JSON.stringify({ claims, validation: countValidation(claims) }, null, 2)}\n\n[MINUTA_CORRIGIDA]\n${JSON.stringify(factSafeSections, null, 2)}\n\nINSTRUÇÃO: devolva title e sections. Não reinsira referências técnicas ou avisos internos.`
   const reviewResult = await generateJson(reviewPrompt, reviewSchema, 'revisão jurídica final v3')
 
   const reviewed = Array.isArray(reviewResult.parsed.sections)
@@ -606,7 +620,7 @@ INSTRUÇÃO DE SAÍDA: JSON do schema. A peça em sections deve estar LIMPA, sem
 [VALIDAÇÃO FINAL CONTRA O DOCUMENTO ORIGINAL]
 ÁREA: ${report.area}
 PERSPECTIVA: ${report.perspective}
-TIPO: ${pieceType}
+TIPO: ${effectivePieceType}
 
 [MINUTA APÓS REVISÃO]
 ${JSON.stringify(reviewed, null, 2)}
@@ -682,7 +696,7 @@ REGRAS:
   ].join('+')
 
   return {
-    pieceType,
+    pieceType: effectivePieceType,
     title: cleanExportableText(String(reviewResult.parsed.title || draftResult.parsed.title || pieceType)),
     sections: safeSections,
     claims: finalClaims,
