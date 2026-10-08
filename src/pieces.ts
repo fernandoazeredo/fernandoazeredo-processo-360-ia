@@ -100,7 +100,7 @@ export function suggestPieceTypeForReport(report: AnalysisReport) {
     return 'Memoriais / Alegações Finais'
   }
 
-  if (report.area === 'Previdenciário' && report.perspective === 'Segurado' && hasDefenseInRecord(report) && hasJudicialExpertEvidence(report)) {
+  if (report.area === 'Previdenciário' && report.perspective === 'Segurado' && hasDefenseInRecord(report)) {
     return 'Réplica / Manifestação'
   }
 
@@ -395,6 +395,18 @@ async function generateJson(prompt: string, schema: any, context: string, conten
     }
   }
   throw lastError instanceof Error ? lastError : new Error('PIECE_GENERATION_FAILED')
+}
+
+// Remove identificadores de instruções internas dos textos apresentados ao usuário.
+// Mantém o conteúdo probatório e a classificação factual intactos.
+function cleanInternalRuleReferences(text: string) {
+  return String(text || '')
+    .replace(/\\bconforme\\s+(?:a\\s+)?regra\\s*#?\\s*\\d+\\s*[,;:]?\\s*/gi, '')
+    .replace(/\\b(?:pela|segundo|de acordo com a)\\s+regra\\s*#?\\s*\\d+\\s*[,;:]?\\s*/gi, '')
+    .replace(/\\bregra\\s*#?\\s*\\d+\\b\\s*[:–-]?\\s*/gi, '')
+    .replace(/^\\s*[,;:]\\s*/, '')
+    .replace(/^([a-záàâãéêíóôõúç])/, (_, first: string) => first.toUpperCase())
+    .trim()
 }
 
 function countValidation(claims: PieceClaim[]) {
@@ -794,7 +806,7 @@ REGRAS:
     pieceType: effectivePieceType,
     title: cleanExportableText(effectivePieceType),
     sections: safeSections,
-    claims: finalClaims,
+    claims: finalClaims.map(claim => ({ ...claim, treatment: cleanInternalRuleReferences(claim.treatment) })),
     validation: countValidation(finalClaims),
     model: finalValidationModel || validationResult.model || draftResult.model,
     promptVersion
