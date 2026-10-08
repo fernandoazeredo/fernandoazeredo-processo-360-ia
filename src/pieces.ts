@@ -92,7 +92,7 @@ export function suggestPieceTypeForReport(report: AnalysisReport) {
     return 'Alegações Finais'
   }
 
-  if (/INSTRUÇÃO ENCERRADA|CONCLUSO PARA SENTENÇA/.test(phase) && ['Consumidor','Tributário','Família','Previdenciário'].includes(report.area)) {
+  if (/INSTRUÇÃO ENCERRADA|CONCLUSO PARA SENTENÇA/.test(phase) && ['Consumidor','Tributário','Família','Previdenciário','Ambiental','Administrativo'].includes(report.area)) {
     return 'Memoriais / Alegações Finais'
   }
 
@@ -100,7 +100,7 @@ export function suggestPieceTypeForReport(report: AnalysisReport) {
     return 'Memoriais / Alegações Finais'
   }
 
-  if (report.area === 'Previdenciário' && report.perspective === 'Segurado' && /PÓS-CONTESTAÇÃO E PERÍCIA/.test(phase)) {
+  if (report.area === 'Previdenciário' && report.perspective === 'Segurado' && hasDefenseInRecord(report) && hasJudicialExpertEvidence(report)) {
     return 'Réplica / Manifestação'
   }
 
@@ -121,9 +121,9 @@ export function pieceTypeOptions(area: string, perspective: string) {
       'Assistente de acusação': ['Petição / Manifestação'],
       Querelante: ['Petição / Manifestação']
     },
-    Ambiental: { 'Autuado / Réu': ['Defesa / Impugnação', 'Petição / Manifestação'], 'Órgão Ambiental / MP': ['Petição / Manifestação'] },
+    Ambiental: { 'Autuado / Réu': ['Defesa / Impugnação', 'Memoriais / Alegações Finais', 'Petição / Manifestação'], 'Órgão Ambiental / MP': ['Memoriais / Alegações Finais', 'Petição / Manifestação'] },
     Tributário: { Contribuinte: ['Defesa / Impugnação', 'Embargos à Execução Fiscal', 'Memoriais / Alegações Finais', 'Petição / Manifestação'], 'Fazenda Pública': ['Petição de Execução', 'Impugnação aos Embargos', 'Memoriais / Alegações Finais', 'Petição / Manifestação'] },
-    Administrativo: { Administrado: ['Defesa / Recurso', 'Petição / Manifestação'], 'Administração Pública': ['Petição / Manifestação'] },
+    Administrativo: { Administrado: ['Defesa / Recurso', 'Memoriais / Alegações Finais', 'Petição / Manifestação'], 'Administração Pública': ['Memoriais / Alegações Finais', 'Petição / Manifestação'] },
     Previdenciário: { Segurado: ['Petição Inicial', 'Réplica / Manifestação', 'Memoriais / Alegações Finais', 'Quesitos Periciais', 'Petição / Manifestação'], INSS: ['Contestação', 'Memoriais / Alegações Finais', 'Quesitos Periciais', 'Petição / Manifestação'] },
     Consumidor: { Consumidor: ['Petição Inicial', 'Memoriais / Alegações Finais', 'Petição / Manifestação'], 'Fornecedor / Empresa': ['Contestação', 'Memoriais / Alegações Finais', 'Petição / Manifestação'] },
     Família: { Requerente: ['Petição Inicial', 'Memoriais / Alegações Finais', 'Petição / Manifestação'], Requerido: ['Contestação', 'Memoriais / Alegações Finais', 'Petição / Manifestação'] },
@@ -314,19 +314,25 @@ function hasDefenseInRecord(report: AnalysisReport) {
     || /(?:apresentad|protocolad|juntad|oferecid)[^.;]{0,60}(?:contestação|contestacao|defesa)/i.test(timelineText)
 }
 
+function hasJudicialExpertEvidence(report: AnalysisReport) {
+  const text = reportText(report)
+  const explicitAbsence = /(?:não|nao)\s+(?:há|ha|consta|existe|foi\s+(?:realizada|produzida|juntada|localizada|identificada))[^.\n]{0,100}(?:perícia|pericia|laudo\s+pericial)/i.test(text)
+    || /(?:perícia|pericia|laudo\s+pericial)[^.\n]{0,100}(?:não|nao)\s+(?:consta|existe|foi\s+(?:realizada|produzida|juntada|localizada|identificada))/i.test(text)
+  if (explicitAbsence) return false
+
+  return /(?:perícia|pericia)\s+judicial/i.test(text)
+    || /(?:laudo|parecer)\s+pericial/i.test(text)
+    || /(?:perícia|pericia)[^.\n]{0,120}(?:realizad|produzid|juntad|concluíd|concluid|apresentad)/i.test(text)
+    || /(?:realizad|produzid|juntad|concluíd|concluid|apresentad)[^.\n]{0,120}(?:perícia|pericia)/i.test(text)
+    || /perito[^.\n]{0,120}(?:conclu|apur|atest|inform)/i.test(text)
+}
+
 function inferProceduralPhase(report: AnalysisReport) {
   const haystack = `${report.executiveSummary}\n${report.claimsEvidenceDecisions}\n${report.globalAnalysis}\n${report.timeline.map(item => `${item.event} ${item.reference}`).join('\n')}`.toLowerCase()
   const hasProcessNumber = Boolean(report.processNumber && !/informação não constante/i.test(report.processNumber))
   const instructionClosed = /(?:instrução|instrucao)[^\.\n]{0,120}(?:encerrad|concluíd|concluid)|(?:encerrad|concluíd|concluid)[^\.\n]{0,120}(?:instrução|instrucao)|alegações finais|alegacoes finais|memoriais|razões finais|razoes finais|art\.\s*403\b/.test(haystack)
   if (instructionClosed) {
     return 'INSTRUÇÃO ENCERRADA — fase de Memoriais / Alegações Finais'
-  }
-  if (report.area === 'Previdenciário') {
-    const hasContestacao = /contestação|contestacao|defesa do inss|inss[^\.\n]{0,80}(?:contest|defesa)/.test(haystack)
-    const hasPericia = /(?:perícia|pericia)[^\.\n]{0,100}(?:realizad|concluíd|concluid|produzid)|(?:laudo|parecer)\s+pericial|perito[^\.\n]{0,80}(?:conclu|apur)/.test(haystack)
-    if (hasContestacao && hasPericia) {
-      return 'PÓS-CONTESTAÇÃO E PERÍCIA — fase de Réplica / Manifestação ou memoriais conforme o último ato'
-    }
   }
   if (/conclus(?:o|os|a|as)[^\.\n]{0,80}(?:sentença|sentenca)|(?:sentença|sentenca)[^\.\n]{0,80}conclus(?:o|os|a|as)/.test(haystack)) {
     return 'CONCLUSO PARA SENTENÇA — fase compatível com Memoriais / Alegações Finais'
