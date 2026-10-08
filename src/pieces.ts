@@ -87,12 +87,23 @@ export function suggestPieceType(area: string, perspective: string) {
 
 export function suggestPieceTypeForReport(report: AnalysisReport) {
   const phase = inferProceduralPhase(report)
-  if (/INSTRUÇÃO ENCERRADA|CONCLUSO PARA SENTENÇA/.test(phase) && ['Criminal','Consumidor','Tributário','Família'].includes(report.area)) {
+
+  if (report.area === 'Criminal' && /INSTRUÇÃO ENCERRADA|CONCLUSO PARA SENTENÇA/.test(phase)) {
+    return 'Alegações Finais'
+  }
+
+  if (/INSTRUÇÃO ENCERRADA|CONCLUSO PARA SENTENÇA/.test(phase) && ['Consumidor','Tributário','Família','Previdenciário'].includes(report.area)) {
     return 'Memoriais / Alegações Finais'
   }
+
   if (report.area === 'Tributário' && /EMBARGOS JÁ OPOSTOS/.test(phase)) {
     return 'Memoriais / Alegações Finais'
   }
+
+  if (report.area === 'Previdenciário' && report.perspective === 'Segurado' && /PÓS-CONTESTAÇÃO E PERÍCIA/.test(phase)) {
+    return 'Réplica / Manifestação'
+  }
+
   return suggestPieceType(report.area, report.perspective)
 }
 
@@ -113,7 +124,7 @@ export function pieceTypeOptions(area: string, perspective: string) {
     Ambiental: { 'Autuado / Réu': ['Defesa / Impugnação', 'Petição / Manifestação'], 'Órgão Ambiental / MP': ['Petição / Manifestação'] },
     Tributário: { Contribuinte: ['Defesa / Impugnação', 'Embargos à Execução Fiscal', 'Memoriais / Alegações Finais', 'Petição / Manifestação'], 'Fazenda Pública': ['Petição de Execução', 'Impugnação aos Embargos', 'Memoriais / Alegações Finais', 'Petição / Manifestação'] },
     Administrativo: { Administrado: ['Defesa / Recurso', 'Petição / Manifestação'], 'Administração Pública': ['Petição / Manifestação'] },
-    Previdenciário: { Segurado: ['Petição Inicial', 'Réplica / Manifestação', 'Quesitos Periciais', 'Petição / Manifestação'], INSS: ['Contestação', 'Quesitos Periciais', 'Petição / Manifestação'] },
+    Previdenciário: { Segurado: ['Petição Inicial', 'Réplica / Manifestação', 'Memoriais / Alegações Finais', 'Quesitos Periciais', 'Petição / Manifestação'], INSS: ['Contestação', 'Memoriais / Alegações Finais', 'Quesitos Periciais', 'Petição / Manifestação'] },
     Consumidor: { Consumidor: ['Petição Inicial', 'Memoriais / Alegações Finais', 'Petição / Manifestação'], 'Fornecedor / Empresa': ['Contestação', 'Memoriais / Alegações Finais', 'Petição / Manifestação'] },
     Família: { Requerente: ['Petição Inicial', 'Memoriais / Alegações Finais', 'Petição / Manifestação'], Requerido: ['Contestação', 'Memoriais / Alegações Finais', 'Petição / Manifestação'] },
     Empresarial: { 'Parte Autora': ['Petição Inicial', 'Petição / Manifestação'], 'Parte Ré': ['Contestação', 'Petição / Manifestação'] }
@@ -202,7 +213,8 @@ AMBIENTAL:
 - Localização/proximidade da fábrica não comprova nexo causal.
 - Paralisação de produção, tubulação de terceiro e origem do efluente permanecem alegação/hipótese conforme a fonte.
 - Não inventar procedimento administrativo, ponto de coleta, lançamento contínuo ou resultado de perícia.
-- Pedidos de prova técnica devem investigar a origem sem antecipar conclusão.`,
+- Pedidos de prova técnica devem investigar a origem sem antecipar conclusão.
+- Se os autos contiverem proposta de TAC, acordo ou composição ambiental, a peça deve enfrentá-la expressamente, preservando valor, data, condições e autoria exatamente como documentados. Se constar proposta de TAC de R$ 600.000,00, mencionar esse valor e contextualizar juridicamente sem tratá-lo como acordo firmado ou confissão, salvo se houver prova específica disso.`,
     Tributário: `
 TRIBUTÁRIO:
 - Separar principal, multa, juros, total, depósito e valor da causa.
@@ -217,6 +229,8 @@ ADMINISTRATIVO:
 - Protocolo de renovação não equivale a licença vigente.
 - Não atribuir automaticamente pendência documental à empresa sem fonte.
 - Distinguir campo de motivação vazio, conteúdo desconhecido e nulidade efetivamente reconhecida.
+- Quando houver discussão de "direito líquido e certo", a peça deve enfrentá-la expressamente: identificar qual direito é alegado, qual prova pré-constituída o sustentaria e quais controvérsias ou lacunas impedem tratá-lo automaticamente como demonstrado.
+- Se houver atestados, laudos ou documentos médicos apresentados somente depois do processo administrativo, a peça deve confrontar expressamente a cronologia e a força probatória desses documentos, sem fingir que integravam o processo administrativo desde o início.
 - Não concluir nulidade insanável ou regularidade integral sem suporte suficiente.`,
     Previdenciário: `
 PREVIDENCIÁRIO:
@@ -306,6 +320,13 @@ function inferProceduralPhase(report: AnalysisReport) {
   const instructionClosed = /(?:instrução|instrucao)[^\.\n]{0,120}(?:encerrad|concluíd|concluid)|(?:encerrad|concluíd|concluid)[^\.\n]{0,120}(?:instrução|instrucao)|alegações finais|alegacoes finais|memoriais|razões finais|razoes finais|art\.\s*403\b/.test(haystack)
   if (instructionClosed) {
     return 'INSTRUÇÃO ENCERRADA — fase de Memoriais / Alegações Finais'
+  }
+  if (report.area === 'Previdenciário') {
+    const hasContestacao = /contestação|contestacao|defesa do inss|inss[^\.\n]{0,80}(?:contest|defesa)/.test(haystack)
+    const hasPericia = /(?:perícia|pericia)[^\.\n]{0,100}(?:realizad|concluíd|concluid|produzid)|(?:laudo|parecer)\s+pericial|perito[^\.\n]{0,80}(?:conclu|apur)/.test(haystack)
+    if (hasContestacao && hasPericia) {
+      return 'PÓS-CONTESTAÇÃO E PERÍCIA — fase de Réplica / Manifestação ou memoriais conforme o último ato'
+    }
   }
   if (/conclus(?:o|os|a|as)[^\.\n]{0,80}(?:sentença|sentenca)|(?:sentença|sentenca)[^\.\n]{0,80}conclus(?:o|os|a|as)/.test(haystack)) {
     return 'CONCLUSO PARA SENTENÇA — fase compatível com Memoriais / Alegações Finais'
