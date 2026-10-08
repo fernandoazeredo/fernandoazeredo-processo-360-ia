@@ -587,7 +587,6 @@ function App() {
           <img className="logo-dark" src="/assets/logo-processo-360-ia-dark.svg" alt="Processo 360 IA" />
         </div>
         <div className="topbar-actions">
-          {(IS_PREVIEW || (appUser.email===ADMIN_EMAIL && !adminClientView)) && <span className="client-preview-badge">{VERSION_BADGE}</span>}
           <span className="signed-user">{appUser.displayName || appUser.email || 'Usuário'}</span>
           {(appUser.email !== ADMIN_EMAIL || adminClientView) && adminClientView && <span className="client-preview-badge">Visualização do cliente</span>}
           <button className="icon-button" onClick={() => setDark(!dark)} aria-label="Alternar tema">
