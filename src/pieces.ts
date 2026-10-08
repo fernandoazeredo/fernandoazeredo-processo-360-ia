@@ -644,6 +644,15 @@ export async function generateLegalPiece(report: AnalysisReport, pieceType: stri
     loadMotorBPrompt(report.area, report.perspective, MOTOR_B_PURPOSES.reviewer, MOTOR_B_REVIEWER)
   ])
 
+  // Diagnóstico sem conteúdo processual: confirma apenas a preparação/envio do anexo,
+  // nunca a leitura semântica pelo modelo. Não registra nomes, trechos nem PDF.
+  console.info('[Processo 360 IA][Validador][diagnostico]', {
+    etapa: 'inicio', pdfDisponivel: Boolean(originalFile),
+    pdfBytes: originalFile?.size ?? 0,
+    promptOrigem: validatorPromptDoc.source,
+    promptVersao: validatorPromptDoc.version
+  })
+
   const draftPrompt = `${basePromptDoc.content}\n\n${specificPromptDoc.content}\n\nÁREA: ${report.area}\nPERSPECTIVA: ${report.perspective}\nTIPO SOLICITADO: ${effectivePieceType}\nFASE PROCESSUAL INFERIDA: ${phase}\nDATA ATUAL DO SISTEMA: ${currentDate}\nDATA A UTILIZAR NA PEÇA: ${pieceDate}\nREGRA DE DATA: em Petição Inicial, use a data de ajuizamento/distribuição expressamente identificada; se ela não estiver identificada, preserve [DATA]. Nunca use a data atual como se fosse a data histórica de ajuizamento.\n\n[DADOS_PROFISSIONAIS_DO_ADVOGADO]\n${professional}\n\n[DADOS_CONSOLIDADOS_DO_PROCESSO]\n${source}\n\n[DIAGNOSTICO_JURIDICO]\n${diagnostic}\n\nINSTRUÇÃO DE INTEGRIDADE FACTUAL: a perspectiva define argumentação, não os acontecimentos. Não converta alegação em fato. Frases como "cumpriu", "juntou", "preservou", "regularizou", "não realizou", "restou comprovado" e equivalentes só podem ser categóricas com suporte documental específico; sem suporte, use formulação condicional/controvertida.
 INSTRUÇÃO DE SAÍDA: JSON do schema. A peça em sections deve estar LIMPA, sem referências de lote/página/folha e sem avisos internos do sistema. Use a DATA A UTILIZAR NA PEÇA no fecho e os DADOS PROFISSIONAIS no bloco de assinatura; em Petição Inicial nunca substitua a data histórica de ajuizamento pela data atual. Não substitua dados existentes por placeholders.`
 
@@ -676,6 +685,13 @@ INSTRUÇÃO DE SAÍDA: JSON do schema. A peça em sections deve estar LIMPA, sem
 
   if (originalFile) {
     const originalAttachment = await buildValidationAttachment(originalFile, claims, report)
+    console.info('[Processo 360 IA][Validador][diagnostico]', {
+      etapa: 'anexo-final-preparado', paginas: originalAttachment.pages,
+      anexoCompleto: originalAttachment.complete,
+      anexoBytes: originalAttachment.bytes.length,
+      promptOrigem: validatorPromptDoc.source,
+      promptVersao: validatorPromptDoc.version
+    })
     const finalValidationPrompt = `${validatorPromptDoc.content}
 
 [VALIDAÇÃO FINAL CONTRA O DOCUMENTO ORIGINAL]
@@ -704,6 +720,8 @@ REGRAS:
 5. Se o PDF anexado for apenas um recorte de páginas referenciadas, não confirme fato que dependa de página não presente.
 6. Toda afirmação material categórica sem suporte específico deve ser marcada NÃO CONFIRMADA/PARCIALMENTE CONFIRMADA e reescrita de modo condicional.
 7. correctedSections deve refletir exatamente essa validação final.
+9. Critério positivo: quando o documento original anexado sustentar integralmente a afirmação, marque CONFIRMADA (não PARCIALMENTE CONFIRMADA), indique a folha em sourceReference e registre no treatment um trecho curto e fiel de suporte. Não exija prova adicional para a simples existência, data ou teor literal de um documento presente.
+10. Separe a existência/teor do documento de inferências: aditivo datado, habite-se e existência/conteúdo de laudo podem ser confirmados se constarem das folhas; efeitos jurídicos, conclusões periciais não expressas e justificativas como chuvas atípicas exigem prova própria. Não promova alegações sem prova a CONFIRMADA.
 8. Se ANEXO COMPLETO = NÃO, não conclua que documento, contestação, perícia, audiência, aditivo ou outro fato "não existe/não consta" apenas porque não apareceu no recorte. Use as referências da análise completa para localizar a página correspondente e preserve o fato quando houver suporte indicado.`
 
     const finalValidationResult = await generateJson(
@@ -712,6 +730,11 @@ REGRAS:
       'validação factual final no documento original v9',
       [{ inlineData: { data: bytesToBase64(originalAttachment.bytes), mimeType: 'application/pdf' } }]
     )
+
+    console.info('[Processo 360 IA][Validador][diagnostico]', {
+      etapa: 'resposta-validacao-final', modelo: finalValidationResult.model,
+      anexoEnviado: true, respostaRecebida: true
+    })
 
     finalClaims = Array.isArray(finalValidationResult.parsed.claims)
       ? finalValidationResult.parsed.claims.map((item: any, index: number) => ({
@@ -728,6 +751,9 @@ REGRAS:
       : reviewed
     finalValidationModel = finalValidationResult.model || reviewResult.model
   } else {
+    console.warn('[Processo 360 IA][Validador][diagnostico]', {
+      etapa: 'sem-pdf-original', confirmadasRebaixadas: claims.filter(item => item.status === 'CONFIRMADA').length
+    })
     finalClaims = claims.map(item => item.status === 'CONFIRMADA'
       ? { ...item, status: 'PARCIALMENTE CONFIRMADA' as ClaimStatus, treatment: `${item.treatment || ''} Documento original não disponível na validação final.`.trim() }
       : item)
