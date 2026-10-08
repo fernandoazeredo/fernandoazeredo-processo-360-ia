@@ -301,17 +301,29 @@ function reportToSource(report: AnalysisReport) {
 }
 
 function reportText(report: AnalysisReport) {
-  return `${report.executiveSummary}\n${report.claimsEvidenceDecisions}\n${report.globalAnalysis}\n${report.conclusionStrategy}\n${report.timeline.map(item => `${item.event} ${item.reference}`).join('\n')}`.toLowerCase()
+  const factualFindings = Array.isArray(report.factualFindings)
+    ? report.factualFindings.map(item => `${item.classification || ''} ${item.statement || ''} ${item.source || ''} ${item.excerpt || ''}`).join('\n')
+    : ''
+  const pendingItems = Array.isArray(report.pendingItems)
+    ? report.pendingItems.map(item => `${item.item || ''} ${item.reason || ''} ${item.evidenceNeeded || ''}`).join('\n')
+    : ''
+  const sources = Array.isArray(report.sources)
+    ? report.sources.map(item => `${item.note || ''} ${item.pages || ''}`).join('\n')
+    : ''
+
+  return `${report.executiveSummary}\n${report.claimsEvidenceDecisions}\n${report.globalAnalysis}\n${report.conclusionStrategy}\n${report.timeline.map(item => `${item.event} ${item.reference}`).join('\n')}\n${factualFindings}\n${pendingItems}\n${sources}`.toLowerCase()
 }
 
 function hasDefenseInRecord(report: AnalysisReport) {
   const text = reportText(report)
-  const explicitAbsence = /(?:não|nao)\s+(?:há|ha|consta|existe|foi\s+(?:localizada|identificada|apresentada|juntada))[^.\n]{0,80}(?:contestação|contestacao|defesa)/i.test(text)
-    || /(?:contestação|contestacao|defesa)[^.\n]{0,80}(?:não|nao)\s+(?:consta|foi\s+(?:localizada|identificada|apresentada|juntada))/i.test(text)
+  const explicitAbsence = /(?:não|nao)\s+(?:há|ha|consta|existe|foi\s+(?:localizada|identificada|apresentada|juntada))[^.\n]{0,100}(?:contestação|contestacao|defesa)/i.test(text)
+    || /(?:contestação|contestacao|defesa)[^.\n]{0,100}(?:não|nao)\s+(?:consta|foi\s+(?:localizada|identificada|apresentada|juntada))/i.test(text)
   if (explicitAbsence) return false
-  const timelineText = report.timeline.map(item => `${item.event} ${item.reference}`).join(' ').toLowerCase()
-  return /(?:contestação|contestacao|defesa)[^.;]{0,60}(?:apresentad|protocolad|juntad|oferecid)/i.test(timelineText)
-    || /(?:apresentad|protocolad|juntad|oferecid)[^.;]{0,60}(?:contestação|contestacao|defesa)/i.test(timelineText)
+
+  return /(?:contestação|contestacao|defesa)(?:\s+do\s+inss)?[^.;\n]{0,120}(?:apresentad|protocolad|juntad|oferecid|consta|exist)/i.test(text)
+    || /(?:apresentad|protocolad|juntad|oferecid|consta|exist)[^.;\n]{0,120}(?:contestação|contestacao|defesa)(?:\s+do\s+inss)?/i.test(text)
+    || /\bcontestação\s+do\s+inss\b/i.test(text)
+    || /\bdefesa\s+do\s+inss\b/i.test(text)
 }
 
 function hasJudicialExpertEvidence(report: AnalysisReport) {
@@ -322,9 +334,9 @@ function hasJudicialExpertEvidence(report: AnalysisReport) {
 
   return /(?:perícia|pericia)\s+judicial/i.test(text)
     || /(?:laudo|parecer)\s+pericial/i.test(text)
-    || /(?:perícia|pericia)[^.\n]{0,120}(?:realizad|produzid|juntad|concluíd|concluid|apresentad)/i.test(text)
-    || /(?:realizad|produzid|juntad|concluíd|concluid|apresentad)[^.\n]{0,120}(?:perícia|pericia)/i.test(text)
-    || /perito[^.\n]{0,120}(?:conclu|apur|atest|inform)/i.test(text)
+    || /(?:perícia|pericia)[^.\n]{0,160}(?:realizad|produzid|juntad|concluíd|concluid|apresentad|dii|incapacid)/i.test(text)
+    || /(?:realizad|produzid|juntad|concluíd|concluid|apresentad|dii|incapacid)[^.\n]{0,160}(?:perícia|pericia)/i.test(text)
+    || /perito[^.\n]{0,160}(?:conclu|apur|atest|inform|dii|incapacid)/i.test(text)
 }
 
 function inferProceduralPhase(report: AnalysisReport) {
