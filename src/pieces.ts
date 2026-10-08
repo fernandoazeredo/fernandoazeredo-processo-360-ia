@@ -486,7 +486,7 @@ async function applyCriticalFactualGate(
   const critical = criticalAssertionsFromSections(sections)
   if (!critical.length) return { sections, claims }
 
-  const attachment = await buildValidationAttachment(originalFile, claims)
+  const attachment = await buildValidationAttachment(originalFile, claims, report)
   const prompt = `${validatorPromptDoc.content}
 
 [BARREIRA FACTUAL CRÍTICA — V9]
@@ -503,7 +503,14 @@ ${JSON.stringify(critical, null, 2)}
 [CLAIMS ATUAIS — NÃO SÃO FONTE DE VERDADE]
 ${JSON.stringify(claims, null, 2)}
 
-Use SOMENTE o PDF original anexado como fonte primária.
+[FATOS E REFERÊNCIAS JÁ EXTRAÍDOS NA ANÁLISE COMPLETA — USE PARA LOCALIZAR A PROVA NO PDF]
+${reportToSource(report)}
+
+[PÁGINAS DO PDF ANEXADAS NESTA ETAPA]
+${attachment.pages}
+ANEXO COMPLETO: ${attachment.complete ? 'SIM' : 'NÃO'}
+
+Use o PDF original anexado como fonte primária. O relatório serve como índice de fatos e referências para localizar a prova, nunca como autorização para inventar suporte.
 
 REGRAS OBRIGATÓRIAS:
 1. Confira individualmente TODAS as afirmações críticas listadas.
@@ -513,7 +520,8 @@ REGRAS OBRIGATÓRIAS:
 5. Se a prova não estiver no PDF anexado, reescreva a frase de modo condicional, como pedido, alegação ou pendência; ou remova a afirmação.
 6. Não invente documento a ser juntado, cumprimento de decisão, evento posterior, certidão, antecedentes, resultado pericial ou confirmação técnica.
 7. correctedSections deve conter a peça integral já corrigida, não apenas os trechos alterados.
-8. Se houver dúvida, prefira PARCIALMENTE CONFIRMADA ou NÃO CONFIRMADA e linguagem conservadora.`
+8. Se houver dúvida, prefira PARCIALMENTE CONFIRMADA ou NÃO CONFIRMADA e linguagem conservadora.
+9. Se ANEXO COMPLETO = NÃO, a ausência de um fato nas páginas anexadas NÃO autoriza escrever "não há", "não existe", "não consta" ou "não foi apresentado" quando a análise completa indicar página específica fora do recorte. Preserve o fato como pendente ou use a referência da análise para localizar a página correta.`
 
   const result = await generateJson(
     prompt,
@@ -667,7 +675,7 @@ INSTRUÇÃO DE SAÍDA: JSON do schema. A peça em sections deve estar LIMPA, sem
   let finalValidationModel = reviewResult.model
 
   if (originalFile) {
-    const originalAttachment = await buildValidationAttachment(originalFile, claims)
+    const originalAttachment = await buildValidationAttachment(originalFile, claims, report)
     const finalValidationPrompt = `${validatorPromptDoc.content}
 
 [VALIDAÇÃO FINAL CONTRA O DOCUMENTO ORIGINAL]
@@ -681,6 +689,13 @@ ${JSON.stringify(reviewed, null, 2)}
 [CLAIMS DA PRIMEIRA VALIDAÇÃO]
 ${JSON.stringify(claims, null, 2)}
 
+[FATOS E REFERÊNCIAS DA ANÁLISE COMPLETA — ÍNDICE PARA LOCALIZAÇÃO NO PDF]
+${source}
+
+[PÁGINAS DO PDF ANEXADAS NESTA ETAPA]
+${originalAttachment.pages}
+ANEXO COMPLETO: ${originalAttachment.complete ? 'SIM' : 'NÃO'}
+
 REGRAS:
 1. Revalide novamente todas as afirmações materiais APÓS as alterações do revisor.
 2. Use o PDF original anexado como fonte primária. O relatório consolidado não substitui o documento original.
@@ -688,7 +703,8 @@ REGRAS:
 4. Não transforme ausência de informação em prova de inexistência.
 5. Se o PDF anexado for apenas um recorte de páginas referenciadas, não confirme fato que dependa de página não presente.
 6. Toda afirmação material categórica sem suporte específico deve ser marcada NÃO CONFIRMADA/PARCIALMENTE CONFIRMADA e reescrita de modo condicional.
-7. correctedSections deve refletir exatamente essa validação final.`
+7. correctedSections deve refletir exatamente essa validação final.
+8. Se ANEXO COMPLETO = NÃO, não conclua que documento, contestação, perícia, audiência, aditivo ou outro fato "não existe/não consta" apenas porque não apareceu no recorte. Use as referências da análise completa para localizar a página correspondente e preserve o fato quando houver suporte indicado.`
 
     const finalValidationResult = await generateJson(
       finalValidationPrompt,
@@ -750,7 +766,7 @@ REGRAS:
 
   return {
     pieceType: effectivePieceType,
-    title: cleanExportableText(String(reviewResult.parsed.title || draftResult.parsed.title || pieceType)),
+    title: cleanExportableText(effectivePieceType),
     sections: safeSections,
     claims: finalClaims,
     validation: countValidation(finalClaims),
@@ -772,7 +788,7 @@ export async function revalidateLegalPiece(
     MOTOR_B_PURPOSES.validator,
     MOTOR_B_VALIDATOR
   )
-  const attachment = await buildValidationAttachment(originalFile, piece.claims)
+  const attachment = await buildValidationAttachment(originalFile, piece.claims, report)
   const publicRepresentation = usesPublicRepresentation(report.area, report.perspective)
   const currentDate = new Intl.DateTimeFormat('pt-BR').format(new Date())
   const pieceDate = /petição inicial/i.test(piece.pieceType) ? inferInitialFilingDate(report) : currentDate
@@ -790,6 +806,13 @@ ${JSON.stringify(piece.sections, null, 2)}
 [VALIDAÇÃO ANTERIOR — APENAS REFERÊNCIA, NÃO FONTE DE VERDADE]
 ${JSON.stringify(piece.claims, null, 2)}
 
+[FATOS E REFERÊNCIAS DA ANÁLISE COMPLETA — ÍNDICE PARA LOCALIZAÇÃO NO PDF]
+${reportToSource(report)}
+
+[PÁGINAS DO PDF ANEXADAS NESTA ETAPA]
+${attachment.pages}
+ANEXO COMPLETO: ${attachment.complete ? 'SIM' : 'NÃO'}
+
 REGRAS OBRIGATÓRIAS:
 1. A edição manual INVALIDOU a validação anterior.
 2. Reavalie todas as afirmações materiais da versão editada contra o PDF original anexado.
@@ -798,7 +821,8 @@ REGRAS OBRIGATÓRIAS:
 5. Se o trecho não estiver disponível nas páginas anexadas, use NÃO CONFIRMADA ou PARCIALMENTE CONFIRMADA.
 6. Alegação de parte deve permanecer alegação; sua existência não comprova seu conteúdo.
 7. correctedSections deve conter exatamente a versão revalidada, com linguagem condicional onde faltar prova.
-8. Não crie fato novo, documento, juntada, cumprimento, depoimento, preservação, perícia ou evento posterior.`
+8. Não crie fato novo, documento, juntada, cumprimento, depoimento, preservação, perícia ou evento posterior.
+9. Se ANEXO COMPLETO = NÃO, não transforme ausência no recorte em inexistência no processo. Use as referências da análise completa para localizar a prova e, sem confirmação suficiente, mantenha linguagem pendente em vez de remover fato documentado em página fora do recorte.`
 
   const result = await generateJson(
     prompt,
@@ -845,6 +869,7 @@ REGRAS OBRIGATÓRIAS:
 
   return {
     ...piece,
+    title: cleanExportableText(piece.pieceType),
     sections: safeSections,
     claims: gated.claims,
     validation: countValidation(gated.claims),
@@ -857,7 +882,7 @@ function extractPageIndexes(reference: string, pageCount: number) {
   const refs = String(reference || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   const indexes = new Set<number>()
 
-  const rangeRegex = /paginas?\s*(\d+)\s*(?:-|–|a)\s*(\d+)/gi
+  const rangeRegex = /(?:paginas?|pags?\.?|fls?\.?|folhas?)\s*(\d+)\s*(?:-|–|a)\s*(\d+)/gi
   let rangeMatch: RegExpExecArray | null
   while ((rangeMatch = rangeRegex.exec(refs))) {
     let start = Math.max(1, Math.min(Number(rangeMatch[1]), pageCount))
@@ -866,7 +891,7 @@ function extractPageIndexes(reference: string, pageCount: number) {
     for (let page = start; page <= end; page += 1) indexes.add(page - 1)
   }
 
-  const pageListMatch = refs.match(/paginas?\s+([\d,; e]+)(?=$|\]|\)|\.|\n)/i)
+  const pageListMatch = refs.match(/(?:paginas?|pags?\.?|fls?\.?|folhas?)\s+([\d,; e]+)(?=$|\]|\)|\.|\n)/i)
   if (pageListMatch) {
     for (const token of pageListMatch[1].match(/\d+/g) || []) {
       const page = Number(token)
@@ -874,7 +899,7 @@ function extractPageIndexes(reference: string, pageCount: number) {
     }
   }
 
-  const singleRegex = /(?:pagina|p\.)\s*[:#]?\s*(\d+)/gi
+  const singleRegex = /(?:pagina|pag\.?|p\.|fl\.?|folha)\s*[:#]?\s*(\d+)/gi
   let singleMatch: RegExpExecArray | null
   while ((singleMatch = singleRegex.exec(refs))) {
     const page = Number(singleMatch[1])
@@ -884,28 +909,51 @@ function extractPageIndexes(reference: string, pageCount: number) {
   return [...indexes].sort((a,b)=>a-b)
 }
 
-async function buildValidationAttachment(file: File, claims: PieceClaim[]) {
+async function buildValidationAttachment(file: File, claims: PieceClaim[], report?: AnalysisReport) {
   const sourceBytes = await file.arrayBuffer()
   const source = await PDFDocument.load(sourceBytes, { ignoreEncryption: true })
   const pageCount = source.getPageCount()
 
-  if (file.size <= 8 * 1024 * 1024 && pageCount <= 60) {
+  // Processos médios devem ser validados integralmente. O limite anterior de 60 páginas
+  // fazia um processo de 65 páginas cair indevidamente no recorte de 6 páginas.
+  if (file.size <= 12 * 1024 * 1024 && pageCount <= 80) {
     return { bytes: new Uint8Array(sourceBytes), pages: `1-${pageCount}`, complete: true }
   }
 
   const selected = new Set<number>()
+
+  // 1) Páginas já citadas pelos claims.
   for (const claim of claims) {
     for (const index of extractPageIndexes(claim.sourceReference, pageCount)) selected.add(index)
   }
 
-  // Para PDFs extensos, a validação final usa somente páginas efetivamente referenciadas.
-  // Sem referência, não inventamos confirmação: incluímos no máximo as 6 primeiras páginas
-  // para identificação básica e o validador deve manter o restante como pendente.
-  if (!selected.size) {
-    for (let i = 0; i < Math.min(6, pageCount); i += 1) selected.add(i)
+  // 2) Páginas identificadas na análise completa: linha do tempo, matriz factual,
+  // fontes, alegações/provas/decisões, análise global e conclusão.
+  if (report) {
+    const reportReferences = reportText(report)
+    for (const index of extractPageIndexes(reportReferences, pageCount)) selected.add(index)
   }
 
-  const indexes = [...selected].sort((a,b)=>a-b).slice(0, 24)
+  // Em documento extenso, nunca usar "primeiras 6 páginas" como substituto do processo.
+  // Se ainda não houver referência suficiente, distribui páginas por todo o PDF para evitar
+  // falsos negativos concentrados no início e mantém a validação como recorte incompleto.
+  if (!selected.size) {
+    const targetCount = Math.min(32, pageCount)
+    for (let i = 0; i < targetCount; i += 1) {
+      const index = Math.round((i * (pageCount - 1)) / Math.max(1, targetCount - 1))
+      selected.add(index)
+    }
+  }
+
+  // Inclui vizinhança imediata de cada referência para capturar documentos que começam/terminam
+  // na página adjacente (ex.: aditivo, laudo ou ata de audiência).
+  const expanded = new Set<number>(selected)
+  for (const index of selected) {
+    if (index > 0) expanded.add(index - 1)
+    if (index + 1 < pageCount) expanded.add(index + 1)
+  }
+
+  const indexes = [...expanded].sort((a,b)=>a-b).slice(0, 48)
   const target = await PDFDocument.create()
   const pages = await target.copyPages(source, indexes)
   pages.forEach(page => target.addPage(page))
