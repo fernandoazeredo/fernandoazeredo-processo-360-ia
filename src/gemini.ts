@@ -7,7 +7,7 @@ export const CONSOLIDATION_MODEL = 'gemini-3.8-flash'
 export const EXTRACTION_MODEL = 'gemini-3.8-flash'
 const EXTRACTION_MODELS = [EXTRACTION_MODEL, EXTRACTION_MODEL] as const
 const CONSOLIDATION_MODELS = [CONSOLIDATION_MODEL, CONSOLIDATION_MODEL] as const
-const ARCHITECTURE_VERSION = 'blaze-browser-lots-v8-timeout-model-errors-values'
+const ARCHITECTURE_VERSION = 'blaze-browser-lots-v9-factual-integrity'
 const MAX_LOT_PAGES = 60
 const MAX_LOT_BYTES = 8 * 1024 * 1024
 const REQUEST_TIMEOUT_MS = 210_000
@@ -42,6 +42,9 @@ export type GeminiAnalysisReport = {
   globalAnalysis: string
   risks: Array<{ item: string; level: 'Alta' | 'Média' | 'Baixa'; basis: string }>
   conclusionStrategy: string
+  factualFindings: Array<{ classification: 'FATO DOCUMENTADO' | 'ALEGAÇÃO DE PARTE' | 'PONTO CONTROVERTIDO' | 'INFERÊNCIA' | 'INFORMAÇÃO AUSENTE'; statement: string; source: string; excerpt: string }>
+  calculations: Array<{ description: string; formula: string; inputs: string; result: string; legalCondition: string }>
+  pendingItems: Array<{ item: string; reason: string; evidenceNeeded: string }>
   sources: Array<{ lot: number; pages: string; note: string }>
 }
 
@@ -77,6 +80,12 @@ type LotExtraction = {
   favorablePoints: string[]
   adversePoints: string[]
   unresolvedQuestions: string[]
+  factualRecords: Array<{
+    classification: 'FATO DOCUMENTADO' | 'ALEGAÇÃO DE PARTE' | 'PONTO CONTROVERTIDO' | 'INFERÊNCIA' | 'INFORMAÇÃO AUSENTE'
+    statement: string
+    sourcePage: string
+    sourceExcerpt: string
+  }>
 }
 
 type ResumeState = {
@@ -91,23 +100,38 @@ type ResumeState = {
 }
 
 const GLOBAL_RIGOR = `
-PROCESSO 360 IA — PADRÃO GLOBAL DE RIGOR
+PROCESSO 360 IA — PADRÃO GLOBAL DE RIGOR FACTUAL V9
 
 1. Siga integralmente a estrutura e o formato exigidos pelo prompt específico.
-2. Não inclua introdução, saudação, disclaimer genérico ou conteúdo fora do solicitado.
+2. Não inclua introdução, saudação ou conteúdo fora do solicitado.
 3. Baseie toda afirmação factual exclusivamente no material fornecido na chamada.
-4. Nunca invente fatos, datas, valores, documentos, páginas, provas, decisões, precedentes ou probabilidades.
-5. Preserve a área jurídica e a perspectiva informadas durante toda a execução.
-6. Vincule cada fato, prova, data, valor ou decisão à referência de origem disponível.
-7. Em lote isolado, extraia e catalogue; não antecipe conclusão global do processo.
-8. Na consolidação, considere todos os lotes antes de concluir.
-9. Sempre que um fato, folha, data, valor ou documento necessário não constar nos dados fornecidos, escreva exatamente: "Informação não constante nos dados fornecidos".
-10. Para risco, probabilidade de êxito, solidez ou classificação equivalente, use exclusivamente: "Alta", "Média" ou "Baixa".
-11. Identifique contradições, lacunas, duplicidades e limitações de prova.
-12. Antes de entregar, verifique internamente completude, rastreabilidade e ausência de invenções.
-13. Quando a data exata de um evento não constar, não invente a data. Use no campo date exatamente "Informação não constante nos dados fornecidos" e, somente se a relação temporal estiver claramente sustentada pelo contexto, registre no evento ou na referência uma "Inferência cronológica" objetiva (ex.: posterior à contestação de 12/03/2026), deixando explícito que se trata de inferência.
-14. Valores monetários devem ser transcritos exatamente como constam no material, com sua natureza e referência sempre que identificáveis. Não calcule, complete ou estime valores ausentes.
-15. Não invente súmulas, OJs, precedentes, números de julgados ou entendimentos jurisprudenciais. Só cite referência jurisprudencial específica quando ela constar nos dados fornecidos ou nos prompts jurídicos publicados.
+4. Nunca invente fatos, datas, valores, documentos, páginas, provas, decisões, precedentes, eventos posteriores ou resultados de perícia.
+5. Separe explicitamente: FATO DOCUMENTADO, ALEGAÇÃO DE PARTE, PONTO CONTROVERTIDO, INFERÊNCIA, CÁLCULO DERIVADO e CONCLUSÃO JURÍDICA.
+6. A existência de uma alegação prova apenas que ela foi alegada; não confirma a veracidade do conteúdo.
+7. Ausência de informação não prova inexistência. Use "Informação não constante nos dados fornecidos" quando faltar suporte.
+8. A perspectiva altera argumentos, riscos e estratégia, mas NÃO altera o núcleo factual dos autos.
+9. Em lote isolado, extraia e catalogue de modo NEUTRO; não escolha lado nem antecipe conclusão global.
+10. Na consolidação, confronte tese favorável, tese contrária e provas disponíveis. Documento unilateral não é prova conclusiva por si só.
+11. Toda afirmação material deve indicar a fonte disponível; expressões como "cumpriu", "juntou aos autos", "preservou", "regularizou", "restou comprovado", "não realizou" ou equivalentes exigem suporte documental específico.
+12. Não declare tempestividade, revelia, decurso de prazo, procedência, improcedência, nulidade, resultado pericial ou cumprimento de decisão sem dados suficientes.
+13. Diferencie tutela provisória, decisão administrativa, despacho interlocutório e julgamento definitivo.
+14. Datas: não crie acontecimentos posteriores usando a data atual. Quando a data exata não constar, registre "Informação não constante nos dados fornecidos". Inferência cronológica só pode ser usada se identificada como inferência e ancorada em evento documentado.
+15. Valores: preserve separadamente principal, multa, juros, saldo e valor da causa. Não preencha valor da causa a partir do principal sem fonte.
+16. Cálculos derivados são permitidos SOMENTE quando úteis e verificáveis. Identifique-os como "Cálculo derivado", mostre fórmula, valores de entrada e premissas; nunca apresente o resultado como valor literal do documento.
+17. Não invente súmulas, OJs, precedentes, números de julgados ou capitulação legal ausente. Quando a regra jurídica depender de legislação local ou conteúdo não fornecido, registre a dependência.
+18. Risco não pode ser classificado como baixo apenas porque existe argumento favorável. Informe prova faltante, hipótese contrária e impacto de prova futura.
+19. Competência, vara, comarca e representação processual só podem ser preenchidas quando constarem dos dados. Cidade do escritório não substitui comarca.
+20. Diferencie advogado privado, Ministério Público, procuradoria pública, INSS e assistente de acusação. Não reutilize automaticamente assinatura privada para órgão público.
+21. Antes de entregar, faça controle de consistência: nenhuma certeza pode ser contradita por pendência, controvérsia ou ausência de prova no próprio relatório.
+22. Regras por área:
+CRIMINAL — não inferir primariedade ou bons antecedentes sem certidão/registro específico efetivamente presente; não citar "certidões" como prova se elas não existirem nos documentos; não inferir ausência de flagrante pela ausência de apreensão; não inventar corpo de delito/laudo, qualificadora, causa de aumento ou procuração; distinguir justa causa, art. 397 do CPP e absolvição após instrução; se a instrução estiver encerrada, registrar a fase de Alegações Finais e não recomendar Resposta à Acusação; preservar lacunas de vídeo/depoimento.
+AMBIENTAL — distinguir responsabilidade administrativa subjetiva e civil objetiva; proximidade não prova nexo; não antecipar origem de efluente ou resultado pericial.
+TRIBUTÁRIO — separar principal, multa, juros e total; não deslocar pagamento entre competências sem prova; saldo calculado é hipótese condicionada; distinguir embargos sem efeito suspensivo de depósito integral e suspensão da exigibilidade.
+ADMINISTRATIVO — não aplicar automaticamente Lei 9.784/1999 a ente municipal; explicitar aplicação subsidiária quando cabível; protocolo não equivale a licença; campo de motivação vazio não equivale a nulidade já reconhecida.
+PREVIDENCIÁRIO — avaliar incapacidade em relação à atividade habitual; separar DID, DII, DER e DIB; não fixar DIB automaticamente pelo laudo; não antecipar perícia.
+CONSUMIDOR — não afirmar cumprimento/descumprimento de liminar sem prova posterior; divergência de serial permanece alegação até comprovação; recebimento postal não prova identidade do equipamento; ordem de exibição não implica automaticamente inversão do ônus.
+FAMÍLIA — planilha não equivale a recibos; três holerites não provam habitualidade; transferência sem descrição mantém finalidade controvertida; distinguir pedido, provisórios e oferta; idade deve ser calculada na data de referência.
+EMPRESARIAL — obrigação contratual não prova que treinamento ocorreu ou não ocorreu; não inventar juntada de planilha/logs; preservação para perícia não equivale a perícia realizada; manter controvertida a origem de registros duplicados.
 `.trim()
 
 const extractionSchema = Schema.object({
@@ -135,7 +159,13 @@ const extractionSchema = Schema.object({
     proceduralIssues: Schema.array({ items: Schema.string() }),
     favorablePoints: Schema.array({ items: Schema.string() }),
     adversePoints: Schema.array({ items: Schema.string() }),
-    unresolvedQuestions: Schema.array({ items: Schema.string() })
+    unresolvedQuestions: Schema.array({ items: Schema.string() }),
+    factualRecords: Schema.array({ items: Schema.object({ properties: {
+      classification: Schema.enumString({ enum: ['FATO DOCUMENTADO', 'ALEGAÇÃO DE PARTE', 'PONTO CONTROVERTIDO', 'INFERÊNCIA', 'INFORMAÇÃO AUSENTE'] }),
+      statement: Schema.string(),
+      sourcePage: Schema.string(),
+      sourceExcerpt: Schema.string()
+    } }) })
   }
 })
 
@@ -167,6 +197,24 @@ const reportSchema = Schema.object({
       })
     }),
     conclusionStrategy: Schema.string(),
+    factualFindings: Schema.array({ items: Schema.object({ properties: {
+      classification: Schema.enumString({ enum: ['FATO DOCUMENTADO', 'ALEGAÇÃO DE PARTE', 'PONTO CONTROVERTIDO', 'INFERÊNCIA', 'INFORMAÇÃO AUSENTE'] }),
+      statement: Schema.string(),
+      source: Schema.string(),
+      excerpt: Schema.string()
+    } }) }),
+    calculations: Schema.array({ items: Schema.object({ properties: {
+      description: Schema.string(),
+      formula: Schema.string(),
+      inputs: Schema.string(),
+      result: Schema.string(),
+      legalCondition: Schema.string()
+    } }) }),
+    pendingItems: Schema.array({ items: Schema.object({ properties: {
+      item: Schema.string(),
+      reason: Schema.string(),
+      evidenceNeeded: Schema.string()
+    } }) }),
     sources: Schema.array({
       items: Schema.object({
         properties: {
@@ -540,7 +588,8 @@ function isValidLotExtraction(value: any): value is LotExtraction {
     Array.isArray(value.proceduralIssues) &&
     Array.isArray(value.favorablePoints) &&
     Array.isArray(value.adversePoints) &&
-    Array.isArray(value.unresolvedQuestions)
+    Array.isArray(value.unresolvedQuestions) &&
+    Array.isArray(value.factualRecords)
   )
 }
 
@@ -563,8 +612,8 @@ async function analyzeLot(
 Você está analisando um lote de um processo jurídico muito maior.
 
 ÁREA: ${area}
-PERSPECTIVA OBRIGATÓRIA: ${perspective}
-REGRA DE POLO: analise este lote exclusivamente sob a perspectiva "${perspective}". É proibido inverter o polo, escrever como se a perspectiva fosse a parte contrária ou reaproveitar conclusão de outra perspectiva.
+PERSPECTIVA SOLICITADA PARA A ETAPA POSTERIOR: ${perspective}
+REGRA DE EXTRAÇÃO NEUTRA: este lote compõe uma base factual comum às duas perspectivas. Extraia fatos, alegações, documentos e controvérsias de modo neutro. NÃO reescreva acontecimentos para favorecer a perspectiva selecionada.
 LOTE: ${lot.number} de ${lotCount}
 PÁGINAS DO PDF ORIGINAL: ${lot.start}-${lot.end}
 
@@ -579,6 +628,7 @@ Mantenha referências de página/peça sempre que identificáveis.
 - Em timeline, use data exata apenas quando ela estiver expressamente identificada. Se a data exata não constar, use em date exatamente "Informação não constante nos dados fornecidos". Quando o contexto permitir estabelecer com segurança uma posição relativa, registre no event ou reference "Inferência cronológica: ..." e indique o evento/data que sustenta essa ordenação.
 - Em monetaryValues, TRANSCREVA literalmente todos os valores expressamente identificados, especialmente TRCT/verbas rescisórias, valor da causa e valor de cada pedido. Em extratos de FGTS, preserve competência por competência: mês/ano, valor literal quando houver, situação documental identificável e referência. Não agregue meses distintos quando o documento individualizar competências. Confira dígito por dígito antes de responder. Para cada valor, informe natureza e referência. NÃO some, subtraia, estime, arredonde, complete nem crie 'diferença' entre dois valores. Uma diferença monetária só pode entrar em claims se estiver expressamente formulada como pedido/alegação no documento. Se a leitura de um algarismo estiver duvidosa, registre a dúvida em unresolvedQuestions em vez de escolher um valor.
 - Em qualifications, extraia e preserve separadamente a qualificação encontrada de cada parte e advogado: papel processual, nome, estado civil, CPF/CNPJ, endereço, nome do advogado e OAB. Se o estado civil constar literalmente (por exemplo, solteiro/solteira, casado/casada, divorciado/divorciada, viúvo/viúva), preencha civilStatus exatamente com esse dado; se não constar, use "Informação não constante nos dados fornecidos". Não descarte esses dados por não serem necessários ao resumo do lote.
+- Em factualRecords, registre TODA afirmação material relevante usando obrigatoriamente uma das classificações: FATO DOCUMENTADO, ALEGAÇÃO DE PARTE, PONTO CONTROVERTIDO, INFERÊNCIA ou INFORMAÇÃO AUSENTE. Para cada registro informe sourcePage com a página original e sourceExcerpt com trecho curto literal ou síntese muito próxima da fonte. Não use "FATO DOCUMENTADO" para o conteúdo de mera alegação unilateral.
 - Em claims, catalogue cada pedido ou pretensão separadamente quando isso for possível, preservando o vínculo com os respectivos valores, fundamentos, provas e decisões encontrados no lote.
 - Se houver súmula, OJ, precedente ou entendimento jurisprudencial expressamente citado no lote ou nos prompts jurídicos fornecidos, preserve a referência com exatidão. Não crie nem complete referência jurisprudencial ausente.
 O JSON deve respeitar exatamente o schema solicitado.
@@ -676,6 +726,9 @@ function isValidReport(value: any): value is GeminiAnalysisReport {
     typeof value.globalAnalysis === 'string' &&
     Array.isArray(value.risks) &&
     typeof value.conclusionStrategy === 'string' &&
+    Array.isArray(value.factualFindings) &&
+    Array.isArray(value.calculations) &&
+    Array.isArray(value.pendingItems) &&
     Array.isArray(value.sources)
   )
 }
@@ -690,14 +743,39 @@ function literalQuantityTokens(lotResults: LotExtraction[]) {
   return new Set(matches.map(normalizeQuantityToken))
 }
 
-function removeUnsupportedDerivedQuantities(report: GeminiAnalysisReport, lotResults: LotExtraction[]) {
-  const allowed = literalQuantityTokens(lotResults)
-  const quantityPattern = /R\$\s*\d+(?:\.\d{3})*(?:,\d{2})?|\b\d+(?:[.,]\d+)?\s*%/gi
-  const clean = (value: string) => String(value || '').replace(quantityPattern, token =>
-    allowed.has(normalizeQuantityToken(token))
-      ? token
-      : '[QUANTIA DERIVADA REMOVIDA — não consta literalmente nos lotes]'
-  )
+function sanitizeDerivedQuantityMarkers(report: GeminiAnalysisReport) {
+  const clean = (value: string) => String(value || '')
+    .replace(/\[QUANTIA DERIVADA REMOVIDA[^\]]*\]/gi, 'Cálculo derivado não demonstrado — revisar fórmula e premissas.')
+  report.executiveSummary = clean(report.executiveSummary)
+  report.claimsEvidenceDecisions = clean(report.claimsEvidenceDecisions)
+  report.globalAnalysis = clean(report.globalAnalysis)
+  report.conclusionStrategy = clean(report.conclusionStrategy)
+  report.timeline = report.timeline.map(item => ({ ...item, event: clean(item.event), reference: clean(item.reference) }))
+  report.risks = report.risks.map(item => ({ ...item, item: clean(item.item), basis: clean(item.basis) }))
+  return report
+}
+
+function sanitizeCriminalPrimacyClaims(report: GeminiAnalysisReport, lotResults: LotExtraction[], area: string) {
+  if (area !== 'Criminal') return report
+
+  const documentedSupport = lotResults.flatMap(lot => [
+    ...lot.evidence,
+    ...lot.factualRecords
+      .filter(record => record.classification === 'FATO DOCUMENTADO')
+      .flatMap(record => [record.statement, record.sourceExcerpt])
+  ]).join('\n')
+
+  const hasSpecificCertificate =
+    /certid(?:ão|ao|ões|oes)|folha\s+de\s+antecedentes|registro\s+de\s+antecedentes/i.test(documentedSupport) &&
+    /prim[aá]ri|primariedade|antecedentes/i.test(documentedSupport)
+
+  if (hasSpecificCertificate) return report
+
+  const safeStatement = 'O PDF afirma que o réu é primário, sem certidão anexada.'
+
+  const clean = (value: string) => String(value || '')
+    .replace(/[^.\n]*(?:certid(?:ão|ao|ões|oes))[^.\n]*(?:prim[aá]ri|primariedade|bons\s+antecedentes|antecedentes)[^.\n]*\.?/gi, safeStatement)
+    .replace(/[^.\n]*(?:primariedade(?:\s+t[eé]cnica)?\s+(?:documentada|comprovada)|bons\s+antecedentes\s+(?:documentados|comprovados))[^.\n]*\.?/gi, safeStatement)
 
   report.executiveSummary = clean(report.executiveSummary)
   report.claimsEvidenceDecisions = clean(report.claimsEvidenceDecisions)
@@ -705,6 +783,29 @@ function removeUnsupportedDerivedQuantities(report: GeminiAnalysisReport, lotRes
   report.conclusionStrategy = clean(report.conclusionStrategy)
   report.timeline = report.timeline.map(item => ({ ...item, event: clean(item.event), reference: clean(item.reference) }))
   report.risks = report.risks.map(item => ({ ...item, item: clean(item.item), basis: clean(item.basis) }))
+
+  report.factualFindings = report.factualFindings.map(item => {
+    const combined = `${item.statement} ${item.excerpt}`
+    if (!/(?:certid(?:ão|ao|ões|oes).*(?:prim[aá]ri|antecedentes)|primariedade(?:\s+t[eé]cnica)?\s+(?:documentada|comprovada)|bons\s+antecedentes\s+(?:documentados|comprovados))/i.test(combined)) {
+      return item
+    }
+    return {
+      ...item,
+      classification: 'ALEGAÇÃO DE PARTE' as const,
+      statement: safeStatement,
+      excerpt: 'Há afirmação de primariedade nos dados processados, mas não foi identificada certidão de antecedentes como suporte documental específico.'
+    }
+  })
+
+  const alreadyPending = report.pendingItems.some(item => /certid.*anteced|primariedade/i.test(`${item.item} ${item.reason} ${item.evidenceNeeded}`))
+  if (!alreadyPending) {
+    report.pendingItems.push({
+      item: 'Primariedade e bons antecedentes',
+      reason: 'Há afirmação de primariedade, mas não foi identificada certidão ou registro específico de antecedentes nos dados processados.',
+      evidenceNeeded: 'Certidão ou registro de antecedentes efetivamente anexado aos autos.'
+    })
+  }
+
   return report
 }
 
@@ -786,22 +887,29 @@ ${finalInstructions}
 
 REGRAS OBRIGATÓRIAS:
 - Considere todos os ${lots.length} lotes antes de concluir.
+- Comece pela descrição neutra dos autos e só depois apresente argumentação orientada à perspectiva.
+- Para cada afirmação material, classifique mentalmente sua natureza: fato documentado, alegação, controvérsia, inferência, cálculo derivado ou conclusão jurídica. Nunca converta alegação em fato.
+- Se duas versões de uma alegação forem incompatíveis, preserve a controvérsia e indique a prova necessária para resolvê-la.
 - Confronte alegações, provas, decisões, valores e eventos entre lotes.
 - Identifique contradições, duplicidades, lacunas e pontos não comprovados.
 - Não invente fatos, páginas, documentos, datas, valores ou precedentes.
 - Quando faltar informação necessária, use exatamente: "Informação não constante nos dados fornecidos".
 - Em risks.level use exclusivamente Alta, Média ou Baixa.
-- Em risks.basis, justifique cada risco com elementos concretos dos lotes: prova existente ou ausente, distribuição do ônus probatório, decisão já proferida, contradição, documento faltante e exposição monetária expressamente identificada. Não crie percentual numérico de êxito ou condenação.
+- Em risks.basis, identifique expressamente DE QUEM é o risco, QUAL resultado adverso está sendo avaliado e QUAL documento/controvérsia o sustenta. Não crie percentual numérico de êxito ou condenação.
+- Em factualFindings, consolide os factualRecords dos lotes preservando a classificação, a fonte e um trecho curto de suporte. Perspectiva não pode alterar a classificação factual.
+- Em pendingItems, liste informação material ainda não comprovada, a razão da pendência e qual prova seria necessária.
+- Em calculations, inclua somente cálculos realmente úteis e verificáveis. Mostre descrição, fórmula, dados de entrada, resultado e condição jurídica. Se o cálculo depender de reconhecimento jurídico (por exemplo, abatimento controvertido), diga isso em legalCondition e não trate o resultado como crédito/débito reconhecido.
 - Na linha do tempo final, não invente datas. Quando um evento não tiver data exata, mantenha em date exatamente "Informação não constante nos dados fornecidos" e utilize relações temporais inferidas apenas quando sustentadas pelos lotes, identificando-as expressamente como "Inferência cronológica".
 - Em claimsEvidenceDecisions, consolide separadamente o valor da causa e o valor de cada pedido quando constarem dos lotes, eliminando duplicidades e preservando a referência documental. Não estime quantias ausentes. NUNCA crie pedido de diferença monetária por comparação aritmética entre TRCT, inicial ou outro documento: o pedido deve existir expressamente em claims.
 - Em parties, consolide TODAS as qualifications extraídas dos lotes, preservando nome, estado civil, CPF/CNPJ, endereço e advogado/OAB. Não troque dado encontrado por 'Informação não constante'.
-- VALORES DO TRCT: trate o valor impresso no documento como transcrição documental, não como resultado de cálculo. Se lotes trouxerem valores conflitantes para o mesmo campo, exponha a divergência e não invente um terceiro valor nem uma diferença.\n- VALORES DERIVADOS: é proibido criar qualquer novo valor em R$ por cálculo, percentual, soma, subtração, projeção ou estimativa. Em especial, se os lotes trouxerem apenas percentual de honorários, preserve o percentual sem convertê-lo em R$. Todo valor monetário em R$ exibido no relatório final deve estar literalmente presente nos lotes extraídos.
+- VALORES DO TRCT: trate o valor impresso no documento como transcrição documental, não como resultado de cálculo. Se lotes trouxerem valores conflitantes para o mesmo campo, exponha a divergência e não invente um terceiro valor nem uma diferença.\n- VALORES DERIVADOS: cálculos verificáveis são permitidos quando juridicamente úteis, mas devem ser rotulados como "Cálculo derivado", com fórmula, valores de entrada e premissas. O resultado não pode ser apresentado como valor literal do PDF nem substituir principal, multa, juros, saldo ou valor da causa.
 - Ao mencionar legislação, súmulas, OJs ou jurisprudência, utilize somente referências específicas presentes nos lotes ou nos prompts jurídicos publicados. Não invente número, tribunal, enunciado ou precedente. Se a referência específica não estiver disponível, exponha a questão jurídica sem fabricar citação.
 - Em conclusionStrategy, além da conclusão jurídica, apresente de 2 a 3 próximos passos práticos e objetivos coerentes com a perspectiva informada, vinculando cada ação a uma lacuna, prova, pedido ou risco identificado nos lotes (por exemplo: juntar documento já mencionado, requerer prova/perícia pertinente ou impugnar ponto documentalmente identificado). Não recomende medida sem suporte nos dados processados.
-- Entregue exatamente as 8 seções representadas no JSON.
+- Entregue todos os campos estruturados do JSON. factualFindings, calculations e pendingItems são obrigatórios, ainda que algum deles seja array vazio.
 - Em processNumber, use o valor consolidado já determinado pelo sistema a partir do número mais frequente entre os lotes válidos. Em caso de empate, prevalece o valor que apareceu primeiro. Se nenhum lote tiver essa informação, use exatamente: "Informação não constante nos dados fornecidos".
 - O valor consolidado já determinado pelo sistema é: "${consolidatedProcessNumber}".
 - Em sources, haverá uma entrada por lote efetivamente considerado.
+- REGRA CRIMINAL DE PRIMARIEDADE: a frase de uma petição, depoimento ou outro texto dizendo que o réu é primário NÃO equivale a certidão. Só escreva "certidão de primariedade", "certidão de antecedentes", "primariedade documentada/comprovada" ou "bons antecedentes documentados/comprovados" se um documento específico dessa natureza estiver efetivamente catalogado como prova. Se os autos apenas afirmarem que o réu é primário, redija exatamente: "O PDF afirma que o réu é primário, sem certidão anexada."
 
 DADOS ESTRUTURADOS DE TODOS OS LOTES:
 ${JSON.stringify(lotResults)}
@@ -836,7 +944,8 @@ ${JSON.stringify(lotResults)}
 
   parsed.processNumber = consolidatedProcessNumber
   parsed.processNumberWarning = processNumberWarning
-  removeUnsupportedDerivedQuantities(parsed, lotResults)
+  sanitizeDerivedQuantityMarkers(parsed)
+  sanitizeCriminalPrimacyClaims(parsed, lotResults, area)
 
   parsed.sources = lots.map(lot => ({
     lot: lot.number,

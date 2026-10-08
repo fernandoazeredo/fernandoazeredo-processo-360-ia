@@ -29,8 +29,16 @@ if (app && typeof window !== 'undefined') {
     hostname === '127.0.0.1' ||
     hostname === '[::1]'
 
+  const previewDebugToken = String(import.meta.env.VITE_APPCHECK_DEBUG_TOKEN || '').trim()
+  const isPullRequestPreview =
+    hostname.startsWith('processo-360-ia--pr') &&
+    hostname.endsWith('.web.app')
+
   if (isLocalDevelopment) {
     ;(self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true
+  } else if (isPullRequestPreview && previewDebugToken) {
+    // Token injetado apenas pelo workflow de Preview. Builds de produção não recebem esta variável.
+    ;(self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = previewDebugToken
   }
 
   try {

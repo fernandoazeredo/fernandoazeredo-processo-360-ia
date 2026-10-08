@@ -6,7 +6,7 @@ import { adminAuth, adminDb, adminFunctions, auth, db, firebaseConfigured, funct
 import { httpsCallable } from 'firebase/functions'
 import { analyzeUploadedProcess } from './ai'
 import type { AnalysisReport } from './ai'
-import { confirmClaimInOriginal, generateLegalPiece, pieceTypeOptions, suggestPieceType } from './pieces'
+import { confirmClaimInOriginal, generateLegalPiece, pieceTypeOptions, revalidateLegalPiece, suggestPieceTypeForReport } from './pieces'
 import type { LegalPieceDraft, PieceClaim, ProfessionalProfile } from './pieces'
 import { chargeAnalysis, chargePiece, consumeForcedAnalysisFailure, consumeForcedPieceFailure, formatBRL, quoteAnalysis, quotePiece, refundCharge } from './wallet'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
@@ -14,6 +14,9 @@ import type { WalletRecord, WalletStatus } from './wallet'
 
 const ADMIN_EMAIL = 'fernandoazeredo64@gmail.com'
 const APP_BUILD = String(import.meta.env.VITE_APP_BUILD || 'dev')
+const APP_RELEASE_LABEL = String(import.meta.env.VITE_RELEASE_LABEL || '')
+const IS_PREVIEW = Boolean(APP_RELEASE_LABEL) || window.location.hostname.includes('--pr')
+const VERSION_BADGE = `${APP_RELEASE_LABEL || 'V9'} · ${APP_BUILD.slice(0,8)}`
 
 type Area = 'Trabalhista' | 'Cível' | 'Criminal' | 'Ambiental' | 'Tributário' | 'Administrativo' | 'Previdenciário' | 'Consumidor' | 'Família' | 'Empresarial'
 type PromptArea = Area | 'Global'
@@ -140,6 +143,21 @@ function parseCurrencyInput(raw:string) {
     ? value.replace(/\./g,'').replace(',','.')
     : value
   return Number(normalized)
+}
+
+function simpleClaimStatus(status:string) {
+  const map:Record<string,string> = {
+    'CONFIRMADA':'Confirmado',
+    'PARCIALMENTE CONFIRMADA':'Confirmado parcialmente',
+    'NÃO CONFIRMADA':'Não confirmado',
+    'CORRIGIDA':'Corrigido',
+    'CONFLITANTE':'Divergente'
+  }
+  return map[status] || status
+}
+
+function cleanClientTimelineText(value:string) {
+  return String(value || '').replace(/\bInferência cronológica\s*:\s*/gi,'')
 }
 
 function scrollToAlert(id:string) {
@@ -406,6 +424,22 @@ function App() {
 
 
 
+  useEffect(()=>{
+    if(!appUser?.uid || analysis) return
+    try{
+      const raw=localStorage.getItem(`p360-last-analysis-${appUser.uid}`)
+      if(!raw) return
+      const saved=JSON.parse(raw)
+      if(saved?.report?.analysisId && saved?.report?.area && saved?.report?.perspective){
+        setAnalysis(saved.report as AnalysisReport)
+        setArea(saved.report.area as Area)
+        setPerspective(saved.report.perspective)
+      }
+    }catch(error){
+      console.warn('[Processo 360 IA] Não foi possível restaurar a última análise concluída.',error)
+    }
+  },[appUser?.uid])
+
   function changeArea(next: Area) {
     setArea(next)
     setPerspective(perspectives[next][0])
@@ -451,6 +485,17 @@ function App() {
         throw new Error(`ANALYSIS_PERSPECTIVE_MISMATCH: solicitado ${selectedArea}/${selectedPerspective}, recebido ${report.area}/${report.perspective}`)
       }
       setAnalysis(report)
+      try{
+        if(appUser?.uid){
+          localStorage.setItem(`p360-last-analysis-${appUser.uid}`,JSON.stringify({
+            report,
+            fileMeta:{name:file.name,size:file.size,lastModified:file.lastModified},
+            savedAt:new Date().toISOString()
+          }))
+        }
+      }catch(error){
+        console.warn('[Processo 360 IA] Não foi possível persistir a análise concluída.',error)
+      }
       window.setTimeout(() => {
         document.getElementById('analysis-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       }, 150)
@@ -491,23 +536,23 @@ function App() {
       } else if (message.includes('ANALYSIS_CANCELLED')) {
         setAnalysisError('')
       } else if (message.includes('GEMINI_CREDIT_DEPLETED')) {
-        setAnalysisError('O crédito/faturamento do provedor de IA não está disponível para concluir a análise. Regularize ou renove o crédito do Google/Firebase antes de tentar novamente.')
+        setAnalysisError(appUser?.email===ADMIN_EMAIL && !adminClientView ? 'O crédito/faturamento do provedor de IA não está disponível para concluir a análise.' : 'Não foi possível concluir. Tente novamente.')
       } else if (message.includes('GEMINI_BILLING_STATE_MISMATCH')) {
-        setAnalysisError('O Google retornou um estado de faturamento inconsistente para o projeto. Verifique o faturamento do Firebase/Google Cloud e tente novamente.')
+        setAnalysisError(appUser?.email===ADMIN_EMAIL && !adminClientView ? 'O Google retornou um estado de faturamento inconsistente para o projeto.' : 'Não foi possível concluir. Tente novamente.')
       } else if (message.includes('GEMINI_RATE_LIMIT')) {
-        setAnalysisError('O Gemini atingiu temporariamente um limite de requisições ou cota do serviço. Aguarde alguns instantes e tente novamente: os lotes já concluídos ficaram salvos para retomada automática.')
+        setAnalysisError(appUser?.email===ADMIN_EMAIL && !adminClientView ? 'O serviço de IA atingiu temporariamente um limite de requisições.' : 'Não foi possível concluir. Tente novamente.')
       } else if (message.includes('GEMINI_TEMPORARILY_BUSY')) {
-        setAnalysisError('O Gemini está temporariamente com alta demanda. Tente novamente mais tarde; os lotes concluídos ficaram salvos para retomada.')
+        setAnalysisError(appUser?.email===ADMIN_EMAIL && !adminClientView ? 'O serviço de IA está temporariamente com alta demanda.' : 'Não foi possível concluir. Tente novamente.')
       } else if (message.includes('GEMINI_REQUEST_TIMEOUT')) {
-        setAnalysisError('O Gemini não respondeu dentro do limite de 210 segundos. O lote em andamento não foi concluído; os lotes anteriores já finalizados permanecem salvos para retomada.')
+        setAnalysisError(appUser?.email===ADMIN_EMAIL && !adminClientView ? 'O serviço de IA excedeu o tempo limite desta tentativa.' : 'Não foi possível concluir. Tente novamente.')
       } else if (message.includes('GEMINI_PROJECT_CONFIGURATION')) {
-        setAnalysisError('A chamada ao Gemini foi recusada pela configuração do projeto Firebase/Google Cloud. Nenhum modelo alternativo incompatível será usado automaticamente.')
+        setAnalysisError(appUser?.email===ADMIN_EMAIL && !adminClientView ? 'A configuração do projeto recusou a chamada ao serviço de IA.' : 'Não foi possível concluir. Tente novamente.')
       } else if (message.includes('GEMINI_MODEL_UNAVAILABLE')) {
-        setAnalysisError('Nenhum dos modelos Gemini configurados respondeu corretamente nesta tentativa. Tente novamente mais tarde.')
+        setAnalysisError(appUser?.email===ADMIN_EMAIL && !adminClientView ? 'Nenhum dos modelos configurados respondeu corretamente nesta tentativa.' : 'Não foi possível concluir. Tente novamente.')
       } else if (message.includes('GEMINI_APP_CHECK_INVALID')) {
-        setAnalysisError('O Firebase App Check rejeitou a chamada ao Gemini. Recarregue a página e tente novamente.')
+        setAnalysisError(appUser?.email===ADMIN_EMAIL && !adminClientView ? 'O App Check rejeitou a chamada ao serviço de IA.' : 'Não foi possível concluir. Tente novamente.')
       } else if (message.includes('FIREBASE_AI_NOT_READY')) {
-        setAnalysisError('O Firebase AI Logic ainda não está configurado corretamente para o aplicativo.')
+        setAnalysisError(appUser?.email===ADMIN_EMAIL && !adminClientView ? 'O Firebase AI Logic ainda não está configurado corretamente.' : 'Não foi possível concluir. Tente novamente.')
       } else {
         setAnalysisError(refundConfirmed
           ? `Não foi possível concluir a análise. O valor de ${formatBRL(refundedCents)} foi devolvido ao seu saldo.`
@@ -542,6 +587,7 @@ function App() {
           <img className="logo-dark" src="/assets/logo-processo-360-ia-dark.svg" alt="Processo 360 IA" />
         </div>
         <div className="topbar-actions">
+          {(IS_PREVIEW || (appUser.email===ADMIN_EMAIL && !adminClientView)) && <span className="client-preview-badge">{VERSION_BADGE}</span>}
           <span className="signed-user">{appUser.displayName || appUser.email || 'Usuário'}</span>
           {(appUser.email !== ADMIN_EMAIL || adminClientView) && adminClientView && <span className="client-preview-badge">Visualização do cliente</span>}
           <button className="icon-button" onClick={() => setDark(!dark)} aria-label="Alternar tema">
@@ -558,7 +604,7 @@ function App() {
               <h2>Créditos disponíveis</h2>
               <button className="wallet-info-button" type="button" aria-label="Informações sobre créditos" onClick={()=>setWalletInfoOpen(true)}>i</button>
             </div>
-            <p>Seus créditos são usados para pagar pelos serviços da API Gemini antes do uso deles. Os créditos não são reembolsáveis e não expiram mensalmente. O saldo pode levar alguns minutos para refletir uma recarga, um uso ou um ajuste administrativo.</p>
+            <p>Seus créditos são usados para pagar pelos serviços de IA antes do uso deles. Os créditos não são reembolsáveis e não expiram mensalmente. O saldo pode levar alguns minutos para refletir uma recarga, um uso ou um ajuste administrativo.</p>
           </div>
           <div className="wallet-compact-actions">
             <span>Saldo <b>{formatBRL(wallet?.balanceCents||0)}</b></span>
@@ -677,7 +723,7 @@ function App() {
           </div>
         </details>}
 
-        {analysis && <AnalysisResult report={analysis} originalFile={file} isAdmin={appUser.email===ADMIN_EMAIL} piecePriceCents={Math.ceil((walletConfig.pieceCostCents||0)*(walletConfig.marginMultiplier||3))} walletBalanceCents={wallet?.balanceCents||0} onRecharge={()=>setWalletTopupOpen(true)} user={appUser} />}
+        {analysis && <AnalysisResult report={analysis} originalFile={file} isAdmin={appUser.email===ADMIN_EMAIL && !adminClientView} piecePriceCents={Math.ceil((walletConfig.pieceCostCents||0)*(walletConfig.marginMultiplier||3))} walletBalanceCents={wallet?.balanceCents||0} onRecharge={()=>setWalletTopupOpen(true)} user={appUser} />}
 
       </main>
 
@@ -702,7 +748,7 @@ function App() {
           <div className="live-progress">
             <strong>{progress}%</strong>
             <div className="progress-track"><i style={{width:`${progress}%`}} /></div>
-            <span>{processingStage}...</span>
+            <span>{appUser.email===ADMIN_EMAIL && !adminClientView ? `${processingStage}...` : 'Analisando seu processo…'}</span>
             <small>Processos extensos podem levar vários minutos. Não feche esta janela.</small>
           </div>
         </div>
@@ -741,7 +787,7 @@ function buildExportFileName(report: AnalysisReport) {
     ? 'lote único'
     : lotNumbers.map(n => `lote ${n}`).join(', ')
 
-  return `${processLabel} - ${loteLabel}`
+  return `${processLabel} - ${report.area} - ${report.perspective} - análise - ${loteLabel}`
 }
 
 function exportAnalysisAsPdf(report: AnalysisReport) {
@@ -804,12 +850,22 @@ ${styleNodes}
     display:none!important;
   }
   @media print{
+    @page{size:A4;margin:2cm 2cm 2.2cm 2cm}
     html,body{
       background:#fff!important;
       color:#111!important;
       -webkit-print-color-adjust:exact!important;
       print-color-adjust:exact!important;
+      font-family:"Times New Roman",Times,serif!important;
+      font-size:12pt!important;
+      line-height:1.5!important;
     }
+    .analysis-section-full,.analysis-grid article{break-inside:auto!important}
+    h1,h2,h3{break-after:avoid-page!important;page-break-after:avoid!important}
+    p{orphans:3;widows:3;text-align:justify!important}
+    .markdown-table{font-size:10pt!important;border-collapse:collapse!important;width:100%!important}
+    .markdown-table th,.markdown-table td{border:1px solid #aaa!important;padding:6px!important;vertical-align:top!important;text-align:left!important}
+    .timeline-item,.risk-item,.source-list>div{break-inside:avoid!important}
   }
 </style>
 </head>
@@ -862,7 +918,8 @@ async function ensureCurrentProductionBuild() {
 
 function pieceHasPending(piece: LegalPieceDraft) {
   const text = piece.sections.map(section => `${section.title}\n${section.content}`).join('\n')
-  return /⚠\s*REVISAR|\[(?:VALOR|RG|NÚMERO|NUMERO|CEP|CPF|CNPJ|ENDEREÇO|DATA|DADO A CONFIRMAR)[^\]]*\]/i.test(text)
+  return /⚠\s*REVISAR|\[(?:VALOR|RG|NÚMERO|NUMERO|CEP|CPF|CNPJ|ENDEREÇO|DATA|DADO A CONFIRMAR|REPRESENTAÇÃO PÚBLICA A CONFIRMAR)[^\]]*\]/i.test(text)
+    || piece.validation.partiallyConfirmed > 0
     || piece.validation.unconfirmed > 0
     || piece.validation.conflicting > 0
 }
@@ -877,7 +934,7 @@ function buildPieceFileName(report: AnalysisReport, pieceType: string) {
   const process = report.processNumber && report.processNumber !== 'Informação não constante nos dados fornecidos'
     ? report.processNumber
     : `processo-${report.analysisId.slice(0, 8)}`
-  return `${process} - ${pieceType}`.replace(/[\\/:*?"<>|]/g, '-').trim()
+  return `${process} - ${report.area} - ${report.perspective} - ${pieceType}`.replace(/[\\/:*?"<>|]/g, '-').trim()
 }
 
 async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) {
@@ -888,6 +945,7 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
   // O PDF protocolável contém somente a peça jurídica. Metadados do Motor B,
   // validação, pontos pendentes e rastreabilidade permanecem exclusivamente na tela.
   const internalSectionPattern = /^(?:pontos?\s+pendentes?|pend[eê]ncias?|rastreabilidade(?:\s+factual)?|valida[cç][aã]o(?:\s+factual)?|auditoria(?:\s+interna)?|relat[oó]rio\s+interno|dados?\s+t[eé]cnicos?)\b/i
+  const seenSections = new Set<string>()
   const sections = piece.sections
     .filter(section => {
       const title = String(section.title || '').trim()
@@ -895,6 +953,9 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
       if (!title && !content) return false
       if (internalSectionPattern.test(title)) return false
       if (internalSectionPattern.test(content.split(/\r?\n/, 1)[0] || '')) return false
+      const signature = title.toLowerCase() + '|' + content.toLowerCase().replace(/\s+/g,' ').slice(0,240)
+      if (seenSections.has(signature)) return false
+      seenSections.add(signature)
       return true
     })
 
@@ -905,7 +966,7 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
   const pageHeight = 841.89
   const marginX = 56.7
   const marginTop = 56.7
-  const marginBottom = 56.7
+  const marginBottom = 72
   const bodySize = 12
   const headingSize = 12
   const titleSize = 14
@@ -984,10 +1045,36 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
     }
   }
 
-  if (pieceHasPending(piece)) {
-    drawWrapped('RASCUNHO DE PEÇA PROCESSUAL - Há pendências que exigem revisão jurídica antes do protocolo.', boldFont, 10, 15, { centered: true })
-    y -= 10
+  const drawJustifiedParagraph = (value:string) => {
+    const clean=normalizePdfText(value).trim()
+    if(!clean) return
+    const isList=/^(?:[-*•]|\d+[.)])\s+/.test(clean)
+    const lines=wrapLine(clean,regularFont,bodySize)
+    lines.forEach((line,index)=>{
+      ensureSpace(bodyLineHeight)
+      if(!line){ y-=bodyLineHeight; return }
+      const words=line.split(/\s+/)
+      const isLast=index===lines.length-1
+      if(isList || isLast || words.length<3){
+        page.drawText(line,{x:marginX,y,size:bodySize,font:regularFont,color:rgb(0,0,0)})
+      }else{
+        const wordsWidth=words.reduce((sum,word)=>sum+regularFont.widthOfTextAtSize(word,bodySize),0)
+        const gap=(textWidth-wordsWidth)/(words.length-1)
+        let x=marginX
+        words.forEach((word,wordIndex)=>{
+          page.drawText(word,{x,y,size:bodySize,font:regularFont,color:rgb(0,0,0)})
+          x+=regularFont.widthOfTextAtSize(word,bodySize)+(wordIndex<words.length-1?gap:0)
+        })
+      }
+      y-=bodyLineHeight
+    })
   }
+
+  drawWrapped('RASCUNHO DE PEÇA PROCESSUAL - Revisão jurídica obrigatória antes do protocolo.', boldFont, 10, 15, { centered: true })
+  if (pieceHasPending(piece)) {
+    drawWrapped('Há pendências factuais ou campos que exigem confirmação.', boldFont, 9, 14, { centered: true })
+  }
+  y -= 10
 
   // Título da peça, sem prompt, modelo, build ou qualquer outro dado técnico.
   drawWrapped(piece.title, boldFont, titleSize, 20, { centered: true })
@@ -998,7 +1085,7 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
     const content = normalizePdfText(section.content).trim()
 
     if (title) {
-      ensureSpace(headingLineHeight * 2)
+      ensureSpace(headingLineHeight + bodyLineHeight * 3)
       drawWrapped(title, boldFont, headingSize, headingLineHeight)
       y -= 4
     }
@@ -1006,12 +1093,42 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
     if (content) {
       const paragraphs = content.split(/\n{2,}/)
       for (const paragraph of paragraphs) {
-        drawWrapped(paragraph, regularFont, bodySize, bodyLineHeight)
+        drawJustifiedParagraph(paragraph)
         y -= 7
       }
     }
     y -= 5
   }
+
+  if (piece.claims.length) {
+    newPage()
+    drawWrapped('ANEXO - AUDITORIA FACTUAL DA MINUTA', boldFont, titleSize, 20, { centered: true })
+    y -= 8
+    drawWrapped('Este anexo registra o status factual e as referências utilizadas pelo validador. A peça permanece rascunho sujeito a revisão jurídica.', regularFont, 10, 15)
+    y -= 8
+    for (const claim of piece.claims) {
+      const status = String(claim.status || 'NÃO CONFIRMADA')
+      const reference = String(claim.sourceReference || 'Referência não informada')
+      const treatment = String(claim.treatment || '')
+      drawWrapped(`${simpleClaimStatus(status)} — ${claim.text}`, boldFont, 10, 15)
+      drawWrapped(`Referência no processo: ${reference}`, regularFont, 9, 14)
+      if (treatment) drawWrapped(`Como foi tratado: ${treatment}`, regularFont, 9, 14)
+      y -= 6
+    }
+  }
+
+  const pageCount=pdf.getPageCount()
+  pdf.getPages().forEach((pdfPage,index)=>{
+    const footer=(report.processNumber || 'Processo') + ' · Página ' + (index+1) + ' de ' + pageCount
+    const footerWidth=regularFont.widthOfTextAtSize(footer,8)
+    pdfPage.drawText(footer,{
+      x:Math.max(marginX,(pageWidth-footerWidth)/2),
+      y:28,
+      size:8,
+      font:regularFont,
+      color:rgb(.35,.35,.35)
+    })
+  })
 
   pdf.setTitle(piece.title)
   pdf.setSubject(piece.pieceType)
@@ -1032,19 +1149,23 @@ async function exportPieceAsPdf(report: AnalysisReport, piece: LegalPieceDraft) 
 }
 
 function exportPieceAsWord(report: AnalysisReport, piece: LegalPieceDraft) {
-  const banner = 'RASCUNHO DE PEÇA PROCESSUAL — Há pendências que exigem revisão jurídica antes do protocolo.'
+  const banner = 'RASCUNHO DE PEÇA PROCESSUAL — REVISÃO JURÍDICA OBRIGATÓRIA ANTES DO PROTOCOLO.'
   const sections = piece.sections
     .filter(section => section.title.trim() || section.content.trim())
     .map(section => `<section><h2>${escapeHtml(section.title)}</h2><div>${escapeHtml(normalizeWordSignature(section.content)).replace(/\n/g, '<br>')}</div></section>`)
     .join('')
 
+  const audit = piece.claims.length
+    ? `<hr><h1>ANEXO — CONFERÊNCIA FACTUAL DA MINUTA</h1><p>Este anexo resume a conferência dos fatos e suas referências no processo.</p>${piece.claims.map(claim=>`<section><b>${escapeHtml(simpleClaimStatus(claim.status))} — ${escapeHtml(claim.text)}</b><br>Referência no processo: ${escapeHtml(claim.sourceReference||'Referência não informada')}${claim.treatment?`<br>Como foi tratado: ${escapeHtml(claim.treatment)}`:''}</section>`).join('')}`
+    : ''
+
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>
-    body{font-family:Arial,sans-serif;font-size:12pt;line-height:1.5;color:#111;margin:2.5cm}
+    body{font-family:"Times New Roman",Times,serif;font-size:12pt;line-height:1.5;color:#111;margin:2.5cm;text-align:justify}
     h1{text-align:center;font-size:14pt;margin:0 0 20pt}
-    h2{font-size:12pt;margin:18pt 0 8pt;border-bottom:1px solid #bbb;padding-bottom:4pt}
+    h2{font-size:12pt;margin:18pt 0 8pt;border-bottom:1px solid #bbb;padding-bottom:4pt;text-align:left;page-break-after:avoid}
     .warning{font-size:10pt;border:1px solid #bbb;padding:8pt;margin-bottom:18pt}
-    section{margin-bottom:12pt}
-  </style></head><body><div class="p360-print-warning">${escapeHtml(banner)}</div><h1>${escapeHtml(piece.title)}</h1>${sections}</body></html>`
+    section{margin-bottom:12pt} ul,ol,table{text-align:left} p{orphans:3;widows:3}
+  </style></head><body><div class="p360-print-warning">${escapeHtml(banner)}</div><h1>${escapeHtml(piece.title)}</h1>${sections}${audit}</body></html>`
 
   const blob = new Blob(['\ufeff', html], { type: 'application/msword;charset=utf-8' })
   const url = URL.createObjectURL(blob)
@@ -1057,9 +1178,19 @@ function exportPieceAsWord(report: AnalysisReport, piece: LegalPieceDraft) {
   URL.revokeObjectURL(url)
 }
 
+function requiresPrivateProfessional(area:string,perspective:string){
+  return !(
+    (area==='Criminal' && perspective==='Acusação') ||
+    (area==='Ambiental' && /Órgão Ambiental|MP/i.test(perspective)) ||
+    (area==='Tributário' && /Fazenda Pública/i.test(perspective)) ||
+    (area==='Administrativo' && /Administração Pública/i.test(perspective)) ||
+    (area==='Previdenciário' && perspective==='INSS')
+  )
+}
+
 function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletBalanceCents, onRecharge, user}:{report:AnalysisReport;originalFile:File|null;isAdmin:boolean;piecePriceCents:number;walletBalanceCents:number;onRecharge:()=>void;user:User}) {
   const [pieceOpen, setPieceOpen] = useState(false)
-  const [pieceType, setPieceType] = useState(() => suggestPieceType(report.area, report.perspective))
+  const [pieceType, setPieceType] = useState(() => suggestPieceTypeForReport(report))
   const [piece, setPiece] = useState<LegalPieceDraft | null>(null)
   const [pieceBusy, setPieceBusy] = useState(false)
   const [pieceStage, setPieceStage] = useState('')
@@ -1076,6 +1207,47 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
   const [profileEditing, setProfileEditing] = useState(false)
   const [pieceQuoteCents, setPieceQuoteCents] = useState(piecePriceCents)
   const [pieceQuoteError, setPieceQuoteError] = useState('')
+  const [pieceValidationStale,setPieceValidationStale]=useState(false)
+  const [pieceRevalidating,setPieceRevalidating]=useState(false)
+  const [revalidationOriginalFile,setRevalidationOriginalFile]=useState<File|null>(originalFile)
+
+  useEffect(()=>{
+    if(originalFile) setRevalidationOriginalFile(originalFile)
+  },[originalFile])
+
+  useEffect(()=>{
+    try{
+      const raw=localStorage.getItem(`p360-piece-${user.uid}-${report.analysisId}`)
+      if(raw){
+        const saved=JSON.parse(raw)
+        if(saved?.piece?.pieceType && saved?.analysisId===report.analysisId){
+          setPiece(saved.piece as LegalPieceDraft)
+          setPieceType(saved.piece.pieceType)
+          setPieceValidationStale(Boolean(saved.pieceValidationStale))
+          setPieceOpen(true)
+        }
+      }
+    }catch(error){
+      console.warn('[Processo 360 IA] Não foi possível restaurar a peça concluída.',error)
+    }
+  },[report.analysisId,user.uid])
+
+  useEffect(()=>{
+    if(!piece) return
+    try{
+      localStorage.setItem(`p360-piece-${user.uid}-${report.analysisId}`,JSON.stringify({
+        analysisId:report.analysisId,
+        area:report.area,
+        perspective:report.perspective,
+        fileName:report.fileName,
+        promptVersion:piece.promptVersion,
+        pieceValidationStale,
+        piece
+      }))
+    }catch(error){
+      console.warn('[Processo 360 IA] Não foi possível persistir a peça concluída.',error)
+    }
+  },[piece,pieceValidationStale,report.analysisId,user.uid])
 
   useEffect(() => {
     if (!pieceOpen) return
@@ -1174,7 +1346,7 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
   async function handleGeneratePiece() {
     setPieceError('')
     setPiece(null)
-    if (!professionalProfile.name.trim() || !professionalProfile.oab.trim()) {
+    if (requiresPrivateProfessional(report.area,report.perspective) && (!professionalProfile.name.trim() || !professionalProfile.oab.trim())) {
       setPieceError('Cadastre o nome do advogado e a OAB antes de gerar a peça. Assim o sistema não criará assinatura com campos em branco.')
       return
     }
@@ -1186,16 +1358,33 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
     setPieceStage('Estruturando e redigindo o rascunho')
     let chargeId = ''
     try {
+      let currentPiecePrice = pieceQuoteCents
       if (!isAdmin) {
-        const charge = await chargePiece(pieceType, report.processNumber, pieceQuoteCents)
+        const freshQuote = await quotePiece()
+        currentPiecePrice = freshQuote.priceCents
+        setPieceQuoteCents(currentPiecePrice)
+        if (walletBalanceCents < currentPiecePrice) {
+          throw new Error('WALLET_INSUFFICIENT')
+        }
+        if (pieceQuoteCents > 0 && currentPiecePrice !== pieceQuoteCents) {
+          setPieceError(`O preço da peça foi atualizado para ${formatBRL(currentPiecePrice)}. Confira o novo valor e clique novamente em Gerar Rascunho.`)
+          return
+        }
+        const charge = await chargePiece(pieceType, report.processNumber, currentPiecePrice)
         chargeId = charge.chargeId
         if (await consumeForcedPieceFailure()) {
           throw new Error('TEST_FORCED_PIECE_FAILURE')
         }
       }
-      window.setTimeout(() => setPieceStage('Validando fatos contra o relatório consolidado'), 900)
-      const generated = await generateLegalPiece(report, pieceType, professionalProfile)
+      window.setTimeout(() => setPieceStage('Validando novamente contra o documento original'), 900)
+      const generated = await generateLegalPiece(
+        report,
+        pieceType,
+        requiresPrivateProfessional(report.area,report.perspective) ? professionalProfile : undefined,
+        originalFile || undefined
+      )
       setPiece(generated)
+      setPieceValidationStale(false)
       setPieceStage('Rascunho validado')
       window.setTimeout(() => document.getElementById('piece-review')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
     } catch (error: any) {
@@ -1227,12 +1416,81 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
   }
 
   function updatePieceSection(index: number, value: string) {
-    setPiece(current => current ? {
-      ...current,
-      sections: current.sections.map((section, sectionIndex) =>
-        sectionIndex === index ? { ...section, content: value } : section
+    setPiece(current => {
+      if (!current) return current
+      const next = {
+        ...current,
+        sections: current.sections.map((section, sectionIndex) =>
+          sectionIndex === index ? { ...section, content: value } : section
+        )
+      }
+      try {
+        localStorage.setItem(`p360-piece-${user.uid}-${report.analysisId}`, JSON.stringify({
+          analysisId: report.analysisId,
+          area: report.area,
+          perspective: report.perspective,
+          fileName: report.fileName,
+          promptVersion: next.promptVersion,
+          pieceValidationStale: true,
+          piece: next
+        }))
+      } catch (error) {
+        console.warn('[Processo 360 IA] Não foi possível salvar imediatamente a edição manual.', error)
+      }
+      return next
+    })
+    setPieceValidationStale(true)
+    setConfirmation({})
+  }
+
+  async function requestOriginalPdfForRevalidation():Promise<File|null>{
+    return await new Promise(resolve=>{
+      const input=document.createElement('input')
+      input.type='file'
+      input.accept='application/pdf,.pdf'
+      input.style.display='none'
+      input.onchange=()=>{
+        const selected=input.files?.[0] || null
+        input.remove()
+        if(!selected){ resolve(null); return }
+        if(report.fileName && selected.name !== report.fileName){
+          setPieceError(`Selecione o PDF original desta análise: ${report.fileName}. O arquivo escolhido foi ${selected.name}.`)
+          resolve(null)
+          return
+        }
+        setRevalidationOriginalFile(selected)
+        resolve(selected)
+      }
+      document.body.appendChild(input)
+      input.click()
+    })
+  }
+
+  async function handleRevalidateEditedPiece(){
+    if(!piece || pieceRevalidating) return
+    setPieceError('')
+    const validationFile=originalFile || revalidationOriginalFile || await requestOriginalPdfForRevalidation()
+    if(!validationFile){
+      setPieceError('Para revalidar após atualizar a página, selecione novamente o PDF original do processo. A edição permanece salva e nenhuma nova cobrança será feita.')
+      return
+    }
+    setPieceRevalidating(true)
+    try{
+      const revalidated=await revalidateLegalPiece(
+        report,
+        piece,
+        validationFile,
+        requiresPrivateProfessional(report.area,report.perspective) ? professionalProfile : undefined
       )
-    } : current)
+      setPiece(revalidated)
+      setPieceValidationStale(false)
+      setPieceStage('Peça editada revalidada contra o documento original')
+    }catch(error:any){
+      console.error('[Processo 360 IA] Falha na revalidação após edição.',error)
+      setPieceError('A peça foi editada, mas a nova validação não foi concluída. Revise novamente antes de exportar.')
+    }finally{
+      setPieceRevalidating(false)
+    }
   }
 
   async function handleConfirmClaim(claim: PieceClaim) {
@@ -1298,8 +1556,8 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
         ? <div className="timeline-list">{report.timeline.map((item,i)=>
             <div className="timeline-item" key={i}>
               <strong>{item.date || 'Data não identificada'}</strong>
-              <span>{item.event}</span>
-              <small>{item.reference}</small>
+              <span>{cleanClientTimelineText(item.event)}</span>
+              <small>{cleanClientTimelineText(item.reference)}</small>
             </div>)}</div>
         : <p>Nenhum evento cronológico estruturado foi retornado.</p>}
     </div>
@@ -1325,13 +1583,49 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
       <MarkdownBlock text={report.conclusionStrategy}/>
     </div>
 
-    <div className="analysis-section-full sources-block">
-      <h3>7. Rastreabilidade dos lotes</h3>
+    {Array.isArray(report.factualFindings) && report.factualFindings.length>0 && <div className="analysis-section-full">
+      <h3>7. Matriz factual</h3>
+      <div className="markdown-table-wrap">
+        <table className="markdown-table factual-table">
+          <thead><tr><th>Classificação</th><th>Afirmação</th><th>Fonte</th><th>Trecho de suporte</th></tr></thead>
+          <tbody>{report.factualFindings.map((item,i)=><tr key={i}>
+            <td><b>{item.classification}</b></td><td>{item.statement}</td><td>{item.source}</td><td>{item.excerpt}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>
+    </div>}
+
+    {Array.isArray(report.calculations) && report.calculations.length>0 && <div className="analysis-section-full">
+      <h3>8. Cálculos derivados</h3>
+      <div className="markdown-table-wrap">
+        <table className="markdown-table">
+          <thead><tr><th>Descrição</th><th>Fórmula</th><th>Dados de origem</th><th>Resultado</th><th>Condição jurídica</th></tr></thead>
+          <tbody>{report.calculations.map((item,i)=><tr key={i}>
+            <td>{item.description}</td><td>{item.formula}</td><td>{item.inputs}</td><td>{item.result}</td><td>{item.legalCondition}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>
+    </div>}
+
+    {Array.isArray(report.pendingItems) && report.pendingItems.length>0 && <div className="analysis-section-full">
+      <h3>9. Pendências de confirmação</h3>
+      <div className="markdown-table-wrap">
+        <table className="markdown-table">
+          <thead><tr><th>Pendência</th><th>Motivo</th><th>Prova necessária</th></tr></thead>
+          <tbody>{report.pendingItems.map((item,i)=><tr key={i}>
+            <td>{item.item}</td><td>{item.reason}</td><td>{item.evidenceNeeded}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>
+    </div>}
+
+    {isAdmin && <div className="analysis-section-full sources-block">
+      <h3>10. Rastreabilidade dos lotes</h3>
       <div className="source-list">
         {report.sources.map((source,i)=>
           <div key={i}><b>Lote {source.lot}</b><span>Páginas {source.pages}</span><small>{source.note}</small></div>)}
       </div>
-    </div>
+    </div>}
 
     {pieceOpen && <section className="piece-module" id="piece-module">
       <div className="piece-controls no-print" data-ui-only="true">
@@ -1396,12 +1690,16 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
             <h2>{piece.title}</h2>
           </div>
           <div className="piece-actions no-print" data-ui-only="true">
-            <button onClick={() => exportPieceAsWord(report, piece)}><Download size={17}/> Exportar Word</button>
-            <button onClick={() => exportPieceAsPdf(report, piece)}><Download size={17}/> Exportar PDF</button>
+            {pieceValidationStale && <button className="secondary-button compact" disabled={pieceRevalidating} onClick={handleRevalidateEditedPiece}>
+              <ShieldCheck size={17}/> {pieceRevalidating?'Revalidando...':'Revalidar alterações'}
+            </button>}
+            <button disabled={pieceValidationStale} onClick={() => exportPieceAsWord(report, piece)}><Download size={17}/> Exportar Word (.doc)</button>
+            <button disabled={pieceValidationStale} onClick={() => exportPieceAsPdf(report, piece)}><Download size={17}/> Exportar PDF</button>
           </div>
         </div>
 
         <div className="piece-validation-panel no-print" data-ui-only="true">
+          {pieceValidationStale && <p className="analysis-warning"><b>Validação desatualizada:</b> a peça foi editada. Revalide contra o PDF original antes de exportar.</p>}
           <div className="validation-counts">
             <span><CheckCircle2 size={16}/> {piece.validation.confirmed} confirmadas</span>
             <span>{piece.validation.partiallyConfirmed} parcialmente confirmadas</span>
@@ -1438,14 +1736,14 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
             {piece.claims.map(claim =>
               <article className={`piece-claim status-${claim.status.toLowerCase().replace(/\s+/g,'-')}`} key={claim.id}>
                 <div className="piece-claim-top">
-                  <strong>{claim.status}</strong>
+                  <strong>{simpleClaimStatus(claim.status)}</strong>
                   <span>{claim.type}</span>
                 </div>
                 <p>{claim.text}</p>
-                <small><b>Origem:</b> {claim.sourceReference || 'Sem referência específica'}</small>
-                {claim.treatment && <small><b>Tratamento:</b> {claim.treatment}</small>}
-                <button onClick={() => handleConfirmClaim(claim)} disabled={confirmingClaim === claim.id}>
-                  <Search size={15}/> {confirmingClaim === claim.id ? 'Confirmando...' : 'Confirmar este fato no documento original'}
+                <small><b>Referência no processo:</b> {claim.sourceReference || 'Sem referência específica'}</small>
+                {claim.treatment && <small><b>Como foi tratado:</b> {claim.treatment}</small>}
+                <button className="icon-button" title="Conferir no documento original" aria-label="Conferir no documento original" onClick={() => handleConfirmClaim(claim)} disabled={confirmingClaim === claim.id}>
+                  <Search size={15}/>
                 </button>
                 {confirmation[claim.id] && <div className="piece-confirm-result">{confirmation[claim.id]}</div>}
               </article>)}
@@ -1455,9 +1753,9 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
             <h3>Rastreabilidade factual</h3>
             {piece.claims.map(claim =>
               <div className="piece-trace-row" key={`print-${claim.id}`}>
-                <p><strong>{claim.status}</strong> — {claim.text}</p>
-                <p><b>Origem:</b> {claim.sourceReference || 'Sem referência específica'}</p>
-                {claim.treatment && <p><b>Tratamento:</b> {claim.treatment}</p>}
+                <p><strong>{simpleClaimStatus(claim.status)}</strong> — {claim.text}</p>
+                <p><b>Referência no processo:</b> {claim.sourceReference || 'Sem referência específica'}</p>
+                {claim.treatment && <p><b>Como foi tratado:</b> {claim.treatment}</p>}
               </div>)}
           </section>
         </>}
