@@ -73,3 +73,7 @@ Regras centrais:
 - usar exatamente `Informação não constante nos dados fornecidos` quando faltar dado necessário;
 - classificar risco somente como `Alta`, `Média` ou `Baixa`;
 - considerar todos os lotes antes da conclusão final.
+
+## Homologação final — 09/10/2026
+
+Versão funcional aprovada após os PRs #47 e #48, incluindo validação factual documental, seleção de peça previdenciária por fase e limpeza das referências internas no anexo. Os testes de carteira, estornos, análises, peças e exportações foram aprovados pelo usuário (notas finais >= 8). Este registro documental aciona o workflow existente de publicação em produção da branch `main`, sem modificar o código de execução.
