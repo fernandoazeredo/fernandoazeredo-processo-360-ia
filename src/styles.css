@@ -3546,3 +3546,18 @@ select:focus,input:focus,textarea:focus{
     white-space:normal;
   }
 }
+
+/* Botão DICAS: identidade visual Processo 360 IA (azul + laranja). */
+.topbar .tips-header-button,
+.topbar .tips-header-button:hover,
+.topbar .tips-header-button:focus-visible {
+  background: linear-gradient(115deg, #078fe8 0%, #2378ef 42%, #ff8124 100%);
+  color: #fff;
+  border: 1px solid transparent;
+  font-weight: 800;
+  margin-top: 0;
+  box-shadow: 0 4px 14px rgba(20, 112, 213, .16);
+}
+.topbar .tips-header-button:hover { filter: brightness(1.08); }
+.topbar .tips-header-button:focus-visible { outline: 3px solid #ffab57; outline-offset: 3px; }
+.topbar .tips-header-button svg { color: #fff; }
