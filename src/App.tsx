@@ -590,7 +590,7 @@ function App() {
         <div className="topbar-actions">
           <span className="signed-user">{appUser.displayName || appUser.email || 'Usuário'}</span>
           {(appUser.email !== ADMIN_EMAIL || adminClientView) && adminClientView && <span className="client-preview-badge">Visualização do cliente</span>}
-          <button className="secondary-button compact" type="button" onClick={() => setTipsOpen(true)} aria-haspopup="dialog" aria-label="DICAS — Instruções para o usuário"><HelpCircle size={16} /> DICAS</button>
+          <button className="secondary-button compact" type="button" onClick={() => setTipsOpen(true)} aria-haspopup="dialog" aria-label="DICAS — Instruções para o usuário" style={{backgroundColor: '#c62828', color: '#ffffff', borderColor: '#c62828', fontWeight: 800}}><HelpCircle size={16} /> DICAS</button>
           <button className="icon-button" onClick={() => setDark(!dark)} aria-label="Alternar tema">
             {dark ? <Sun size={19} /> : <Moon size={19} />}
           </button>
