@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, signOut, User } from 'firebase/auth'
 import { addDoc, collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
-import { AlertTriangle, BrainCircuit, CheckCircle2, ChevronRight, CreditCard, Download, FilePenLine, FileText, LockKeyhole, Moon, Pencil, Plus, Save, Search, ShieldCheck, Sun, Trash2, UploadCloud, Users, X } from 'lucide-react'
+import { AlertTriangle, BrainCircuit, CheckCircle2, ChevronRight, CreditCard, Download, FilePenLine, FileText, LockKeyhole, Moon, Pencil, Plus, Save, Search, ShieldCheck, Sun, Trash2, UploadCloud, Users, HelpCircle, X } from 'lucide-react'
 import { adminAuth, adminDb, adminFunctions, auth, db, firebaseConfigured, functions } from './firebase'
 import { httpsCallable } from 'firebase/functions'
 import { analyzeUploadedProcess } from './ai'
@@ -303,6 +303,7 @@ function App() {
   const [adminClientView, setAdminClientView] = useState(false)
   const [walletTopupOpen, setWalletTopupOpen] = useState(false)
   const [walletInfoOpen, setWalletInfoOpen] = useState(false)
+  const [tipsOpen, setTipsOpen] = useState(false)
   const [ledgerExpanded, setLedgerExpanded] = useState(false)
   const [adminUser, setAdminUser] = useState<User | null>(null)
   const [appUser, setAppUser] = useState<User | null>(null)
@@ -589,6 +590,7 @@ function App() {
         <div className="topbar-actions">
           <span className="signed-user">{appUser.displayName || appUser.email || 'Usuário'}</span>
           {(appUser.email !== ADMIN_EMAIL || adminClientView) && adminClientView && <span className="client-preview-badge">Visualização do cliente</span>}
+          <button className="secondary-button compact" type="button" onClick={() => setTipsOpen(true)} aria-haspopup="dialog" aria-label="DICAS — Instruções para o usuário"><HelpCircle size={16} /> DICAS</button>
           <button className="icon-button" onClick={() => setDark(!dark)} aria-label="Alternar tema">
             {dark ? <Sun size={19} /> : <Moon size={19} />}
           </button>
@@ -751,6 +753,29 @@ function App() {
             <small>Processos extensos podem levar vários minutos. Não feche esta janela.</small>
           </div>
         </div>
+      </div>}
+
+      {tipsOpen && <div className="wallet-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="tips-title" onClick={() => setTipsOpen(false)}>
+        <section className="wallet-modal wallet-info-modal" onClick={event => event.stopPropagation()} style={{maxWidth: 700, maxHeight: '85vh', overflowY: 'auto'}}>
+          <button className="wallet-modal-close" type="button" onClick={() => setTipsOpen(false)} aria-label="Fechar DICAS"><X size={20}/></button>
+          <h2 id="tips-title">DICAS — Como usar o Processo 360 IA</h2>
+          <p>Guia rápido para analisar um processo e, se desejar, preparar uma peça jurídica.</p>
+          <ol style={{paddingLeft: 24, lineHeight: 1.65}}>
+            <li><b>Acesse sua conta.</b> Entre com seu login. Confira o saldo de créditos disponível.</li>
+            <li><b>Envie o PDF.</b> Selecione o processo judicial que deseja analisar e aguarde a leitura do arquivo.</li>
+            <li><b>Escolha a área jurídica.</b> Selecione Trabalhista, Cível, Criminal, Ambiental, Tributário, Administrativo, Previdenciário, Consumidor, Família ou Empresarial.</li>
+            <li><b>Defina a perspectiva.</b> Indique a parte que você representa para orientar a análise.</li>
+            <li><b>Confira o preço e inicie a análise.</b> O valor é informado antes da confirmação. Aguarde o processamento sem fechar a página.</li>
+            <li><b>Leia o relatório.</b> Examine o resumo, a linha do tempo, as alegações, as provas, os riscos e a estratégia sugerida.</li>
+            <li><b>Gere uma peça, se necessário.</b> Confira o tipo de peça sugerido, altere-o quando adequado e confirme o preço antes de gerar.</li>
+            <li><b>Confira a validação factual.</b> Analise os fatos confirmados, parcialmente confirmados, não confirmados, corrigidos ou conflitantes e as referências às folhas.</li>
+            <li><b>Revise e revalide.</b> Verifique nomes, datas, valores, fundamentos e documentos. Se editar a peça, revalide antes de exportar.</li>
+            <li><b>Exporte.</b> Salve o relatório ou a peça em PDF ou Word, conforme as opções disponíveis.</li>
+          </ol>
+          <p><b>Sobre créditos:</b> cobranças são apresentadas antes de cada operação. Em caso de falha cobrada, consulte o estorno e o extrato da carteira.</p>
+          <p><b>Importante:</b> o conteúdo gerado é um rascunho de apoio jurídico. A revisão por profissional habilitado é obrigatória antes de qualquer utilização ou protocolo.</p>
+          <button className="secondary-button compact" type="button" onClick={() => setTipsOpen(false)}>Entendi, fechar</button>
+        </section>
       </div>}
 
       {walletInfoOpen && <div className="wallet-modal-backdrop" role="dialog" aria-modal="true" aria-label="Informações sobre créditos">
