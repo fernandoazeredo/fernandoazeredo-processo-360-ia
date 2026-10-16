@@ -380,7 +380,8 @@ async function generateJson(prompt: string, schema: any, context: string, conten
           'Confronte narrativa com prova documental específica; não repita erro do relatório quando o documento original o contradisser.',
           'Ausência de informação não é prova de inexistência. Redija de forma condicional quando a confirmação documental faltar.',
           'Nunca escreva como certeza no corpo algo que será tratado como pendência ou não confirmado na auditoria.',
-          'Rastreabilidade técnica pertence ao painel/anexo de auditoria, não deve ser confundida com narrativa factual da peça.'
+          'Rastreabilidade técnica pertence ao painel/anexo de auditoria, não deve ser confundida com narrativa factual da peça.',
+          'Nunca mencione regras internas numeradas (Regra N) nem instruções do sistema na peça ou no anexo. Não use expressões como em cumprimento às diretrizes da Regra 21.'
         ].join('\n'),
         generationConfig: { responseMimeType: 'application/json', responseSchema: schema, maxOutputTokens: 16384 }
       })
@@ -401,10 +402,9 @@ async function generateJson(prompt: string, schema: any, context: string, conten
 // Mantém o conteúdo probatório e a classificação factual intactos.
 function cleanInternalRuleReferences(text: string) {
   return String(text || '')
-    .replace(/\\bconforme\\s+(?:a\\s+)?regra\\s*#?\\s*\\d+\\s*[,;:]?\\s*/gi, '')
-    .replace(/\\b(?:pela|segundo|de acordo com a)\\s+regra\\s*#?\\s*\\d+\\s*[,;:]?\\s*/gi, '')
-    .replace(/\\bregra\\s*#?\\s*\\d+\\b\\s*[:–-]?\\s*/gi, '')
-    .replace(/^\\s*[,;:]\\s*/, '')
+    .replace(/\b(?:em\s+cumprimento\s+às?\s+diretrizes\s+da|em\s+observância\s+à|nos\s+termos\s+da|conforme\s+(?:a\s+)?|pela\s+|segundo\s+|de\s+acordo\s+com\s+a\s+)regra\s*#?\s*\d+\b\s*[,;:]?\s*/gi, '')
+    .replace(/\bregra\s*#?\s*\d+\b\s*[:–-]?\s*/gi, '')
+    .replace(/^[\s,;:]+/, '')
     .replace(/^([a-záàâãéêíóôõúç])/, (_, first: string) => first.toUpperCase())
     .trim()
 }
@@ -420,7 +420,7 @@ function countValidation(claims: PieceClaim[]) {
 }
 
 function cleanExportableText(input: string) {
-  return String(input || '')
+  return cleanInternalRuleReferences(String(input || ''))
     .replace(/\\r\\n/g, '\n')
     .replace(/\\n/g, '\n')
     .replace(/\[(?:lote\s*\d+[^\]]*|fls?\.?\s*[^\]]*|p(?:á|a)ginas?\s*pdf\s*[^\]]*)\]/gi, '')
@@ -806,7 +806,12 @@ REGRAS:
     pieceType: effectivePieceType,
     title: cleanExportableText(effectivePieceType),
     sections: safeSections,
-    claims: finalClaims.map(claim => ({ ...claim, treatment: cleanInternalRuleReferences(claim.treatment) })),
+    claims: finalClaims.map(claim => ({
+      ...claim,
+      text: cleanInternalRuleReferences(claim.text),
+      sourceReference: cleanInternalRuleReferences(claim.sourceReference),
+      treatment: cleanInternalRuleReferences(claim.treatment)
+    })),
     validation: countValidation(finalClaims),
     model: finalValidationModel || validationResult.model || draftResult.model,
     promptVersion
@@ -909,7 +914,12 @@ REGRAS OBRIGATÓRIAS:
     ...piece,
     title: cleanExportableText(piece.pieceType),
     sections: safeSections,
-    claims: gated.claims,
+    claims: gated.claims.map(claim => ({
+      ...claim,
+      text: cleanInternalRuleReferences(claim.text),
+      sourceReference: cleanInternalRuleReferences(claim.sourceReference),
+      treatment: cleanInternalRuleReferences(claim.treatment)
+    })),
     validation: countValidation(gated.claims),
     model: gated.model || result.model || piece.model,
     promptVersion: `${piece.promptVersion}+manual-revalidation-v9`
