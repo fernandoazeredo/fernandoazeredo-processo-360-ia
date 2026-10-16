@@ -176,6 +176,7 @@ function scrollToAlert(id:string) {
   window.setTimeout(reveal,320)
 }
 
+const pieceUXSteps = ['Estruturando rascunho','Validação factual','Revisão jurídica','Validando contra o documento original','Barreira factual crítica']
 const stages = [
   'Preparando o processo',
   'Lendo o PDF localmente',
@@ -749,7 +750,7 @@ function App() {
           <div className="live-progress">
             <strong>{progress}%</strong>
             <div className="progress-track"><i style={{width:`${progress}%`}} /></div>
-            <span>{appUser.email===ADMIN_EMAIL && !adminClientView ? `${processingStage}...` : 'Analisando seu processo…'}</span>
+            <span>{appUser.email===ADMIN_EMAIL && !adminClientView ? `${processingStage}...` : (progress>=84?'Consolidando análise…':processingStage)}</span>
             <small>Processos extensos podem levar vários minutos. Não feche esta janela.</small>
           </div>
         </div>
@@ -1218,6 +1219,8 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
   const [piece, setPiece] = useState<LegalPieceDraft | null>(null)
   const [pieceBusy, setPieceBusy] = useState(false)
   const [pieceStage, setPieceStage] = useState('')
+  const [pieceUXStep,setPieceUXStep] = useState(0)
+  useEffect(()=>{if(!pieceBusy)return;const t=window.setInterval(()=>setPieceUXStep(v=>Math.min(v+1,4)),14000);return ()=>window.clearInterval(t)},[pieceBusy])
   const [pieceError, setPieceError] = useState('')
 
   useEffect(() => {
@@ -1378,6 +1381,7 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
       setPieceError('WALLET_INSUFFICIENT: saldo insuficiente para gerar a peça. Recarregue a carteira.')
       return
     }
+    setPieceUXStep(0)
     setPieceBusy(true)
     setPieceStage('Estruturando e redigindo o rascunho')
     let chargeId = ''
@@ -1400,7 +1404,6 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
           throw new Error('TEST_FORCED_PIECE_FAILURE')
         }
       }
-      window.setTimeout(() => setPieceStage('Validando novamente contra o documento original'), 900)
       const generated = await generateLegalPiece(
         report,
         pieceType,
@@ -1703,6 +1706,7 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
         {pieceError && <p className="analysis-error" id="piece-error-box" tabIndex={-1}>{pieceError}</p>}
       </div>
 
+      {pieceBusy && <div className="processing-overlay" role="dialog" aria-modal="true" aria-label="Gerando peça jurídica"><div className="processing-inner"><BrainLoader/><div className="live-progress" role="status"><strong>{[12,30,48,66,84][pieceUXStep]}%</strong><div className="progress-track"><i style={{width:`${[12,30,48,66,84][pieceUXStep]}%`}}/></div><span>{pieceUXSteps[pieceUXStep]}</span><small>Progresso ilustrativo. Não feche esta janela.</small></div></div></div>}
       {piece && <div className="piece-review" id="piece-review">
         <div className="piece-draft-banner">
           <AlertTriangle size={20}/>
