@@ -5,8 +5,8 @@ import { aiClient, auth, db } from './firebase'
 import { MOTOR_B_BASE_GLOBAL, MOTOR_B_PURPOSES, MOTOR_B_REVIEWER, MOTOR_B_TRABALHISTA_RECLAMADA, MOTOR_B_TRABALHISTA_RECLAMANTE, MOTOR_B_VALIDATOR } from './piecePrompts'
 import type { AnalysisReport } from './ai'
 
-const PIECE_MODEL = 'gemini-3.8-flash'
-const PIECE_FALLBACK_MODELS = [PIECE_MODEL, 'gemini-3.6-flash', 'gemini-3.5-flash-lite'] as const
+const PIECE_MODEL = 'gemini-3.6-flash'
+const PIECE_FALLBACK_MODELS = [PIECE_MODEL, 'gemini-3.8-flash'] as const
 const REQUEST_TIMEOUT_MS = 90_000
 const PLACEHOLDER = '[DADO A CONFIRMAR]'
 const MOTOR_B_LOCAL_VERSION = 9
