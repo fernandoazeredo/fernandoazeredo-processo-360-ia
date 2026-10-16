@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, signOut, User } from 'firebase/auth'
 import { addDoc, collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
 import { AlertTriangle, BrainCircuit, CheckCircle2, ChevronRight, CreditCard, Download, FilePenLine, FileText, LockKeyhole, Moon, Pencil, Plus, Save, Search, ShieldCheck, Sun, Trash2, UploadCloud, Users, HelpCircle, X } from 'lucide-react'
@@ -1706,7 +1707,7 @@ function AnalysisResult({report, originalFile, isAdmin, piecePriceCents, walletB
         {pieceError && <p className="analysis-error" id="piece-error-box" tabIndex={-1}>{pieceError}</p>}
       </div>
 
-      {pieceBusy && <div className="processing-overlay" role="dialog" aria-modal="true" aria-label="Gerando peça jurídica"><div className="processing-inner"><BrainLoader/><div className="live-progress" role="status"><strong>{[12,30,48,66,84][pieceUXStep]}%</strong><div className="progress-track"><i style={{width:`${[12,30,48,66,84][pieceUXStep]}%`}}/></div><span>{pieceUXSteps[pieceUXStep]}</span><small>Progresso ilustrativo. Não feche esta janela.</small></div></div></div>}
+      {pieceBusy && createPortal(<div className="processing-overlay" role="dialog" aria-modal="true" aria-label="Gerando peça jurídica"><div className="processing-inner"><BrainLoader/><div className="live-progress" role="status"><strong>{[12,30,48,66,84][pieceUXStep]}%</strong><div className="progress-track"><i style={{width:`${[12,30,48,66,84][pieceUXStep]}%`}}/></div><span>{pieceUXSteps[pieceUXStep]}</span><small>Progresso ilustrativo. Não feche esta janela.</small></div></div></div>, document.body)}
       {piece && <div className="piece-review" id="piece-review">
         <div className="piece-draft-banner">
           <AlertTriangle size={20}/>
