@@ -54,7 +54,7 @@ export const dicasFaqGroups: { title: string; items: { question: string; answer:
       },
       {
         "question": "Já paguei. Para onde envio o comprovante?",
-        "answer": "Na janela \"Comprar créditos\", clique em \"Enviar comprovante para o suporte\". Abre o WhatsApp financeiro (21) 99615-7226 com mensagem pronta; anexe o comprovante."
+        "answer": "Na janela \"Comprar créditos\", clique em \"Enviar comprovante para o suporte\". Abre o suporte pelo WhatsApp com mensagem pronta; anexe o comprovante."
       },
       {
         "question": "Os créditos entram automaticamente?",
@@ -70,7 +70,7 @@ export const dicasFaqGroups: { title: string; items: { question: string; answer:
       },
       {
         "question": "Paguei, mas o saldo não mudou. O que faço?",
-        "answer": "Confirme que enviou o comprovante pelo botão \"Enviar comprovante para o suporte\" e aguarde a conferência. Se o prazo passar, fale com o WhatsApp financeiro (21) 99615-7226."
+        "answer": "Confirme que enviou o comprovante pelo botão \"Enviar comprovante para o suporte\" e aguarde a conferência. Se o prazo passar, fale com o suporte pelo WhatsApp."
       },
       {
         "question": "Como consulto meu saldo e o histórico?",
@@ -111,7 +111,7 @@ export const dicasFaqGroups: { title: string; items: { question: string; answer:
       },
       {
         "question": "Esqueci minha senha. O que faço?",
-        "answer": "Fale com o atendimento pelo WhatsApp (21) 99615-7226. Se sua conta estiver vinculada ao Google, você também pode usar \"Entrar com Google\"."
+        "answer": "Fale com o atendimento pelo suporte pelo WhatsApp. Se sua conta estiver vinculada ao Google, você também pode usar \"Entrar com Google\"."
       },
       {
         "question": "Posso pagar com Pix?",
