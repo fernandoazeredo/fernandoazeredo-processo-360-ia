@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ExternalLink, Search } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { dicasFaqGroups } from './dicasFaq'
 import './dicas-faq.css'
 
@@ -37,13 +37,13 @@ export default function DicasFaq() {
           <summary>{item.question}<span aria-hidden="true" className="dicas-faq-sign">+</span></summary>
           <div className="dicas-faq-answer">
             <p>{item.answer}</p>
-            {(item.question === 'Esqueci minha senha. O que faço?' || item.question === 'Paguei, mas o saldo não mudou. O que faço?') && <p><a href={SUPPORT_URL} target="_blank" rel="noopener noreferrer">Conversar com o suporte no WhatsApp <ExternalLink size={14} aria-hidden="true" /></a></p>}
+            {(item.question === 'Esqueci minha senha. O que faço?' || item.question === 'Paguei, mas o saldo não mudou. O que faço?') && <p><a href={SUPPORT_URL} target="_blank" rel="noopener noreferrer"><img src="/assets/whatsapp-icon.svg" width="18" height="18" alt="" aria-hidden="true" /> Falar com o suporte</a></p>}
           </div>
         </details>)}
       </section>)}
       <aside className="dicas-faq-contact">
         <strong>Precisa de atendimento humano?</strong>
-        <p>Para dúvidas sobre acesso, conta ou problemas persistentes: <a href={SUPPORT_URL} target="_blank" rel="noopener noreferrer">WhatsApp oficial (21) 99615-7226 <ExternalLink size={14} aria-hidden="true" /></a>.</p>
+        <p>Para dúvidas sobre acesso, conta ou problemas persistentes: <a href={SUPPORT_URL} target="_blank" rel="noopener noreferrer"><img src="/assets/whatsapp-icon.svg" width="18" height="18" alt="" aria-hidden="true" /> Falar com o suporte</a>.</p>
         <p><strong>Comprovantes de pagamento:</strong> utilize o botão “Enviar comprovante para o suporte” dentro da janela “Comprar créditos”.</p>
         <small>Este guia não utiliza IA, não consome créditos e não consulta seus dados. As peças jurídicas são rascunhos e exigem revisão por advogado habilitado.</small>
       </aside>
