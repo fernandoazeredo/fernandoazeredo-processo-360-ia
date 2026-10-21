@@ -45,7 +45,7 @@ export default function DicasFaq() {
         <strong>Precisa de atendimento humano?</strong>
         <p>Para dúvidas sobre acesso, conta ou problemas persistentes: <a href={SUPPORT_URL} target="_blank" rel="noopener noreferrer"><img src="/assets/whatsapp-icon.svg" width="15" height="15" alt="" aria-hidden="true" /> Falar com o suporte</a>.</p>
         <p><strong>Comprovantes de pagamento:</strong> utilize o botão “Enviar comprovante para o suporte” dentro da janela “Comprar créditos”.</p>
-        <small>Este guia não utiliza IA, não consome créditos e não consulta seus dados. As peças jurídicas são rascunhos e exigem revisão por advogado habilitado.</small>
+        <small>Este guia não utiliza IA, não consome créditos e não consulta seus dados. As peças jurídicas geradas pelo sistema devem ser revisadas por advogado habilitado.</small>
       </aside>
     </section>
   )
