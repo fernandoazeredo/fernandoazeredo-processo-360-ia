@@ -37,13 +37,13 @@ export default function DicasFaq() {
           <summary>{item.question}<span aria-hidden="true" className="dicas-faq-sign">+</span></summary>
           <div className="dicas-faq-answer">
             <p>{item.answer}</p>
-            {(item.question === 'Esqueci minha senha. O que faço?' || item.question === 'Paguei, mas o saldo não mudou. O que faço?') && <p><a href={SUPPORT_URL} target="_blank" rel="noopener noreferrer"><img src="/assets/whatsapp-icon.svg" width="18" height="18" alt="" aria-hidden="true" /> Falar com o suporte</a></p>}
+            {(item.question === 'Esqueci minha senha. O que faço?' || item.question === 'Paguei, mas o saldo não mudou. O que faço?') && <p><a href={SUPPORT_URL} target="_blank" rel="noopener noreferrer"><img src="/assets/whatsapp-icon.svg" width="15" height="15" alt="" aria-hidden="true" /> Falar com o suporte</a></p>}
           </div>
         </details>)}
       </section>)}
       <aside className="dicas-faq-contact">
         <strong>Precisa de atendimento humano?</strong>
-        <p>Para dúvidas sobre acesso, conta ou problemas persistentes: <a href={SUPPORT_URL} target="_blank" rel="noopener noreferrer"><img src="/assets/whatsapp-icon.svg" width="18" height="18" alt="" aria-hidden="true" /> Falar com o suporte</a>.</p>
+        <p>Para dúvidas sobre acesso, conta ou problemas persistentes: <a href={SUPPORT_URL} target="_blank" rel="noopener noreferrer"><img src="/assets/whatsapp-icon.svg" width="15" height="15" alt="" aria-hidden="true" /> Falar com o suporte</a>.</p>
         <p><strong>Comprovantes de pagamento:</strong> utilize o botão “Enviar comprovante para o suporte” dentro da janela “Comprar créditos”.</p>
         <small>Este guia não utiliza IA, não consome créditos e não consulta seus dados. As peças jurídicas são rascunhos e exigem revisão por advogado habilitado.</small>
       </aside>
