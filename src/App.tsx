@@ -11,6 +11,7 @@ import { confirmClaimInOriginal, generateLegalPiece, pieceTypeOptions, revalidat
 import type { LegalPieceDraft, PieceClaim, ProfessionalProfile } from './pieces'
 import { chargeAnalysis, chargePiece, consumeForcedAnalysisFailure, consumeForcedPieceFailure, formatBRL, quoteAnalysis, quotePiece, refundCharge } from './wallet'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
+import DicasFaq from './DicasFaq'
 import type { WalletRecord, WalletStatus } from './wallet'
 
 const ADMIN_EMAIL = 'fernandoazeredo64@gmail.com'
@@ -776,6 +777,7 @@ function App() {
           </ol>
           <p><b>Sobre créditos:</b> cobranças são apresentadas antes de cada operação. Em caso de falha cobrada, consulte o estorno e o extrato da carteira.</p>
           <p><b>Importante:</b> o conteúdo gerado é um rascunho de apoio jurídico. A revisão por profissional habilitado é obrigatória antes de qualquer utilização ou protocolo.</p>
+          <DicasFaq />
           <button className="secondary-button compact" type="button" onClick={() => setTipsOpen(false)}>Entendi, fechar</button>
         </section>
       </div>}
