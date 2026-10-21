@@ -11,6 +11,7 @@ import { confirmClaimInOriginal, generateLegalPiece, pieceTypeOptions, revalidat
 import type { LegalPieceDraft, PieceClaim, ProfessionalProfile } from './pieces'
 import { chargeAnalysis, chargePiece, consumeForcedAnalysisFailure, consumeForcedPieceFailure, formatBRL, quoteAnalysis, quotePiece, refundCharge } from './wallet'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
+import { dicasFaqGroups } from './dicasFaq'
 import type { WalletRecord, WalletStatus } from './wallet'
 
 const ADMIN_EMAIL = 'fernandoazeredo64@gmail.com'
@@ -776,6 +777,21 @@ function App() {
           </ol>
           <p><b>Sobre créditos:</b> cobranças são apresentadas antes de cada operação. Em caso de falha cobrada, consulte o estorno e o extrato da carteira.</p>
           <p><b>Importante:</b> o conteúdo gerado é um rascunho de apoio jurídico. A revisão por profissional habilitado é obrigatória antes de qualquer utilização ou protocolo.</p>
+          <div style={{marginTop: 24, borderTop: '1px solid var(--border-color, #9995)', paddingTop: 18}}>
+            <h3 style={{margin: '0 0 8px'}}>Perguntas frequentes</h3>
+            <p style={{marginTop: 0}}>Toque em uma pergunta para consultar a resposta. Estas orientações são gratuitas e não consomem créditos.</p>
+            {dicasFaqGroups.map(group => (
+              <div key={group.title} style={{marginBottom: 20}}>
+                <h4 style={{marginBottom: 10}}>{group.title}</h4>
+                {group.items.map(item => (
+                  <details key={item.question} style={{marginBottom: 8, padding: '10px 12px', border: '1px solid currentColor', borderRadius: 8}}>
+                    <summary style={{cursor: 'pointer', fontWeight: 600, lineHeight: 1.5}}>{item.question}</summary>
+                    <p style={{margin: '12px 0 2px', lineHeight: 1.6}}>{item.answer}</p>
+                  </details>
+                ))}
+              </div>
+            ))}
+          </div>
           <button className="secondary-button compact" type="button" onClick={() => setTipsOpen(false)}>Entendi, fechar</button>
         </section>
       </div>}
