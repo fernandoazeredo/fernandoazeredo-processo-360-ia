@@ -3,7 +3,7 @@ import { ExternalLink, Search } from 'lucide-react'
 import { dicasFaqGroups } from './dicasFaq'
 import './dicas-faq.css'
 
-const SUPPORT_URL = 'https://wa.me/5521996157226'
+const SUPPORT_URL = `https://wa.me/5521996157226?text=${encodeURIComponent('Olá! Estou utilizando o Processo 360 IA, consultei o menu DICAS e preciso de atendimento sobre uma dúvida no aplicativo. Poderiam me ajudar?')}`
 const normalize = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 
 export default function DicasFaq() {
