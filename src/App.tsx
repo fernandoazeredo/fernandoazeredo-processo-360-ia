@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, signOut, User } from 'firebase/auth'
 import { addDoc, collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
@@ -296,7 +296,6 @@ function App() {
   const [progress, setProgress] = useState(0)
   const [processingStage, setProcessingStage] = useState(stages[0])
   const [analysis, setAnalysis] = useState<AnalysisReport | null>(null)
-  const clearAfterProcessingRef = useRef(false)
   const [analysisError, setAnalysisError] = useState('')
 
   useEffect(() => {
@@ -461,19 +460,13 @@ function App() {
   }
 
   function confirmClearAnalysis() {
-    if (processing) {
-      if (window.confirm('A análise está em andamento e continuará até terminar, inclusive eventual cobrança ou estorno. Deseja limpar o resultado automaticamente ao final?')) {
-        clearAfterProcessingRef.current = true
-      }
-      return
-    }
+    if (processing) return
     if (!window.confirm('Limpar a análise exibida e a última análise salva neste navegador? Essa ação não altera créditos, extrato ou pagamentos.')) return
     clearAnalysisData()
   }
 
   async function startAnalysis() {
     if (!file) return
-    clearAfterProcessingRef.current = false
     const selectedArea = area
     const selectedPerspective = perspective
     setAnalysisError('')
@@ -511,9 +504,9 @@ function App() {
       if (report.area !== selectedArea || report.perspective !== selectedPerspective) {
         throw new Error(`ANALYSIS_PERSPECTIVE_MISMATCH: solicitado ${selectedArea}/${selectedPerspective}, recebido ${report.area}/${report.perspective}`)
       }
-      if (!clearAfterProcessingRef.current) setAnalysis(report)
+      setAnalysis(report)
       try{
-        if(appUser?.uid && !clearAfterProcessingRef.current){
+        if(appUser?.uid){
           localStorage.setItem(`p360-last-analysis-${appUser.uid}`,JSON.stringify({
             report,
             fileMeta:{name:file.name,size:file.size,lastModified:file.lastModified},
@@ -587,10 +580,6 @@ function App() {
       }
     } finally {
       setProcessing(false)
-      if (clearAfterProcessingRef.current) {
-        clearAfterProcessingRef.current = false
-        clearAnalysisData()
-      }
     }
   }
 
@@ -754,7 +743,7 @@ function App() {
           </div>
         </details>}
 
-        {(analysis || processing || analysisError) && <div style={{display:'flex',justifyContent:'flex-end',margin:'12px 0'}}>
+        {!processing && (analysis || analysisError) && <div style={{display:'flex',justifyContent:'flex-end',margin:'12px 0'}}>
           <button type="button" className="secondary-button compact" onClick={confirmClearAnalysis} aria-label="Limpar análise com confirmação">
             <Trash2 size={16}/> Limpar análise
           </button>
@@ -787,7 +776,6 @@ function App() {
             <div className="progress-track"><i style={{width:`${progress}%`}} /></div>
             <span>{appUser.email===ADMIN_EMAIL && !adminClientView ? `${processingStage}...` : (progress>=84?'Consolidando análise…':processingStage)}</span>
             <small>Processos extensos podem levar vários minutos. Não feche esta janela.</small>
-            <button type="button" className="secondary-button compact" style={{margin:'10px auto 0'}} onClick={confirmClearAnalysis}><Trash2 size={15}/> Limpar ao terminar</button>
           </div>
         </div>
       </div>}
